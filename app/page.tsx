@@ -23,6 +23,7 @@ import {
 import useWebRTCAudioSession from "@/hooks/use-webrtc"
 import { tools } from "@/lib/tools"
 import { getAccount, getDatabases, ID, Query, DB_ID, COLLECTIONS } from "@/lib/appwrite"
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 
 type CancerType = "colon" | "breast" | "lymphoma"
 type AppPhase = "idle" | "recording" | "processing" | "results"
@@ -223,6 +224,9 @@ export default function App() {
   const [userId, setUserId] = useState<string | null>(null)
   const [authEmail, setAuthEmail] = useState("")
   const [magicLinkSent, setMagicLinkSent] = useState(false)
+  const [emailOtpUserId, setEmailOtpUserId] = useState<string | null>(null)
+  const [emailOtpCode, setEmailOtpCode] = useState("")
+  const [emailOtpVerifying, setEmailOtpVerifying] = useState(false)
   const [authSending, setAuthSending] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const [welcomeBack, setWelcomeBack] = useState(false)
@@ -641,6 +645,9 @@ export default function App() {
     setAuthStatus("auth")
     setAuthEmail("")
     setMagicLinkSent(false)
+    setEmailOtpUserId(null)
+    setEmailOtpCode("")
+    setEmailOtpVerifying(false)
     setWelcomeBack(false)
   }
 
@@ -652,13 +659,74 @@ export default function App() {
     setPhase("idle")
   }
 
+  async function loadAuthenticatedUserData(currentUserId: string) {
+    try {
+      const profile = await getDatabases().getDocument(DB_ID, COLLECTIONS.profiles, currentUserId)
+      const pName = profile.name as string
+      const pRelationship = profile.relationship as string
+      const pCancerType = profile.cancerType as string
+
+      if (pName) setCaregiverName(pName)
+      if (isRelationship(pRelationship)) setRelationship(pRelationship)
+      if (isCancerType(pCancerType)) setCancerType(pCancerType)
+
+      try {
+        const journalDocs = await getDatabases().listDocuments(DB_ID, COLLECTIONS.journal, [
+          Query.equal("userId", currentUserId),
+          Query.orderDesc("timestamp"),
+          Query.limit(10),
+        ])
+        setJournalEntries(
+          journalDocs.documents.map((doc: Record<string, unknown>) => ({
+            id: doc.$id as string,
+            text: doc.content as string,
+            date: doc.timestamp as string,
+          }))
+        )
+      } catch {
+        setJournalEntries(parseJson<JournalEntry[]>(window.localStorage.getItem(STORAGE_KEYS.journal), []))
+      }
+
+      try {
+        const fearDocs = await getDatabases().listDocuments(DB_ID, COLLECTIONS.fears, [
+          Query.equal("userId", currentUserId),
+          Query.orderDesc("timestamp"),
+          Query.limit(6),
+        ])
+        setFearTimeline(
+          fearDocs.documents.map((doc: Record<string, unknown>) => ({
+            id: doc.$id as string,
+            quote: doc.fearQuote as string,
+            summary: doc.fearSummary as string,
+            date: doc.timestamp as string,
+          }))
+        )
+      } catch {
+        setFearTimeline(parseJson<FearMemory[]>(window.localStorage.getItem(STORAGE_KEYS.fears), []))
+      }
+
+      setOnboarded(true)
+      setWelcomeBack(true)
+      window.setTimeout(() => setWelcomeBack(false), 2000)
+    } catch {
+      setFearTimeline(parseJson<FearMemory[]>(window.localStorage.getItem(STORAGE_KEYS.fears), []))
+      setJournalEntries(parseJson<JournalEntry[]>(window.localStorage.getItem(STORAGE_KEYS.journal), []))
+      setOnboarded(false)
+      setOnboardingStep("name")
+    }
+  }
+
   async function sendMagicLink() {
     if (!authEmail.trim()) return
     setAuthSending(true)
     setAuthError(null)
     try {
       const redirectUrl = window.location.origin + window.location.pathname
-      await getAccount().createMagicURLToken(ID.unique(), authEmail.trim(), redirectUrl)
+      const email = authEmail.trim()
+      await getAccount().createMagicURLToken(ID.unique(), email, redirectUrl)
+      const token = await getAccount().createEmailToken(ID.unique(), email)
+      setEmailOtpUserId(token.userId)
+      setEmailOtpCode("")
       setMagicLinkSent(true)
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not send magic link. Try again."
@@ -668,6 +736,31 @@ export default function App() {
     }
   }
 
+  async function verifyEmailOtp(code = emailOtpCode) {
+    if (!emailOtpUserId || code.length !== 6) return
+    setEmailOtpVerifying(true)
+    setAuthError(null)
+    try {
+      await getAccount().createSession(emailOtpUserId, code)
+      const user = await getAccount().get()
+      setUserId(user.$id)
+      await loadAuthenticatedUserData(user.$id)
+      setShowAuthModal(false)
+      setAuthStatus("authenticated")
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "That code did not work. Check it and try again."
+      setAuthError(msg)
+    } finally {
+      setEmailOtpVerifying(false)
+    }
+  }
+
+  function updateEmailOtpCode(value: string) {
+    const next = value.replace(/\D/g, "").slice(0, 6)
+    setEmailOtpCode(next)
+    if (next.length === 6) void verifyEmailOtp(next)
+  }
+
   function continueAsGuest() {
     setAuthStatus("guest")
   }
@@ -675,6 +768,9 @@ export default function App() {
   function resetMagicLink() {
     setMagicLinkSent(false)
     setAuthEmail("")
+    setEmailOtpUserId(null)
+    setEmailOtpCode("")
+    setEmailOtpVerifying(false)
     setAuthError(null)
   }
 
@@ -738,12 +834,16 @@ export default function App() {
             key="auth"
             email={authEmail}
             error={authError}
+            isOtpVerifying={emailOtpVerifying}
             isSending={authSending}
             magicLinkSent={magicLinkSent}
             onContinueAsGuest={continueAsGuest}
             onEmailChange={setAuthEmail}
+            onOtpChange={updateEmailOtpCode}
             onResetMagicLink={resetMagicLink}
             onSendMagicLink={sendMagicLink}
+            onVerifyOtp={() => void verifyEmailOtp()}
+            otpCode={emailOtpCode}
           />
         ) : welcomeBack ? (
           <WelcomeBackScreen key="welcome-back" name={displayName} />
@@ -897,12 +997,16 @@ export default function App() {
             <AuthScreen
               email={authEmail}
               error={authError}
+              isOtpVerifying={emailOtpVerifying}
               isSending={authSending}
               magicLinkSent={magicLinkSent}
               onContinueAsGuest={() => setShowAuthModal(false)}
               onEmailChange={setAuthEmail}
+              onOtpChange={updateEmailOtpCode}
               onResetMagicLink={resetMagicLink}
               onSendMagicLink={sendMagicLink}
+              onVerifyOtp={() => void verifyEmailOtp()}
+              otpCode={emailOtpCode}
             />
           </motion.div>
         )}
@@ -1941,22 +2045,33 @@ function OneThingScreen({
 function AuthScreen({
   email,
   error,
+  isOtpVerifying,
   isSending,
   magicLinkSent,
   onContinueAsGuest,
   onEmailChange,
+  onOtpChange,
   onResetMagicLink,
   onSendMagicLink,
+  onVerifyOtp,
+  otpCode,
 }: {
   email: string
   error: string | null
+  isOtpVerifying: boolean
   isSending: boolean
   magicLinkSent: boolean
   onContinueAsGuest: () => void
   onEmailChange: (value: string) => void
+  onOtpChange: (value: string) => void
   onResetMagicLink: () => void
   onSendMagicLink: () => void
+  onVerifyOtp: () => void
+  otpCode: string
 }) {
+  const primaryButtonClass =
+    "flex min-h-14 flex-1 items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 disabled:opacity-40"
+
   return (
     <motion.section
       key="auth"
@@ -1972,7 +2087,7 @@ function AuthScreen({
           Your space. Private to you.
         </h1>
         <p className="mt-4 text-lg leading-8 text-[#5f5a55]">
-          Create an account to save everything across devices.
+          Sign in or create an account to save your sessions across devices.
         </p>
 
         {magicLinkSent ? (
@@ -1981,6 +2096,39 @@ function AuthScreen({
             <p className="mt-3 text-base leading-7 text-[#5f5a55]">
               We sent a sign-in link to <strong>{email}</strong>. Click it to continue.
             </p>
+            <div className="mt-8">
+              <p className="text-base leading-7 text-[#5f5a55]">
+                We also sent a code — enter it here to verify instantly without leaving this tab.
+              </p>
+              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <InputOTP
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={onOtpChange}
+                  disabled={isOtpVerifying}
+                  containerClassName="justify-center sm:justify-start"
+                >
+                  <InputOTPGroup>
+                    {Array.from({ length: 6 }).map((_, index) => (
+                      <InputOTPSlot
+                        key={index}
+                        index={index}
+                        className="h-12 w-11 border-[#c9b8d8]/70 bg-white/45 text-lg text-[#242230]"
+                      />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
+                <button
+                  type="button"
+                  onClick={onVerifyOtp}
+                  disabled={isOtpVerifying || otpCode.length !== 6}
+                  className={`${primaryButtonClass} sm:flex-none`}
+                >
+                  {isOtpVerifying ? "Verifying..." : "Verify code"}
+                </button>
+              </div>
+              {error && <div className="mt-4"><ErrorText message={error} /></div>}
+            </div>
             <p className="mt-6 text-sm text-[#756f68]">
               Wrong address?{" "}
               <button type="button" onClick={onResetMagicLink} className="underline underline-offset-2 hover:text-[#242230]">
@@ -2005,14 +2153,14 @@ function AuthScreen({
                 type="button"
                 onClick={onSendMagicLink}
                 disabled={isSending || !email.trim()}
-                className="flex items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 disabled:opacity-40"
+                className={primaryButtonClass}
               >
                 {isSending ? "Sending..." : "Send magic link"}
               </button>
               <button
                 type="button"
                 onClick={onContinueAsGuest}
-                className={`${GLASS_BUTTON} rounded-[26px] px-7 py-4 text-[#3f3a36]`}
+                className={primaryButtonClass}
               >
                 Continue as guest
               </button>
