@@ -1128,7 +1128,7 @@ function Onboarding({
             className="w-full max-w-6xl"
           >
             <p className="mb-5 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">NOW NAME THE CARE CONTEXT</p>
-            <h1 className={`text-5xl font-normal leading-none sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>Who was diagnosed?</h1>
+            <h1 className={`overflow-visible px-0.5 pb-1 text-5xl font-normal leading-none sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>Who was diagnosed?</h1>
             <div className="mt-9 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {RELATIONSHIPS.map((item, index) => (
                 <motion.button
@@ -1202,7 +1202,7 @@ function IdleView({
       </motion.p>
       <motion.h1
         variants={itemVariants}
-        className={`max-w-4xl text-5xl font-normal leading-[0.98] sm:text-7xl lg:text-8xl ${SOFT_GRADIENT_TEXT}`}
+        className={`max-w-4xl overflow-visible px-0.5 pb-1 text-5xl font-normal leading-[0.98] sm:text-7xl lg:text-8xl ${SOFT_GRADIENT_TEXT}`}
       >
         What are you carrying right now, {displayName}?
       </motion.h1>
