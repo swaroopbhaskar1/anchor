@@ -22,11 +22,13 @@ import {
 } from "lucide-react"
 import useWebRTCAudioSession from "@/hooks/use-webrtc"
 import { tools } from "@/lib/tools"
+import { getAccount, getDatabases, ID, Query, DB_ID, COLLECTIONS } from "@/lib/appwrite"
 
 type CancerType = "colon" | "breast" | "lymphoma"
 type AppPhase = "idle" | "recording" | "processing" | "results"
 type OnboardingStep = "name" | "relationship"
 type CompanionScreen = "breathe" | "control" | "say" | "oneThing" | null
+type AuthStatus = "checking" | "auth" | "authenticated" | "guest"
 type RelationshipValue = (typeof RELATIONSHIPS)[number]["value"]
 
 interface MirrorResult {
@@ -217,6 +219,14 @@ function AmbientOrbs() {
 
 export default function App() {
   const [hydrated, setHydrated] = useState(false)
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking")
+  const [userId, setUserId] = useState<string | null>(null)
+  const [authEmail, setAuthEmail] = useState("")
+  const [magicLinkSent, setMagicLinkSent] = useState(false)
+  const [authSending, setAuthSending] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [welcomeBack, setWelcomeBack] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("name")
   const [onboarded, setOnboarded] = useState(false)
   const [caregiverName, setCaregiverName] = useState("")
@@ -304,26 +314,117 @@ export default function App() {
   }, [cancerType, displayName, lovedOneLabel, mirrorResult])
 
   useEffect(() => {
-    const storedName = window.localStorage.getItem(STORAGE_KEYS.name) || ""
-    const storedRelationship = window.localStorage.getItem(STORAGE_KEYS.relationship)
-    const storedCancerType = window.localStorage.getItem(STORAGE_KEYS.cancerType)
-    const storedOnboarded = window.localStorage.getItem(STORAGE_KEYS.onboarded) === "true"
+    async function init() {
+      // Always load misc localStorage items
+      setOneThingCount(Number(window.localStorage.getItem(STORAGE_KEYS.oneThingCount) || "0"))
+      const storedUsed = parseJson<number[]>(window.localStorage.getItem(STORAGE_KEYS.oneThingUsed), [])
+      setOneThingUsed(storedUsed)
+      setCurrentOneThing(pickOneThing(storedUsed))
 
-    if (storedName) setCaregiverName(storedName)
-    if (isRelationship(storedRelationship)) setRelationship(storedRelationship)
-    if (isCancerType(storedCancerType)) setCancerType(storedCancerType)
+      // Handle magic link return (?userId=...&secret=...)
+      const params = new URLSearchParams(window.location.search)
+      const magicUserId = params.get("userId")
+      const secret = params.get("secret")
+      if (magicUserId && secret) {
+        window.history.replaceState({}, "", window.location.pathname)
+        try {
+          await getAccount().createSession(magicUserId, secret)
+        } catch (e) {
+          console.error("[auth] Magic link completion failed:", e)
+        }
+      }
 
-    setFearTimeline(parseJson<FearMemory[]>(window.localStorage.getItem(STORAGE_KEYS.fears), []))
-    setJournalEntries(parseJson<JournalEntry[]>(window.localStorage.getItem(STORAGE_KEYS.journal), []))
-    setOneThingCount(Number(window.localStorage.getItem(STORAGE_KEYS.oneThingCount) || "0"))
-    const storedUsed = parseJson<number[]>(window.localStorage.getItem(STORAGE_KEYS.oneThingUsed), [])
-    setOneThingUsed(storedUsed)
-    setCurrentOneThing(pickOneThing(storedUsed))
+      // Check Appwrite session
+      try {
+        const user = await getAccount().get()
+        setUserId(user.$id)
 
-    const canSkip = storedOnboarded && storedName && isRelationship(storedRelationship) && isCancerType(storedCancerType)
-    setOnboarded(Boolean(canSkip))
-    setOnboardingStep(canSkip ? "relationship" : "name")
-    setHydrated(true)
+        // Try to load profile
+        try {
+          const profile = await getDatabases().getDocument(DB_ID, COLLECTIONS.profiles, user.$id)
+          const pName = profile.name as string
+          const pRelationship = profile.relationship as string
+          const pCancerType = profile.cancerType as string
+
+          if (pName) setCaregiverName(pName)
+          if (isRelationship(pRelationship)) setRelationship(pRelationship)
+          if (isCancerType(pCancerType)) setCancerType(pCancerType)
+
+          // Load journal from Appwrite
+          try {
+            const journalDocs = await getDatabases().listDocuments(DB_ID, COLLECTIONS.journal, [
+              Query.equal("userId", user.$id),
+              Query.orderDesc("timestamp"),
+              Query.limit(10),
+            ])
+            setJournalEntries(
+              journalDocs.documents.map((doc: Record<string, unknown>) => ({
+                id: doc.$id as string,
+                text: doc.content as string,
+                date: doc.timestamp as string,
+              }))
+            )
+          } catch {
+            setJournalEntries(parseJson<JournalEntry[]>(window.localStorage.getItem(STORAGE_KEYS.journal), []))
+          }
+
+          // Load fears from Appwrite
+          try {
+            const fearDocs = await getDatabases().listDocuments(DB_ID, COLLECTIONS.fears, [
+              Query.equal("userId", user.$id),
+              Query.orderDesc("timestamp"),
+              Query.limit(6),
+            ])
+            setFearTimeline(
+              fearDocs.documents.map((doc: Record<string, unknown>) => ({
+                id: doc.$id as string,
+                quote: doc.fearQuote as string,
+                summary: doc.fearSummary as string,
+                date: doc.timestamp as string,
+              }))
+            )
+          } catch {
+            setFearTimeline(parseJson<FearMemory[]>(window.localStorage.getItem(STORAGE_KEYS.fears), []))
+          }
+
+          setOnboarded(true)
+          setWelcomeBack(true)
+          window.setTimeout(() => setWelcomeBack(false), 2000)
+        } catch {
+          // No profile yet — show onboarding
+          setFearTimeline(parseJson<FearMemory[]>(window.localStorage.getItem(STORAGE_KEYS.fears), []))
+          setJournalEntries(parseJson<JournalEntry[]>(window.localStorage.getItem(STORAGE_KEYS.journal), []))
+          setOnboarded(false)
+          setOnboardingStep("name")
+        }
+
+        setAuthStatus("authenticated")
+      } catch {
+        // No Appwrite session — check localStorage
+        const storedName = window.localStorage.getItem(STORAGE_KEYS.name) || ""
+        const storedRelationship = window.localStorage.getItem(STORAGE_KEYS.relationship)
+        const storedCancerType = window.localStorage.getItem(STORAGE_KEYS.cancerType)
+        const storedOnboarded = window.localStorage.getItem(STORAGE_KEYS.onboarded) === "true"
+
+        if (storedName) setCaregiverName(storedName)
+        if (isRelationship(storedRelationship)) setRelationship(storedRelationship)
+        if (isCancerType(storedCancerType)) setCancerType(storedCancerType)
+
+        setFearTimeline(parseJson<FearMemory[]>(window.localStorage.getItem(STORAGE_KEYS.fears), []))
+        setJournalEntries(parseJson<JournalEntry[]>(window.localStorage.getItem(STORAGE_KEYS.journal), []))
+
+        const canSkip = storedOnboarded && storedName && isRelationship(storedRelationship) && isCancerType(storedCancerType)
+        setOnboarded(Boolean(canSkip))
+        setOnboardingStep(canSkip ? "relationship" : "name")
+
+        // Returning guests skip the auth screen; new visitors see it
+        setAuthStatus(storedOnboarded ? "guest" : "auth")
+      }
+
+      setHydrated(true)
+    }
+
+    void init()
   }, [])
 
   useEffect(() => {
@@ -388,6 +489,7 @@ export default function App() {
             transcript,
             sessionId,
             contextTag: `${lovedOne}-${cancerType}-night-note`,
+            ...(userId ? { userId } : {}),
           }),
         }),
       ])
@@ -403,7 +505,7 @@ export default function App() {
       setError("Anchor lost the thread for a moment. Take a breath and try again.")
       setPhase("idle")
     }
-  }, [cancerType, lovedOne, pathologyText, rememberFear, sessionId])
+  }, [cancerType, lovedOne, pathologyText, rememberFear, sessionId, userId])
 
   useEffect(() => {
     if (wasActiveRef.current && !isSessionActive) {
@@ -502,6 +604,17 @@ export default function App() {
     window.localStorage.setItem(STORAGE_KEYS.onboarded, "true")
     setCaregiverName(name)
     setOnboarded(true)
+
+    if (userId) {
+      getDatabases()
+        .createDocument(DB_ID, COLLECTIONS.profiles, userId, {
+          userId,
+          name,
+          relationship,
+          cancerType,
+        })
+        .catch((e: unknown) => console.error("[profile] Appwrite save failed:", e))
+    }
   }
 
   function startOver() {
@@ -520,6 +633,15 @@ export default function App() {
     setCurrentOneThing(pickOneThing([]))
     setActiveScreen(null)
     setPhase("idle")
+
+    if (userId) {
+      getAccount().deleteSession("current").catch(() => {})
+    }
+    setUserId(null)
+    setAuthStatus("auth")
+    setAuthEmail("")
+    setMagicLinkSent(false)
+    setWelcomeBack(false)
   }
 
   function resetVoice() {
@@ -528,6 +650,32 @@ export default function App() {
     setError(null)
     setCopied(null)
     setPhase("idle")
+  }
+
+  async function sendMagicLink() {
+    if (!authEmail.trim()) return
+    setAuthSending(true)
+    setAuthError(null)
+    try {
+      const redirectUrl = window.location.origin + window.location.pathname
+      await getAccount().createMagicURLToken(ID.unique(), authEmail.trim(), redirectUrl)
+      setMagicLinkSent(true)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not send magic link. Try again."
+      setAuthError(msg)
+    } finally {
+      setAuthSending(false)
+    }
+  }
+
+  function continueAsGuest() {
+    setAuthStatus("guest")
+  }
+
+  function resetMagicLink() {
+    setMagicLinkSent(false)
+    setAuthEmail("")
+    setAuthError(null)
   }
 
   function saveJournalEntry(text: string) {
@@ -545,6 +693,18 @@ export default function App() {
       window.localStorage.setItem(STORAGE_KEYS.journal, JSON.stringify(next))
       return next
     })
+
+    if (userId) {
+      getDatabases()
+        .createDocument(DB_ID, COLLECTIONS.journal, ID.unique(), {
+          userId,
+          content: trimmed,
+          prompt: SAY_PROMPTS[new Date().getMinutes() % SAY_PROMPTS.length],
+          timestamp: entry.date,
+          kept: true,
+        })
+        .catch((e: unknown) => console.error("[journal] Appwrite save failed:", e))
+    }
   }
 
   function completeOneThing() {
@@ -573,8 +733,23 @@ export default function App() {
       <AmbientOrbs />
 
       <AnimatePresence mode="wait">
-        {!onboarded ? (
+        {authStatus === "auth" ? (
+          <AuthScreen
+            key="auth"
+            email={authEmail}
+            error={authError}
+            isSending={authSending}
+            magicLinkSent={magicLinkSent}
+            onContinueAsGuest={continueAsGuest}
+            onEmailChange={setAuthEmail}
+            onResetMagicLink={resetMagicLink}
+            onSendMagicLink={sendMagicLink}
+          />
+        ) : welcomeBack ? (
+          <WelcomeBackScreen key="welcome-back" name={displayName} />
+        ) : !onboarded ? (
           <Onboarding
+            key="onboarding"
             caregiverName={caregiverName}
             cancerType={cancerType}
             onCancerTypeChange={handleCancerTypeChange}
@@ -601,13 +776,24 @@ export default function App() {
                 <p className="m-0 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">ANCHOR</p>
                 <p className="m-0 mt-1 text-sm text-[#756f68]">{currentDateLabel()}</p>
               </div>
-              <button
-                type="button"
-                onClick={startOver}
-                className="text-sm text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#242230]"
-              >
-                Not {displayName}? Start over
-              </button>
+              <div className="flex items-center gap-4">
+                {authStatus === "guest" && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthModal(true)}
+                    className="text-sm text-[#8f7e9b] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#6f6280]"
+                  >
+                    Save across devices →
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={startOver}
+                  className="text-sm text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#242230]"
+                >
+                  Not {displayName}? Start over
+                </button>
+              </div>
             </header>
 
             <div className="grid flex-1 gap-8 py-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:py-12">
@@ -692,6 +878,36 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showAuthModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#fbf7f0]/90 p-5 backdrop-blur-[12px]"
+          >
+            <button
+              type="button"
+              onClick={() => setShowAuthModal(false)}
+              className="absolute right-5 top-5 rounded-full p-2 text-[#756f68] transition hover:text-[#242230]"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+            <AuthScreen
+              email={authEmail}
+              error={authError}
+              isSending={authSending}
+              magicLinkSent={magicLinkSent}
+              onContinueAsGuest={() => setShowAuthModal(false)}
+              onEmailChange={setAuthEmail}
+              onResetMagicLink={resetMagicLink}
+              onSendMagicLink={sendMagicLink}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <style jsx global>{`
         @keyframes cloud-drift-a {
           0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
@@ -772,6 +988,10 @@ function Onboarding({
             <h1 className={`max-w-3xl text-5xl font-normal leading-none sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>
               What should Anchor call you?
             </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-[#5f5a55]">
+              Anchor is an AI companion for the family member navigating a loved one&apos;s cancer diagnosis.
+              Speak your fear, get clinically grounded, and leave with the next moves to take.
+            </p>
             <div className="mt-12 flex flex-col gap-5 sm:flex-row">
               <input
                 autoFocus
@@ -1715,6 +1935,110 @@ function OneThingScreen({
         </AnimatePresence>
       </div>
     </section>
+  )
+}
+
+function AuthScreen({
+  email,
+  error,
+  isSending,
+  magicLinkSent,
+  onContinueAsGuest,
+  onEmailChange,
+  onResetMagicLink,
+  onSendMagicLink,
+}: {
+  email: string
+  error: string | null
+  isSending: boolean
+  magicLinkSent: boolean
+  onContinueAsGuest: () => void
+  onEmailChange: (value: string) => void
+  onResetMagicLink: () => void
+  onSendMagicLink: () => void
+}) {
+  return (
+    <motion.section
+      key="auth"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ duration: 0.65 }}
+      className="relative z-10 grid min-h-screen place-items-center px-5 py-10"
+    >
+      <div className={`${GLASS_PANEL} w-full max-w-2xl rounded-[40px] p-8 sm:p-12`}>
+        <p className="mb-6 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">ANCHOR</p>
+        <h1 className={`text-4xl font-normal leading-tight sm:text-5xl ${SOFT_GRADIENT_TEXT}`}>
+          Your space. Private to you.
+        </h1>
+        <p className="mt-4 text-lg leading-8 text-[#5f5a55]">
+          Create an account to save everything across devices.
+        </p>
+
+        {magicLinkSent ? (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-10">
+            <p className="text-xl text-[#242230]">Check your inbox.</p>
+            <p className="mt-3 text-base leading-7 text-[#5f5a55]">
+              We sent a sign-in link to <strong>{email}</strong>. Click it to continue.
+            </p>
+            <p className="mt-6 text-sm text-[#756f68]">
+              Wrong address?{" "}
+              <button type="button" onClick={onResetMagicLink} className="underline underline-offset-2 hover:text-[#242230]">
+                Try again
+              </button>
+            </p>
+          </motion.div>
+        ) : (
+          <div className="mt-10 flex flex-col gap-5">
+            <input
+              autoFocus
+              type="email"
+              value={email}
+              onChange={(e) => onEmailChange(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") onSendMagicLink() }}
+              placeholder="your@email.com"
+              className="min-h-16 border-b border-[#c9b8d8]/70 bg-transparent text-2xl text-[#242230] outline-none placeholder:text-[#b9afa7] focus:border-[#b98da0]"
+            />
+            {error && <ErrorText message={error} />}
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={onSendMagicLink}
+                disabled={isSending || !email.trim()}
+                className="flex items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 disabled:opacity-40"
+              >
+                {isSending ? "Sending..." : "Send magic link"}
+              </button>
+              <button
+                type="button"
+                onClick={onContinueAsGuest}
+                className={`${GLASS_BUTTON} rounded-[26px] px-7 py-4 text-[#3f3a36]`}
+              >
+                Continue as guest
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.section>
+  )
+}
+
+function WelcomeBackScreen({ name }: { name: string }) {
+  return (
+    <motion.div
+      key="welcome-back"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ duration: 0.7 }}
+      className="relative z-10 grid min-h-screen place-items-center px-5"
+    >
+      <div className="text-center">
+        <p className="mb-4 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">WELCOME BACK</p>
+        <h1 className={`text-5xl font-normal leading-none sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>{name}.</h1>
+      </div>
+    </motion.div>
   )
 }
 

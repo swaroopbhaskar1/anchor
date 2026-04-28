@@ -18,6 +18,7 @@ interface RequestBody {
   transcript: string;
   sessionId: string;
   contextTag: ContextTag;
+  userId?: string;
 }
 
 interface FearExtraction {
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { transcript, sessionId, contextTag } = body;
+  const { transcript, sessionId, contextTag, userId } = body;
 
   if (!transcript || typeof transcript !== "string" || !transcript.trim()) {
     return NextResponse.json(
@@ -167,6 +168,7 @@ export async function POST(req: NextRequest) {
       fearSummary: extraction.fearSummary,
       fearQuote: extraction.fearQuote,
       contextTag: extraction.contextTag,
+      ...(userId ? { userId } : {}),
     });
   } catch (appwriteErr: unknown) {
     const msg =
