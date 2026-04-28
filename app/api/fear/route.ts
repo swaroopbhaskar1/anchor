@@ -8,6 +8,7 @@ const VALID_CONTEXT_TAGS = [
   "scan",
   "chemo_start",
   "post_surgery",
+  "night-note",
   "other",
 ] as const;
 

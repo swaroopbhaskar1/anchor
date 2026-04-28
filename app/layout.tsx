@@ -20,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body style={{ margin: 0, padding: 0, background: "#0a0a0f" }}>
+      <body style={{ margin: 0, padding: 0 }}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <TranslationsProvider>
             {children}
