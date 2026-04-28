@@ -27,6 +27,7 @@ interface UseWebRTCAudioSessionReturn {
   currentVolume: number;
   conversation: Conversation[];
   sendTextMessage: (text: string) => void;
+  transcriptRef: React.MutableRefObject<string>;
 }
 
 /**
@@ -70,6 +71,9 @@ export default function useWebRTCAudioSession(
    * While user is speaking, we update that conversation item by ID.
    */
   const ephemeralUserMessageIdRef = useRef<string | null>(null);
+
+  // Accumulates the full session transcript so it survives stopSession()
+  const transcriptRef = useRef<string>("");
 
   /**
    * Register a function (tool) so the AI can call it.
@@ -221,8 +225,10 @@ export default function useWebRTCAudioSession(
          */
         case "conversation.item.input_audio_transcription.completed": {
           // console.log("Final user transcription:", msg.transcript);
+          const finalText = msg.transcript || "";
+          transcriptRef.current = (transcriptRef.current + " " + finalText).trim();
           updateEphemeralUserMessage({
-            text: msg.transcript || "",
+            text: finalText,
             isFinal: true,
             status: "final",
           });
@@ -438,7 +444,7 @@ export default function useWebRTCAudioSession(
 
       // Send SDP offer to OpenAI Realtime
       const baseUrl = "https://api.openai.com/v1/realtime";
-      const model = "gpt-4o-realtime-preview-2024-12-17";
+      const model = "gpt-4o-realtime-preview";
       const response = await fetch(`${baseUrl}?model=${model}&voice=${voice}`, {
         method: "POST",
         body: offer.sdp,
@@ -573,5 +579,6 @@ export default function useWebRTCAudioSession(
     currentVolume,
     conversation,
     sendTextMessage,
+    transcriptRef,
   };
 }

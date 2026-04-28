@@ -1,0 +1,1 @@
+This is a sample pathology report. The diagnosis is adenocarcinoma. The stage is pT3 N1b M0. The margins are clear.

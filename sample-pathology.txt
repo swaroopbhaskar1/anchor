@@ -1,0 +1,22 @@
+PATIENT PATHOLOGY REPORT
+
+Patient Name: Jane Doe
+DOB: 01/01/1970
+Date of Procedure: 2026-04-28
+Specimen: Right colon, hemicolectomy
+
+DIAGNOSIS:
+Colon, right, hemicolectomy:
+- Invasive adenocarcinoma, moderately differentiated.
+- Tumor invades through the muscularis propria into the subserosa.
+- Margins are negative for carcinoma.
+- 2 of 15 lymph nodes positive for metastatic carcinoma.
+- Pathologic Stage: pT3 N1b M0
+
+MICROSCOPIC DESCRIPTION:
+Sections show a moderately differentiated adenocarcinoma arising in the right colon. The tumor is composed of irregular glands invading through the muscularis propria into the subserosal adipose tissue. There is desmoplastic stromal response. Lymphovascular invasion is identified. Perineural invasion is not seen. Two out of fifteen pericolic lymph nodes show metastatic adenocarcinoma.
+
+Ancillary Studies:
+- Mismatch Repair (MMR) proteins (MLH1, PMS2, MSH2, MSH6): Intact nuclear expression.
+- BRAF V600E: Negative.
+- KRAS/NRAS: Wild type.
