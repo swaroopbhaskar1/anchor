@@ -132,6 +132,23 @@ const CAREGIVER_QUOTES = [
   "I could love them and still admit I was exhausted.",
 ]
 
+const EXAMPLE_INPUT =
+  "i dont know what to do i feel like im messing everything up and i dont even know what questions to ask"
+
+const EXAMPLE_MIRROR_RESULT: MirrorResult = {
+  fearQuote: EXAMPLE_INPUT,
+  fearSummary: "terrified of failing her because you do not know what to ask",
+  mirror:
+    "You're carrying the weight of something no one prepared you for — the fear of getting it wrong when it matters most.",
+  ground:
+    "Standard NCCN staging for colon cancer (Stage I–IV) determines the treatment pathway. Knowing the exact stage is the first move — everything else follows from it.",
+  actions: [
+    "NCCN-aligned next step: Request the full pathology report to confirm staging and lymph node involvement.",
+    "NCCN-aligned next step: Schedule a medical oncologist consult within 7 days of diagnosis.",
+    "NCCN-aligned next step: Ask about CEA tumor marker baseline before treatment begins.",
+  ],
+}
+
 const ONE_THING_ITEMS = [
   "Put the oncology phone number somewhere obvious.",
   "Write the top three questions in one note.",
@@ -247,6 +264,7 @@ export default function App() {
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "done" | "error">("idle")
   const [uploadLabel, setUploadLabel] = useState("")
   const [copied, setCopied] = useState<"note" | "handoff" | null>(null)
+  const [showExampleOutput, setShowExampleOutput] = useState(false)
   const [fearTimeline, setFearTimeline] = useState<FearMemory[]>([])
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([])
   const [oneThingCount, setOneThingCount] = useState(0)
@@ -630,6 +648,7 @@ export default function App() {
     setOnboardingStep("name")
     setMirrorResult(null)
     setPlanResult(null)
+    setShowExampleOutput(false)
     setFearTimeline([])
     setJournalEntries([])
     setOneThingCount(0)
@@ -656,6 +675,7 @@ export default function App() {
     setPlanResult(null)
     setError(null)
     setCopied(null)
+    setShowExampleOutput(false)
     setPhase("idle")
   }
 
@@ -765,6 +785,21 @@ export default function App() {
     setAuthStatus("guest")
   }
 
+  function showAnchorExample() {
+    setCaregiverName("Sarah")
+    setRelationship("mom")
+    setCancerType("colon")
+    setOnboarded(true)
+    setAuthStatus("guest")
+    setOnboardingStep("relationship")
+    setMirrorResult(null)
+    setPlanResult(null)
+    setError(null)
+    setCopied(null)
+    setPhase("idle")
+    setShowExampleOutput(true)
+  }
+
   function resetMagicLink() {
     setMagicLinkSent(false)
     setAuthEmail("")
@@ -842,6 +877,7 @@ export default function App() {
             onOtpChange={updateEmailOtpCode}
             onResetMagicLink={resetMagicLink}
             onSendMagicLink={sendMagicLink}
+            onSeeExample={showAnchorExample}
             onVerifyOtp={() => void verifyEmailOtp()}
             otpCode={emailOtpCode}
           />
@@ -908,6 +944,7 @@ export default function App() {
                       lovedOneLabel={lovedOneLabel}
                       onCancerTypeChange={handleCancerTypeChange}
                       error={error}
+                      showExampleOutput={showExampleOutput}
                     />
                   )}
 
@@ -1179,6 +1216,7 @@ function IdleView({
   lovedOne,
   lovedOneLabel,
   onCancerTypeChange,
+  showExampleOutput,
 }: {
   cancerType: CancerType
   displayName: string
@@ -1187,6 +1225,7 @@ function IdleView({
   lovedOne: string
   lovedOneLabel: string
   onCancerTypeChange: (value: CancerType) => void
+  showExampleOutput: boolean
 }) {
   return (
     <motion.div
@@ -1215,6 +1254,8 @@ function IdleView({
         <CancerTypeSelector cancerType={cancerType} onChange={onCancerTypeChange} />
       </motion.div>
 
+      {showExampleOutput && <ExampleOutputPanel />}
+
       <motion.div variants={itemVariants} className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
         <button
           type="button"
@@ -1233,6 +1274,45 @@ function IdleView({
       </motion.div>
 
       {error && <ErrorText message={error} />}
+    </motion.div>
+  )
+}
+
+function ExampleOutputPanel() {
+  return (
+    <motion.div variants={itemVariants} className={`${GLASS_PANEL} mt-8 rounded-[34px] p-5`}>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="m-0 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">INPUT SHOWN:</p>
+        <span className="rounded-full border border-[#c9b8d8]/60 bg-white/60 px-3 py-1 font-mono text-[0.68rem] tracking-[0.14em] text-[#8f7e9b]">
+          EXAMPLE · Try it yourself below
+        </span>
+      </div>
+      <blockquote
+        className={`m-0 max-w-3xl px-0.5 pb-1 text-3xl font-normal leading-tight sm:text-4xl ${SOFT_GRADIENT_TEXT}`}
+      >
+        &quot;{EXAMPLE_INPUT}&quot;
+      </blockquote>
+
+      <div className="mt-7 grid gap-4">
+        <ResultBand label="WHAT ANCHOR HEARS" icon={<HeartHandshake className="h-5 w-5" />}>
+          {EXAMPLE_MIRROR_RESULT.mirror}
+        </ResultBand>
+        <ResultBand label="WHAT IS CLINICALLY TRUE" icon={<ShieldCheck className="h-5 w-5" />}>
+          {EXAMPLE_MIRROR_RESULT.ground}
+        </ResultBand>
+      </div>
+
+      <div className="mt-7">
+        <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NEXT MOVES</p>
+        <div className="grid gap-3">
+          {EXAMPLE_MIRROR_RESULT.actions.map((action, index) => (
+            <div key={action} className={`${GLASS_PANEL} flex gap-4 rounded-[28px] p-4`}>
+              <span className="font-mono text-sm text-[#b98da0]">{String(index + 1).padStart(2, "0")}</span>
+              <span className="text-base leading-7 text-[#3f3a36]">{action}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </motion.div>
   )
 }
@@ -1447,6 +1527,7 @@ function ResultsView({
       </motion.div>
 
       <motion.div variants={itemVariants} className="mt-10">
+        <p className="mb-2 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NCCN-ALIGNED NEXT STEPS</p>
         <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NEXT MOVES</p>
         <div className="grid gap-3">
           {mirrorResult.actions.slice(0, 3).map((action, index) => (
@@ -1499,6 +1580,9 @@ function ResultsView({
               <PlanColumn actions={planResult.tomorrow} label="Tomorrow" onHoverRegret={onHoverRegret} />
               <PlanColumn actions={planResult.next48} label="Next 48" onHoverRegret={onHoverRegret} />
             </div>
+            <p className="mt-5 text-sm leading-6 text-[#756f68]">
+              Steps grounded in NCCN oncology guidelines · Always verify with your care team
+            </p>
             <AnimatePresence>
               {hoveredRegret && (
                 <motion.div
@@ -1915,7 +1999,7 @@ function ClearMyHeadScreen({ cancerType }: { cancerType: CancerType }) {
             <ResultBand label="What's underneath this" icon={<HeartHandshake className="h-5 w-5" />}>
               {result.mirror}
             </ResultBand>
-            <ResultBand label="What's actually true" icon={<ShieldCheck className="h-5 w-5" />}>
+            <ResultBand label="What is clinically true  (NCCN-aligned)" icon={<ShieldCheck className="h-5 w-5" />}>
               {result.ground}
             </ResultBand>
             <div className={`${GLASS_PANEL} rounded-[30px] p-5`}>
@@ -2053,6 +2137,7 @@ function AuthScreen({
   onOtpChange,
   onResetMagicLink,
   onSendMagicLink,
+  onSeeExample,
   onVerifyOtp,
   otpCode,
 }: {
@@ -2066,6 +2151,7 @@ function AuthScreen({
   onOtpChange: (value: string) => void
   onResetMagicLink: () => void
   onSendMagicLink: () => void
+  onSeeExample?: () => void
   onVerifyOtp: () => void
   otpCode: string
 }) {
@@ -2165,6 +2251,15 @@ function AuthScreen({
                 Continue as guest
               </button>
             </div>
+            {onSeeExample && (
+              <button
+                type="button"
+                onClick={onSeeExample}
+                className="self-center text-sm text-[#8f7e9b] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#6f6280]"
+              >
+                See Anchor in action →
+              </button>
+            )}
           </div>
         )}
       </div>
