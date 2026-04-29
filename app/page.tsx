@@ -8,7 +8,6 @@ import {
   Brain,
   CalendarClock,
   Check,
-  ChevronRight,
   Clipboard,
   FileText,
   HeartHandshake,
@@ -156,6 +155,12 @@ const EXAMPLE_ACTION_SCRIPTS = [
   "Before my mom starts any treatment, should we establish a CEA tumor marker baseline? We understand this is used to track recurrence over time. Can we order that blood test now?",
 ]
 
+const EXAMPLE_ACTION_PREFIXES = [
+  "Request the complete",
+  "Schedule a medical oncologist consult",
+  "Ask about CEA baseline blood",
+]
+
 const EXAMPLE_CLINICAL_SOURCES = [
   "NCCN Colon Cancer Guidelines v.5.2025",
   "National Cancer Institute — Colon Cancer Treatment PDQ",
@@ -252,6 +257,17 @@ function getActionScript(action: string, index: number) {
   const normalizedAction = action.toLowerCase()
   const matchedScript = ACTION_SCRIPTS.find(({ match }) => normalizedAction.includes(match.toLowerCase()))
   return (matchedScript ?? ACTION_SCRIPTS[index % ACTION_SCRIPTS.length]).script
+}
+
+function renderActionText(action: string, emphasizedPrefix?: string) {
+  if (!emphasizedPrefix || !action.startsWith(emphasizedPrefix)) return action
+
+  return (
+    <>
+      <strong className="font-bold">{emphasizedPrefix}</strong>
+      {action.slice(emphasizedPrefix.length)}
+    </>
+  )
 }
 
 function pickOneThing(used: number[]) {
@@ -1343,7 +1359,14 @@ function ExampleOutputPanel() {
         <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NCCN-ALIGNED NEXT STEPS</p>
         <div className="grid gap-3">
           {EXAMPLE_MIRROR_RESULT.actions.map((action, index) => (
-            <ExpandableActionItem action={action} index={index} key={action} script={EXAMPLE_ACTION_SCRIPTS[index]} />
+            <ExpandableActionItem
+              action={action}
+              emphasizedPrefix={EXAMPLE_ACTION_PREFIXES[index]}
+              index={index}
+              key={action}
+              script={EXAMPLE_ACTION_SCRIPTS[index]}
+              variant="example"
+            />
           ))}
         </div>
       </div>
@@ -1692,6 +1715,7 @@ function ResultBand({ children, icon, label }: { children: React.ReactNode; icon
 
 function ExpandableActionItem({
   action,
+  emphasizedPrefix,
   index,
   variant = "default",
   onBlur,
@@ -1701,8 +1725,9 @@ function ExpandableActionItem({
   script: providedScript,
 }: {
   action: string
+  emphasizedPrefix?: string
   index: number
-  variant?: "default" | "compact" | "plan"
+  variant?: "default" | "compact" | "example" | "plan"
   onBlur?: () => void
   onFocus?: () => void
   onMouseEnter?: () => void
@@ -1712,13 +1737,15 @@ function ExpandableActionItem({
   const [isOpen, setIsOpen] = useState(false)
   const script = providedScript ?? getActionScript(action, index)
   const isPlan = variant === "plan"
+  const isExample = variant === "example"
   const containerClass =
-    variant === "default"
+    variant === "default" || variant === "example"
       ? `${GLASS_PANEL} rounded-[28px] p-4`
       : variant === "compact"
         ? "rounded-[22px] border border-white/70 bg-white/56 p-4 text-[#3f3a36]"
         : "w-full rounded-[22px] border border-white/75 bg-white/60 p-3 text-left shadow-[0_10px_30px_rgba(116,100,91,0.08)] backdrop-blur-[20px] transition hover:-translate-y-0.5 hover:border-[#c9b8d8]/80"
   const actionClass = isPlan ? "text-sm leading-6 text-[#3f3a36]" : "text-base leading-7 text-[#3f3a36]"
+  const numberClass = isExample ? "font-mono text-lg font-bold text-[#b98da0]" : "font-mono text-sm text-[#b98da0]"
 
   return (
     <div className={containerClass} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
@@ -1731,14 +1758,13 @@ function ExpandableActionItem({
         className="w-full text-left"
       >
         <span className={isPlan ? "mb-2 block font-mono text-xs text-[#8f7e9b]" : "flex gap-4"}>
-          <span className={isPlan ? "" : "font-mono text-sm text-[#b98da0]"}>
+          <span className={isPlan ? "" : numberClass}>
             {String(index + 1).padStart(2, "0")}
           </span>
-          <span className={isPlan ? actionClass : actionClass}>{action}</span>
+          <span className={actionClass}>{renderActionText(action, emphasizedPrefix)}</span>
         </span>
-        <span className="mt-3 flex items-center gap-1 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-[#8f7e9b]">
-          <ChevronRight className={`h-3.5 w-3.5 transition ${isOpen ? "rotate-90" : ""}`} />
-          Tap for script
+        <span className="mt-3 flex items-center gap-1 font-mono text-[0.68rem] tracking-[0.16em] text-[#8f7e9b]">
+          Tap for script →
         </span>
       </button>
       <AnimatePresence>
@@ -2359,13 +2385,16 @@ function AuthScreen({
               </button>
             </div>
             {onSeeExample && (
-              <button
-                type="button"
-                onClick={onSeeExample}
-                className="self-center text-sm text-[#8f7e9b] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#6f6280]"
-              >
-                See Anchor in action →
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onSeeExample}
+                  className="self-center text-sm text-[#8f7e9b] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#6f6280]"
+                >
+                  Try a live demo first →
+                </button>
+                <p className="self-center text-sm text-[#756f68]">See exactly what Anchor does before you begin.</p>
+              </>
             )}
           </div>
         )}
