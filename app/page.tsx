@@ -980,7 +980,7 @@ export default function App() {
                   onClick={startOver}
                   className="text-sm text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#242230]"
                 >
-                  Not {displayName}? Start over
+                  {showExampleOutput ? "Exit demo · Start over →" : `Not ${displayName}? Start over`}
                 </button>
               </div>
             </header>
@@ -1325,6 +1325,11 @@ function IdleView({
           Keep it messy. The transcript becomes your grounded note.
         </p>
       </motion.div>
+      {showExampleOutput && (
+        <p className="mt-3 text-sm leading-6 text-[#756f68]">
+          This is a live demo — speak your own fear to try it yourself, or Start over to enter your own details.
+        </p>
+      )}
 
       {error && <ErrorText message={error} />}
     </motion.div>
