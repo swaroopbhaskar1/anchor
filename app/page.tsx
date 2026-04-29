@@ -8,6 +8,7 @@ import {
   Brain,
   CalendarClock,
   Check,
+  ChevronRight,
   Clipboard,
   FileText,
   HeartHandshake,
@@ -139,15 +140,45 @@ const EXAMPLE_MIRROR_RESULT: MirrorResult = {
   fearQuote: EXAMPLE_INPUT,
   fearSummary: "terrified of failing her because you do not know what to ask",
   mirror:
-    "You're carrying the weight of something no one prepared you for — the fear of getting it wrong when it matters most.",
+    "You're carrying the weight of something no one prepared you for — the fear of getting it wrong when it matters most. That fear means you're paying attention. That's exactly what she needs right now.",
   ground:
-    "Standard NCCN staging for colon cancer (Stage I–IV) determines the treatment pathway. Knowing the exact stage is the first move — everything else follows from it.",
+    "Colon cancer is staged I–IV using the TNM system. Stage determines everything — surgery type, whether chemotherapy follows, and surveillance schedule. Surgery (partial colectomy) is typically the first step for Stages I–III. Chemotherapy such as FOLFOX or CAPOX follows for Stage III. Knowing the exact stage and lymph node involvement from the pathology report is the single most important next move.",
   actions: [
-    "NCCN-aligned next step: Request the full pathology report to confirm staging and lymph node involvement.",
-    "NCCN-aligned next step: Schedule a medical oncologist consult within 7 days of diagnosis.",
-    "NCCN-aligned next step: Ask about CEA tumor marker baseline before treatment begins.",
+    "Request the complete pathology report — confirm tumor stage, lymph node count (12+ nodes required for accurate staging per NCCN v.5.2025), and MMR/MSI status for treatment decisions.",
+    "Schedule a medical oncologist consult within 7 days — standard NCCN timeline for non-metastatic colon cancer. Ask specifically about adjuvant chemotherapy eligibility based on stage.",
+    "Ask about CEA baseline blood test before any treatment begins — carcinoembryonic antigen is the standard NCI-recommended tumor marker for tracking colon cancer recurrence over time.",
   ],
 }
+
+const EXAMPLE_ACTION_SCRIPTS = [
+  "Hi, I'm calling about my mom's recent colon cancer diagnosis. We need the complete pathology report including tumor stage, how many lymph nodes were examined, and MMR/MSI testing results. Our oncologist needs this before our next appointment. Can you send it directly to us?",
+  "Hi, my mom was just diagnosed with colon cancer and we need to schedule an urgent medical oncology consultation. NCCN guidelines recommend this within 7 days of diagnosis. What's the earliest available appointment with a GI oncologist?",
+  "Before my mom starts any treatment, should we establish a CEA tumor marker baseline? We understand this is used to track recurrence over time. Can we order that blood test now?",
+]
+
+const EXAMPLE_CLINICAL_SOURCES = [
+  "NCCN Colon Cancer Guidelines v.5.2025",
+  "National Cancer Institute — Colon Cancer Treatment PDQ",
+  "American Cancer Society — Colorectal Cancer Treatment by Stage",
+]
+
+const ACTION_SCRIPTS = [
+  {
+    match: "pathology report",
+    script:
+      "Hi, I'm calling about my [mom's] recent diagnosis. Could you send us the complete pathology report including staging and lymph node involvement? We want to share it with our oncologist.",
+  },
+  {
+    match: "oncologist consult",
+    script:
+      "Hi, my [mom] was recently diagnosed with colon cancer and we need to schedule an urgent oncologist consultation. What's the earliest available appointment?",
+  },
+  {
+    match: "CEA tumor marker baseline",
+    script:
+      "Before treatment begins, should we establish a CEA tumor marker baseline? Our oncologist mentioned this tracks recurrence — can we order that test now?",
+  },
+]
 
 const ONE_THING_ITEMS = [
   "Put the oncology phone number somewhere obvious.",
@@ -215,6 +246,12 @@ function isCancerType(value: string | null): value is CancerType {
 
 function isRelationship(value: string | null): value is RelationshipValue {
   return RELATIONSHIPS.some((item) => item.value === value)
+}
+
+function getActionScript(action: string, index: number) {
+  const normalizedAction = action.toLowerCase()
+  const matchedScript = ACTION_SCRIPTS.find(({ match }) => normalizedAction.includes(match.toLowerCase()))
+  return (matchedScript ?? ACTION_SCRIPTS[index % ACTION_SCRIPTS.length]).script
 }
 
 function pickOneThing(used: number[]) {
@@ -1297,21 +1334,30 @@ function ExampleOutputPanel() {
         <ResultBand label="WHAT ANCHOR HEARS" icon={<HeartHandshake className="h-5 w-5" />}>
           {EXAMPLE_MIRROR_RESULT.mirror}
         </ResultBand>
-        <ResultBand label="WHAT IS CLINICALLY TRUE" icon={<ShieldCheck className="h-5 w-5" />}>
+        <ResultBand label="WHAT IS CLINICALLY TRUE RIGHT NOW (NCCN-aligned)" icon={<ShieldCheck className="h-5 w-5" />}>
           {EXAMPLE_MIRROR_RESULT.ground}
         </ResultBand>
       </div>
 
       <div className="mt-7">
-        <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NEXT MOVES</p>
+        <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NCCN-ALIGNED NEXT STEPS</p>
         <div className="grid gap-3">
           {EXAMPLE_MIRROR_RESULT.actions.map((action, index) => (
-            <div key={action} className={`${GLASS_PANEL} flex gap-4 rounded-[28px] p-4`}>
-              <span className="font-mono text-sm text-[#b98da0]">{String(index + 1).padStart(2, "0")}</span>
-              <span className="text-base leading-7 text-[#3f3a36]">{action}</span>
-            </div>
+            <ExpandableActionItem action={action} index={index} key={action} script={EXAMPLE_ACTION_SCRIPTS[index]} />
           ))}
         </div>
+      </div>
+
+      <div className="mt-7">
+        <p className="mb-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">CLINICAL SOURCES</p>
+        <div className="space-y-1 text-sm leading-6 text-[#756f68]">
+          {EXAMPLE_CLINICAL_SOURCES.map((source) => (
+            <p className="m-0" key={source}>· {source}</p>
+          ))}
+        </div>
+        <p className="mt-4 text-sm leading-6 text-[#756f68]">
+          This is support for orientation and preparation, not emergency care or a substitute for your oncology team.
+        </p>
       </div>
     </motion.div>
   )
@@ -1536,10 +1582,8 @@ function ResultsView({
               initial={{ opacity: 0, x: -18 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.25 + index * 0.12, duration: 0.55 }}
-              className={`${GLASS_PANEL} flex gap-4 rounded-[28px] p-4`}
             >
-              <span className="font-mono text-sm text-[#b98da0]">{String(index + 1).padStart(2, "0")}</span>
-              <span className="text-base leading-7 text-[#3f3a36]">{action}</span>
+              <ExpandableActionItem action={action} index={index} />
             </motion.div>
           ))}
         </div>
@@ -1646,6 +1690,74 @@ function ResultBand({ children, icon, label }: { children: React.ReactNode; icon
   )
 }
 
+function ExpandableActionItem({
+  action,
+  index,
+  variant = "default",
+  onBlur,
+  onFocus,
+  onMouseEnter,
+  onMouseLeave,
+  script: providedScript,
+}: {
+  action: string
+  index: number
+  variant?: "default" | "compact" | "plan"
+  onBlur?: () => void
+  onFocus?: () => void
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
+  script?: string
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const script = providedScript ?? getActionScript(action, index)
+  const isPlan = variant === "plan"
+  const containerClass =
+    variant === "default"
+      ? `${GLASS_PANEL} rounded-[28px] p-4`
+      : variant === "compact"
+        ? "rounded-[22px] border border-white/70 bg-white/56 p-4 text-[#3f3a36]"
+        : "w-full rounded-[22px] border border-white/75 bg-white/60 p-3 text-left shadow-[0_10px_30px_rgba(116,100,91,0.08)] backdrop-blur-[20px] transition hover:-translate-y-0.5 hover:border-[#c9b8d8]/80"
+  const actionClass = isPlan ? "text-sm leading-6 text-[#3f3a36]" : "text-base leading-7 text-[#3f3a36]"
+
+  return (
+    <div className={containerClass} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        aria-expanded={isOpen}
+        className="w-full text-left"
+      >
+        <span className={isPlan ? "mb-2 block font-mono text-xs text-[#8f7e9b]" : "flex gap-4"}>
+          <span className={isPlan ? "" : "font-mono text-sm text-[#b98da0]"}>
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <span className={isPlan ? actionClass : actionClass}>{action}</span>
+        </span>
+        <span className="mt-3 flex items-center gap-1 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-[#8f7e9b]">
+          <ChevronRight className={`h-3.5 w-3.5 transition ${isOpen ? "rotate-90" : ""}`} />
+          Tap for script
+        </span>
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.p
+            initial={{ opacity: 0, height: 0, y: -4 }}
+            animate={{ opacity: 1, height: "auto", y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -4 }}
+            transition={{ duration: 0.24 }}
+            className="mt-4 overflow-hidden border-t border-white/70 pt-4 text-sm leading-6 text-[#5f5a55]"
+          >
+            {script}
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function PlanColumn({
   actions,
   label,
@@ -1665,18 +1777,16 @@ function PlanColumn({
       <p className="mb-4 text-2xl text-[#242230]">{label}</p>
       <div className="space-y-3">
         {actions.map((action, index) => (
-          <button
-            type="button"
+          <ExpandableActionItem
             key={`${label}-${action.text}`}
             onMouseEnter={() => onHoverRegret(action.regretQuote)}
             onMouseLeave={() => onHoverRegret(null)}
             onFocus={() => onHoverRegret(action.regretQuote)}
             onBlur={() => onHoverRegret(null)}
-            className="w-full rounded-[22px] border border-white/75 bg-white/60 p-3 text-left shadow-[0_10px_30px_rgba(116,100,91,0.08)] backdrop-blur-[20px] transition hover:-translate-y-0.5 hover:border-[#c9b8d8]/80"
-          >
-            <span className="mb-2 block font-mono text-xs text-[#8f7e9b]">{String(index + 1).padStart(2, "0")}</span>
-            <span className="text-sm leading-6 text-[#3f3a36]">{action.text}</span>
-          </button>
+            action={action.text}
+            index={index}
+            variant="plan"
+          />
         ))}
       </div>
     </motion.div>
@@ -1999,17 +2109,14 @@ function ClearMyHeadScreen({ cancerType }: { cancerType: CancerType }) {
             <ResultBand label="What's underneath this" icon={<HeartHandshake className="h-5 w-5" />}>
               {result.mirror}
             </ResultBand>
-            <ResultBand label="What is clinically true  (NCCN-aligned)" icon={<ShieldCheck className="h-5 w-5" />}>
+            <ResultBand label="What is clinically true right now (NCCN-aligned)" icon={<ShieldCheck className="h-5 w-5" />}>
               {result.ground}
             </ResultBand>
             <div className={`${GLASS_PANEL} rounded-[30px] p-5`}>
               <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">THREE WAYS TO LOOSEN ITS GRIP</p>
               <div className="space-y-3">
                 {result.actions.slice(0, 3).map((action, index) => (
-                  <div key={`${action}-${index}`} className="rounded-[22px] border border-white/70 bg-white/56 p-4 text-[#3f3a36]">
-                    <span className="mr-3 font-mono text-xs text-[#b98da0]">{String(index + 1).padStart(2, "0")}</span>
-                    {action}
-                  </div>
+                  <ExpandableActionItem action={action} index={index} key={`${action}-${index}`} variant="compact" />
                 ))}
               </div>
             </div>
@@ -2173,7 +2280,7 @@ function AuthScreen({
           Your space. Private to you.
         </h1>
         <p className="mt-4 text-lg leading-8 text-[#5f5a55]">
-          Sign in or create an account to save your sessions across devices.
+          When everything feels like too much, Anchor shows you what to do next.
         </p>
 
         {magicLinkSent ? (
