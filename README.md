@@ -1,75 +1,465 @@
-# OpenAI WebRTC Shadcn Next15 Starter
-This is a WebRTC-based Voice AI stream application using `OpenAI`'s `Realtime API` and `WebRTC`. Project contains `/api` route and UI components developed with `Next.js` and `shadcn/ui`. It supports real-time audio conversations implented in [skrivov/openai-voice-webrtc-next](https://github.com/skrivov/openai-voice-webrtc-next) with the addition of a hook to abstract the WebRTC handling.
+# Anchor
 
-https://github.com/user-attachments/assets/ea9324af-5c18-48d2-b980-2b81baeea4c0
+Anchor is a Next.js application for cancer caregivers who need a private place to say the unfiltered thing, get the fear reflected back, and leave with clinically grounded next steps.
+
+The product centers on a short voice-first loop: a caregiver speaks what they are carrying, Anchor captures the transcript through OpenAI Realtime WebRTC, retrieves cancer-specific guideline and caregiver-wisdom context from Pinecone, and returns a structured note with emotional mirroring, one clinical grounding point, and three concrete actions.
+
+Anchor is not emergency care, diagnosis, or a replacement for an oncology team. It is designed for orientation, preparation, and caregiver support.
+
+## Core Loop
+
+1. The caregiver signs in with Appwrite magic link or continues as a guest.
+2. Onboarding collects the caregiver name, relationship to the person diagnosed, and cancer type.
+3. The caregiver optionally uploads a pathology PDF or pastes pathology context.
+4. The caregiver starts a voice session, speaks freely, then stops recording.
+5. The accumulated transcript is sent to `/api/mirror`.
+6. Anchor returns:
+   - `mirror`: a human reflection of the underlying fear.
+   - `ground`: a concise clinical fact grounded in retrieved context.
+   - `actions`: three specific next steps.
+   - `fearSummary`: the dominant fear in short form.
+   - `fearQuote`: the raw phrase from the transcript.
+7. The caregiver can request a 72-hour plan from `/api/plan`, copy a note, copy a handoff text, speak again, or use one of the companion tools.
 
 ## Features
-- **Next.js Framework**: Built with Next.js for server-side rendering and API routes.
-- **Modern UI**: Animated using Tailwind CSS & Framer Motion & shadcn/ui.
-- **Use-WebRTC Hook**: A hook to abstract the OpenAI WebRTC handling.
-- **Tool Calling**: 6 example functions to demonstrate client side tools along with Realtime API: `getCurrentTime`, `partyMode`, `changeBackground`, `launchWebsite`, `copyToClipboard`, `scrapeWebsite` (requires FireCrawl API key)
-- **Localization**: Select language for app strings and the voice agent (English, Spanish, French, Chinese)
-- **Type Safety**: TypeScript with strict eslint rules (optional)
 
-  
-## Requirements
-- **Deno runtime** or **Node.js**
-- OpenAI API Key or Azure OpenAI API Key in `.env` file
+- Voice capture through the OpenAI Realtime API over WebRTC.
+- Whisper transcription through Realtime `input_audio_transcription`.
+- Caregiver onboarding for name, relationship, and cancer type.
+- Supported cancer types: `colon`, `breast`, and `lymphoma`.
+- Appwrite magic-link and six-digit email-token sign-in, plus guest mode.
+- Local fallback persistence for guest profile, fear timeline, journal entries, and one-thing completion count.
+- Appwrite persistence for authenticated profiles, journal entries, fear memories, and generated plans.
+- Pathology PDF ingestion with LlamaParse, OpenAI embeddings, and Pinecone upsert.
+- Optional pasted pathology context that is passed directly into mirror and plan generation.
+- RAG over `guidelines` and `wisdom` Pinecone namespaces.
+- 72-hour action plans with regret-prevention prompts.
+- Fear timeline from local storage or Appwrite.
+- Private companion tools:
+  - `Calm Down`: paced breathing.
+  - `Clear My Head`: typed thought reflection through `/api/mirror`.
+  - `Get It Out`: private journaling with keep/release flows.
+  - `Just Do This`: one small caregiver task.
+- Clipboard export for a full Anchor note and a concise support-person handoff.
+- Built-in demo mode with example colon-cancer output.
+- shadcn/ui component library, Tailwind CSS, Framer Motion, Sonner toasts, and Vercel Analytics.
 
-## Installation
+## Clinical Grounding Architecture
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/cameronking4/openai-realtime-api-nextjs.git
-cd openai-realtime-api-nextjs
+Anchor uses a retrieval-augmented architecture for clinical grounding.
+
+`data/guidelines-chunks.json` contains curated clinical chunks for colon cancer, breast cancer, and lymphoma. The chunk metadata includes `cancerType`, `topic`, and `source`, with source labels such as NCCN guideline versions and oncology literature references.
+
+`scripts/upsert-guidelines.ts` embeds those chunks with `text-embedding-3-small` and writes them to the Pinecone `guidelines` namespace.
+
+`scripts/seed-wisdom.ts` embeds caregiver-support and navigation guidance into the Pinecone `wisdom` namespace. Wisdom records are tagged as either `universal` or cancer-type-specific.
+
+`/api/mirror` and `/api/plan` embed a query, retrieve from:
+
+- `guidelines`: top 5 matches filtered to the selected `cancerType`.
+- `wisdom`: top 3 matches filtered to the selected `cancerType` or `universal`.
+
+Those retrieved texts are injected into tightly constrained GPT-4o system prompts that require JSON output and specific section shapes.
+
+`/api/ingest` parses uploaded pathology PDFs with LlamaParse, chunks the parsed text, embeds it, and upserts it into Pinecone. Current generation routes use pasted `pathologyText` directly and retrieve from `guidelines` and `wisdom`; the uploaded `patient-docs` namespace is present as ingestion infrastructure for report retrieval.
+
+## API Reference
+
+All API routes are Next.js route handlers under `app/api`.
+
+### `POST /api/session`
+
+Creates an OpenAI Realtime ephemeral session for browser WebRTC.
+
+Request body: none.
+
+OpenAI session configuration:
+
+- `model`: `gpt-4o-realtime-preview-2024-12-17`
+- `voice`: `alloy`
+- `modalities`: `["audio", "text"]`
+- `tool_choice`: `auto`
+
+Success response:
+
+```json
+{
+  "id": "sess_...",
+  "object": "realtime.session",
+  "client_secret": {
+    "value": "ek_..."
+  }
+}
 ```
 
-### 2. Environment Setup
-Create a `.env` file in the root directory:
-```env
-OPENAI_API_KEY=your-openai-api-key
+The exact payload is proxied from OpenAI. The WebRTC hook reads `client_secret.value`.
+
+Error response:
+
+```json
+{
+  "error": "Failed to fetch session data"
+}
 ```
 
-### 3. Install Dependencies
-If using **Node.js**:
+### `POST /api/mirror`
+
+Generates the main Anchor reflection.
+
+Request body:
+
+```json
+{
+  "transcript": "I do not know what questions to ask and I am scared I will miss something.",
+  "pathologyText": "Optional pasted stage, biomarkers, impression, or confusing report line.",
+  "cancerType": "colon"
+}
+```
+
+Validation:
+
+- `transcript` is required.
+- `cancerType` must be `colon`, `breast`, or `lymphoma`.
+
+Success response:
+
+```json
+{
+  "mirror": "string",
+  "ground": "string",
+  "actions": ["string", "string", "string"],
+  "fearSummary": "string",
+  "fearQuote": "string"
+}
+```
+
+Error responses:
+
+```json
+{ "error": "transcript is required" }
+```
+
+```json
+{ "error": "cancerType must be one of: colon | breast | lymphoma" }
+```
+
+```json
+{ "error": "Internal server error from GPT-4o" }
+```
+
+```json
+{ "error": "Bad request or processing error" }
+```
+
+### `POST /api/plan`
+
+Generates a 72-hour action plan and optionally persists it to Appwrite.
+
+Request body:
+
+```json
+{
+  "fearSummary": "terrified of missing a test that could hurt her",
+  "cancerType": "breast",
+  "pathologyText": "Optional pasted pathology context.",
+  "sessionId": "session-1710000000000"
+}
+```
+
+Validation:
+
+- `cancerType` must be `colon`, `breast`, or `lymphoma`.
+- `sessionId` is optional. When present, the completed plan is written to the Appwrite artifacts collection.
+
+Success response:
+
+```json
+{
+  "tonight": [
+    { "text": "string", "regretQuote": "string" },
+    { "text": "string", "regretQuote": "string" },
+    { "text": "string", "regretQuote": "string" }
+  ],
+  "tomorrow": [
+    { "text": "string", "regretQuote": "string" },
+    { "text": "string", "regretQuote": "string" },
+    { "text": "string", "regretQuote": "string" }
+  ],
+  "next48": [
+    { "text": "string", "regretQuote": "string" },
+    { "text": "string", "regretQuote": "string" },
+    { "text": "string", "regretQuote": "string" }
+  ]
+}
+```
+
+Error responses:
+
+```json
+{ "error": "cancerType must be one of: colon | breast | lymphoma" }
+```
+
+```json
+{ "error": "Internal server error from GPT-4o" }
+```
+
+```json
+{ "error": "Bad request or processing error" }
+```
+
+### `POST /api/fear`
+
+Extracts a fear memory from a transcript and attempts to persist it to Appwrite. Appwrite write failures are logged but do not block the response.
+
+Request body:
+
+```json
+{
+  "transcript": "I keep thinking the scan will show it spread everywhere.",
+  "sessionId": "session-1710000000000",
+  "contextTag": "scan",
+  "userId": "optional-appwrite-user-id"
+}
+```
+
+Validation:
+
+- `transcript` is required and must be a non-empty string.
+- `sessionId` is required and must be a non-empty string.
+- `contextTag` must be one of `diagnosis`, `scan`, `chemo_start`, `post_surgery`, `night-note`, or `other`.
+- `userId` is optional.
+
+Success response:
+
+```json
+{
+  "fearSummary": "string",
+  "fearQuote": "string",
+  "contextTag": "scan"
+}
+```
+
+Error responses:
+
+```json
+{ "error": "Invalid JSON body" }
+```
+
+```json
+{ "error": "transcript is required and must be a non-empty string" }
+```
+
+```json
+{ "error": "sessionId is required and must be a non-empty string" }
+```
+
+```json
+{ "error": "contextTag must be one of: diagnosis, scan, chemo_start, post_surgery, night-note, other" }
+```
+
+```json
+{ "error": "Server misconfiguration: missing OPENAI_API_KEY" }
+```
+
+```json
+{ "error": "GPT-4o returned an unparseable response" }
+```
+
+```json
+{ "error": "GPT-4o response was missing required fields" }
+```
+
+### `POST /api/ingest`
+
+Parses a pathology PDF and stores embedded chunks in Pinecone.
+
+Request body: `multipart/form-data`.
+
+Fields:
+
+- `file`: PDF file.
+- `sessionId`: string.
+- `cancerType`: `colon`, `breast`, or `lymphoma`.
+
+Behavior:
+
+- Uploads the PDF to LlamaParse.
+- Polls for parsed markdown.
+- Chunks the text into roughly 500-word chunks with overlap.
+- Embeds chunks with `text-embedding-3-small`.
+- Upserts records into Pinecone.
+- Uses the `patient-docs` namespace by default.
+- Uses the `guidelines` namespace when `sessionId` starts with `nccn-`.
+
+Success response:
+
+```json
+{
+  "success": true,
+  "sessionId": "session-1710000000000",
+  "chunksIngested": 12
+}
+```
+
+Error responses:
+
+```json
+{ "error": "file, sessionId, and cancerType are required" }
+```
+
+```json
+{ "error": "cancerType must be colon | breast | lymphoma" }
+```
+
+```json
+{ "error": "LlamaParse upload failed" }
+```
+
+```json
+{ "error": "LlamaParse did not return text in time" }
+```
+
+```json
+{ "error": "No text could be extracted or chunked from the file" }
+```
+
+```json
+{ "error": "Internal server error" }
+```
+
+## Data Stores
+
+### Pinecone
+
+Expected namespaces:
+
+- `guidelines`: clinical guideline chunks from `data/guidelines-chunks.json`.
+- `wisdom`: caregiver navigation and psycho-oncology support snippets from `scripts/seed-wisdom.ts`.
+- `patient-docs`: uploaded pathology-report chunks from `/api/ingest`.
+
+The index must support OpenAI `text-embedding-3-small` vectors.
+
+### Appwrite
+
+The browser client uses `NEXT_PUBLIC_APPWRITE_*` variables for account, profile, and journal access. Server routes use admin `APPWRITE_*` variables for fear and artifact writes.
+
+Collections referenced by the application:
+
+- `fears`: hardcoded collection id `69eddc5700127a860597`.
+  - `sessionId`, `timestamp`, `fearSummary`, `fearQuote`, `contextTag`, optional `userId`.
+- `artifacts`: hardcoded collection id `69eddc5c003dc0e0a3f1`.
+  - `sessionId`, `type`, `content`, `timestamp`.
+- `profiles`: configured by `NEXT_PUBLIC_APPWRITE_PROFILES_COLLECTION_ID`.
+  - document id is the Appwrite user id.
+  - `userId`, `name`, `relationship`, `cancerType`.
+- `journal`: configured by `NEXT_PUBLIC_APPWRITE_JOURNAL_COLLECTION_ID`.
+  - `userId`, `content`, `prompt`, `timestamp`, `kept`.
+
+`scripts/setup-appwrite.ts` creates `fears`, `sessions`, and `artifacts` collections in an existing Appwrite database. Profiles and journal collections are expected by the current UI and should be created/configured separately if they are not already present.
+
+## Local Development
+
+Requirements:
+
+- Node.js 20 or newer.
+- npm.
+- OpenAI API key.
+- Pinecone project and index.
+- Llama Cloud API key for PDF ingestion.
+- Appwrite project/database for auth and persistence.
+
+Install dependencies:
+
 ```bash
 npm install
 ```
 
-If using **Deno**:
+Create a local environment file:
+
 ```bash
-deno install
+cp .env.example .env.local
 ```
 
-### 4. Run the Application
+Fill in the values in `.env.local`, then start the app:
 
-#### Using Node.js:
 ```bash
 npm run dev
 ```
 
-#### Using Deno:
+Open `http://localhost:3000`.
+
+Build for production:
+
 ```bash
-deno task start
+npm run build
 ```
 
-The application will be available at `http://localhost:3000`.
+## Seeding Clinical Context
 
-## Usage
-1. Open the app in your browser: `http://localhost:3000`.
-3. Select a voice and start the audio session.
+Seed the guideline namespace:
 
-## Deploy to Vercel
-**Deploy in one-click**
+```bash
+npx tsx scripts/upsert-guidelines.ts
+```
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcameronking4%2Fopenai-realtime-api-nextjs&env=OPENAI_API_KEY&envDescription=OpenAI%20Key%20(Realtime%20API%20Beta%20access)&envLink=https%3A%2F%2Fplatform.openai.com%2Fapi-keys&project-name=openai-rt-shadcn&repository-name=openai-realtime-api-nextjs-clone&demo-title=OpenAI%20Realtime%20API%20(WebRTC)%20x%20shadcn%2Fui&demo-description=Next.js%2015%20template%20to%20create%20beautiful%20Voice%20AI%20applications%20with%20OpenAI%20Realtime%20API%20Beta&demo-url=https%3A%2F%2Fopenai-rt-shadcn.vercel.app&demo-image=http%3A%2F%2Fopenai-rt-shadcn.vercel.app%2Fdemo.gif)
+Seed the caregiver-wisdom namespace:
+
+```bash
+npx tsx scripts/seed-wisdom.ts
+```
+
+Check Pinecone index stats:
+
+```bash
+npx tsx scripts/check-pinecone.ts
+```
+
+Set up the Appwrite collections handled by the setup script:
+
+```bash
+npx tsx scripts/setup-appwrite.ts
+```
+
+## Project Structure
+
+```text
+app/
+  api/
+    fear/route.ts      Fear extraction and persistence
+    ingest/route.ts    Pathology PDF parsing and vector upsert
+    mirror/route.ts    Main grounded reflection endpoint
+    plan/route.ts      72-hour plan generation
+    session/route.ts   OpenAI Realtime ephemeral sessions
+  layout.tsx           Providers, metadata, analytics
+  page.tsx             Main Anchor experience
+components/
+  ui/                  shadcn/ui primitives
+  translations-context.tsx
+hooks/
+  use-webrtc.ts        OpenAI Realtime WebRTC session manager
+  use-tools.ts         Legacy starter tool-call handlers
+lib/
+  appwrite.ts          Browser Appwrite client
+  tools.ts             Realtime tool definitions
+  conversations.ts     Conversation message type
+  translations/        Starter i18n dictionaries
+scripts/
+  setup-appwrite.ts
+  seed-wisdom.ts
+  upsert-guidelines.ts
+  check-pinecone.ts
+data/
+  guidelines-chunks.json
+```
+
+## Notes For Contributors
+
+- The current primary app is `app/page.tsx`; several inherited Realtime starter components remain in `components/` for reference/debug surfaces.
+- Realtime tool definitions are passed into the WebRTC session, but the main Anchor experience does not currently register the corresponding client functions from `hooks/use-tools.ts`.
+- Uploaded pathology PDFs are embedded into Pinecone. Mirror and plan generation currently use pasted pathology text plus guideline/wisdom retrieval.
+- API prompts require JSON output. When changing prompt shape, update this README and the corresponding TypeScript interfaces in `app/page.tsx`.
+- Keep clinical claims tied to retrieved context or explicit source chunks. Avoid adding ungrounded medical guidance directly in UI copy.
 
 ## License
-This project is licensed under the MIT License. See the `LICENSE` file for details.
 
-## Acknowledgements
-- [OpenAI](https://openai.com/) for their API and models.
-- [Next.js](https://nextjs.org/) for the framework.
-- [Tailwind CSS](https://tailwindcss.com/) for styling.
-- [Simon Willison’s Weblog](https://simonwillison.net/2024/Dec/17/openai-webrtc/) for inspiration
-- [Originator: skrivov](https://github.com/skrivov/openai-voice-webrtc-next) for the WebRTC and Nextjs implementation
+MIT. See `LICENSE`.
