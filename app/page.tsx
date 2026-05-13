@@ -958,34 +958,34 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8 }}
-            className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-10"
+            className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 sm:px-8 sm:py-6 lg:px-10"
           >
-            <header className="flex items-start justify-between gap-4">
+            <header className="flex items-center justify-between gap-3">
               <div>
                 <p className="m-0 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">ANCHOR</p>
-                <p className="m-0 mt-1 text-sm text-[#756f68]">{currentDateLabel()}</p>
+                <p className="m-0 mt-0.5 text-xs text-[#756f68] sm:mt-1 sm:text-sm">{currentDateLabel()}</p>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 {authStatus === "guest" && (
                   <button
                     type="button"
                     onClick={() => setShowAuthModal(true)}
-                    className="text-sm text-[#8f7e9b] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#6f6280]"
+                    className="text-xs text-[#8f7e9b] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#6f6280] sm:text-sm"
                   >
-                    Save across devices →
+                    Save →
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={startOver}
-                  className="text-sm text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#242230]"
+                  className="text-xs text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#242230] sm:text-sm"
                 >
-                  {showExampleOutput ? "Exit demo · Start over →" : `Not ${displayName}? Start over`}
+                  {showExampleOutput ? "Exit demo" : "Start over"}
                 </button>
               </div>
             </header>
 
-            <div className="grid flex-1 gap-8 py-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:py-12">
+            <div className="grid flex-1 gap-5 py-5 sm:gap-8 sm:py-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:py-12">
               <section className="min-w-0">
                 <AnimatePresence mode="wait">
                   {phase === "idle" && (
@@ -1166,7 +1166,7 @@ function Onboarding({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, y: -16 }}
       transition={{ duration: 0.65 }}
-      className="relative z-10 grid min-h-screen place-items-center px-5 py-10"
+      className="relative z-10 flex min-h-screen flex-col items-center justify-center px-5 py-10 sm:py-16"
     >
       <AnimatePresence mode="wait">
         {onboardingStep === "name" ? (
@@ -1176,17 +1176,17 @@ function Onboarding({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
-            className={`${GLASS_PANEL} w-full max-w-4xl rounded-[40px] p-8 sm:p-12`}
+            className={`${GLASS_PANEL} w-full max-w-lg rounded-[32px] p-7 sm:max-w-4xl sm:rounded-[40px] sm:p-12`}
           >
-            <p className="mb-6 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">FIRST, THE PERSON HOLDING IT TOGETHER</p>
-            <h1 className={`max-w-3xl text-5xl font-normal leading-none sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>
+            <p className="mb-4 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">FIRST, THE PERSON HOLDING IT TOGETHER</p>
+            <h1 className={`text-3xl font-normal leading-tight sm:text-5xl lg:text-7xl ${SOFT_GRADIENT_TEXT}`}>
               What should Anchor call you?
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-[#5f5a55]">
+            <p className="mt-4 text-base leading-7 text-[#5f5a55] sm:mt-6 sm:text-lg sm:leading-8">
               Anchor is an AI companion for the family member navigating a loved one&apos;s cancer diagnosis.
               Speak your fear, get clinically grounded, and leave with the next moves to take.
             </p>
-            <div className="mt-12 flex flex-col gap-5 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-4 sm:mt-12 sm:flex-row">
               <input
                 autoFocus
                 value={caregiverName}
@@ -1195,13 +1195,13 @@ function Onboarding({
                   if (event.key === "Enter") onContinueName()
                 }}
                 placeholder="Sarah"
-                className="min-h-20 flex-1 border-b border-[#c9b8d8]/70 bg-transparent text-5xl text-[#242230] outline-none placeholder:text-[#b9afa7] focus:border-[#b98da0] sm:text-6xl"
+                className="min-h-[64px] flex-1 border-b border-[#c9b8d8]/70 bg-transparent text-4xl text-[#242230] outline-none placeholder:text-[#b9afa7] focus:border-[#b98da0] sm:text-5xl lg:text-6xl"
               />
               <button
                 type="button"
                 onClick={onContinueName}
                 disabled={!caregiverName.trim()}
-                className="flex items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-5 text-lg text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-base text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 sm:text-lg sm:py-5"
               >
                 Continue
                 <ArrowRight className="h-5 w-5" />
@@ -1215,11 +1215,11 @@ function Onboarding({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-6xl"
+            className="w-full max-w-lg sm:max-w-6xl"
           >
-            <p className="mb-5 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">NOW NAME THE CARE CONTEXT</p>
-            <h1 className={`overflow-visible px-0.5 pb-1 text-5xl font-normal leading-none sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>Who was diagnosed?</h1>
-            <div className="mt-9 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <p className="mb-3 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">NOW NAME THE CARE CONTEXT</p>
+            <h1 className={`overflow-visible px-0.5 pb-1 text-3xl font-normal leading-tight sm:text-5xl lg:text-7xl ${SOFT_GRADIENT_TEXT}`}>Who was diagnosed?</h1>
+            <div className="mt-6 grid grid-cols-2 gap-2 sm:mt-9 sm:gap-3 lg:grid-cols-4">
               {RELATIONSHIPS.map((item, index) => (
                 <motion.button
                   type="button"
@@ -1228,27 +1228,27 @@ function Onboarding({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.04, duration: 0.5 }}
                   onClick={() => setRelationship(item.value)}
-                  whileHover={{ scale: 1.03, y: -6 }}
-                  className={`min-h-40 rounded-[30px] p-5 text-left backdrop-blur-[20px] transition duration-300 ${
+                  whileHover={{ scale: 1.03, y: -4 }}
+                  className={`min-h-[100px] rounded-[22px] p-4 text-left backdrop-blur-[20px] transition duration-300 sm:min-h-40 sm:rounded-[30px] sm:p-5 ${
                     relationship === item.value
                       ? "border border-[#c9b8d8] bg-white/75 shadow-[0_24px_76px_rgba(178,150,176,0.22)]"
                       : "border border-white/70 bg-white/60 shadow-[0_16px_50px_rgba(116,100,91,0.1)] hover:border-[#c9b8d8]/80"
                   }`}
                 >
-                  <span className="block text-2xl text-[#242230]">{item.label}</span>
-                  <span className="mt-4 block max-w-xs text-sm leading-6 text-[#756f68]">{item.note}</span>
+                  <span className="block text-lg text-[#242230] sm:text-2xl">{item.label}</span>
+                  <span className="mt-2 block text-xs leading-5 text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">{item.note}</span>
                 </motion.button>
               ))}
             </div>
 
-            <div className={`${GLASS_PANEL} mt-6 rounded-[32px] p-5`}>
+            <div className={`${GLASS_PANEL} mt-4 rounded-[26px] p-5 sm:mt-6 sm:rounded-[32px]`}>
               <p className="mb-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">CANCER TYPE</p>
               <CancerTypeSelector cancerType={cancerType} onChange={onCancerTypeChange} />
               <button
                 type="button"
                 onClick={onFinish}
                 disabled={!relationship}
-                className="mt-5 flex w-full items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-6 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                className="mt-4 flex w-full items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-6 py-4 text-base text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 sm:mt-5 sm:w-auto"
               >
                 Enter Anchor
                 <ArrowRight className="h-5 w-5" />
@@ -1289,44 +1289,44 @@ function IdleView({
       exit={{ opacity: 0, y: -16, transition: { duration: 0.3 } }}
       className="max-w-4xl"
     >
-      <motion.p variants={itemVariants} className="mb-5 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">
+      <motion.p variants={itemVariants} className="mb-3 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">
         FOR {displayName.toUpperCase()} AND YOUR {lovedOne.toUpperCase()}
       </motion.p>
       <motion.h1
         variants={itemVariants}
-        className={`max-w-4xl overflow-visible px-0.5 pb-1 text-5xl font-normal leading-[0.98] sm:text-7xl lg:text-8xl ${SOFT_GRADIENT_TEXT}`}
+        className={`max-w-4xl overflow-visible px-0.5 pb-1 text-3xl font-normal leading-tight sm:text-5xl lg:text-7xl xl:text-8xl ${SOFT_GRADIENT_TEXT}`}
       >
         What are you carrying right now, {displayName}?
       </motion.h1>
-      <motion.p variants={itemVariants} className="mt-7 max-w-2xl text-lg leading-8 text-[#5f5a55]">
+      <motion.p variants={itemVariants} className="mt-4 max-w-2xl text-base leading-7 text-[#5f5a55] sm:mt-7 sm:text-lg sm:leading-8">
         Anchor will listen, reflect the fear, ground it in the clinical path, and give you the next move for your {lovedOneLabel.toLowerCase()}.
       </motion.p>
 
-      <motion.div variants={itemVariants} className={`${GLASS_PANEL} mt-9 rounded-[34px] p-5`}>
+      <motion.div variants={itemVariants} className={`${GLASS_PANEL} mt-5 rounded-[28px] p-4 sm:mt-9 sm:rounded-[34px] sm:p-5`}>
         <p className="mb-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">DIAGNOSIS CONTEXT</p>
         <CancerTypeSelector cancerType={cancerType} onChange={onCancerTypeChange} />
       </motion.div>
 
       {showExampleOutput && <ExampleOutputPanel />}
 
-      <motion.div variants={itemVariants} className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+      <motion.div variants={itemVariants} className="mt-5 flex flex-col gap-3 sm:mt-8">
         <button
           type="button"
           onClick={handleStartStopClick}
-          className="group flex w-full items-center justify-between rounded-[32px] border border-white/80 bg-[#b7a6c9] px-7 py-6 text-left text-white shadow-[0_24px_72px_rgba(151,128,163,0.26)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_30px_86px_rgba(151,128,163,0.3)] sm:w-auto sm:min-w-80"
+          className="group flex w-full items-center justify-between rounded-[28px] border border-white/80 bg-[#b7a6c9] px-6 py-5 text-left text-white shadow-[0_24px_72px_rgba(151,128,163,0.26)] transition duration-300 hover:-translate-y-0.5 active:scale-[0.98] hover:shadow-[0_30px_86px_rgba(151,128,163,0.3)] sm:rounded-[32px] sm:px-7 sm:py-6"
         >
           <span>
-            <span className="block text-xl">Start speaking</span>
-            <span className="mt-1 block text-sm text-white/80">Anchor listens until you tap stop.</span>
+            <span className="block text-lg sm:text-xl">Start speaking</span>
+            <span className="mt-0.5 block text-sm text-white/80">Anchor listens until you tap stop.</span>
           </span>
-          <Mic className="h-6 w-6 transition group-hover:scale-110" />
+          <Mic className="h-6 w-6 shrink-0 transition group-hover:scale-110" />
         </button>
-        <p className="max-w-sm text-sm leading-6 text-[#756f68]">
-          Keep it messy. The transcript becomes your grounded note.
+        <p className="text-sm leading-6 text-[#756f68]">
+          Keep it messy. Speak or type — the transcript becomes your grounded note.
         </p>
       </motion.div>
       {showExampleOutput && (
-        <p className="mt-3 text-sm leading-6 text-[#756f68]">
+        <p className="mt-2 text-sm leading-6 text-[#756f68]">
           This is a live demo — speak your own fear to try it yourself, or Start over to enter your own details.
         </p>
       )}
@@ -1338,15 +1338,15 @@ function IdleView({
 
 function ExampleOutputPanel() {
   return (
-    <motion.div variants={itemVariants} className={`${GLASS_PANEL} mt-8 rounded-[34px] p-5`}>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <motion.div variants={itemVariants} className={`${GLASS_PANEL} mt-5 rounded-[28px] p-4 sm:mt-8 sm:rounded-[34px] sm:p-5`}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <p className="m-0 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">INPUT SHOWN:</p>
         <span className="rounded-full border border-[#c9b8d8]/60 bg-white/60 px-3 py-1 font-mono text-[0.68rem] tracking-[0.14em] text-[#8f7e9b]">
           EXAMPLE · Try it yourself below
         </span>
       </div>
       <blockquote
-        className={`m-0 max-w-3xl px-0.5 pb-1 text-3xl font-normal leading-tight sm:text-4xl ${SOFT_GRADIENT_TEXT}`}
+        className={`m-0 max-w-3xl px-0.5 pb-1 text-xl font-normal leading-tight sm:text-3xl lg:text-4xl ${SOFT_GRADIENT_TEXT}`}
       >
         &quot;{EXAMPLE_INPUT}&quot;
       </blockquote>
@@ -1393,20 +1393,20 @@ function ExampleOutputPanel() {
 
 function CancerTypeSelector({ cancerType, onChange }: { cancerType: CancerType; onChange: (value: CancerType) => void }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
       {CANCER_TYPES.map((item) => (
         <button
           type="button"
           key={item.value}
           onClick={() => onChange(item.value)}
-          className={`rounded-[24px] p-4 text-left transition duration-300 hover:-translate-y-0.5 ${
+          className={`rounded-[18px] p-3 text-left transition duration-300 hover:-translate-y-0.5 active:scale-[0.97] sm:rounded-[24px] sm:p-4 ${
             cancerType === item.value
               ? "border border-[#c9b8d8] bg-white/78 text-[#242230] shadow-[0_16px_48px_rgba(178,150,176,0.18)]"
               : "border border-white/70 bg-white/50 text-[#3f3a36] shadow-[0_10px_30px_rgba(116,100,91,0.08)]"
           }`}
         >
-          <span className="block text-lg">{item.label}</span>
-          <span className="mt-2 block text-sm leading-5 text-[#756f68]">{item.detail}</span>
+          <span className="block text-sm font-medium sm:text-lg">{item.label}</span>
+          <span className="mt-1 block text-[11px] leading-4 text-[#756f68] sm:mt-2 sm:text-sm sm:leading-5">{item.detail}</span>
         </button>
       ))}
     </div>
@@ -1437,15 +1437,15 @@ function RecordingView({
       transition={{ duration: 0.65 }}
       className="max-w-4xl"
     >
-      <p className="mb-5 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">LISTENING</p>
-      <h1 className={`text-5xl font-normal leading-none sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>
+      <p className="mb-3 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">LISTENING</p>
+      <h1 className={`text-3xl font-normal leading-tight sm:text-5xl lg:text-7xl ${SOFT_GRADIENT_TEXT}`}>
         Say the unedited version, {displayName}.
       </h1>
-      <p className="mt-6 max-w-2xl text-lg leading-8 text-[#5f5a55]">
+      <p className="mt-4 max-w-2xl text-base leading-7 text-[#5f5a55] sm:mt-6 sm:text-lg sm:leading-8">
         Anchor is listening for the fear under the fear, then grounding it for your {lovedOne}&apos;s {cancerType} cancer.
       </p>
 
-      <div className={`${GLASS_PANEL} relative mt-10 grid h-[390px] place-items-center overflow-hidden rounded-[48px]`}>
+      <div className={`${GLASS_PANEL} relative mt-6 grid h-[300px] place-items-center overflow-hidden rounded-[36px] sm:mt-10 sm:h-[390px] sm:rounded-[48px]`}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.9),rgba(217,203,232,0.2)_54%,rgba(234,210,220,0.18)_78%,rgba(255,255,255,0.42)_100%)]" />
         <motion.div
           animate={{
@@ -1490,9 +1490,9 @@ function RecordingView({
         </motion.div>
       </div>
 
-      <div className={`${GLASS_PANEL} mt-7 min-h-20 rounded-[30px] p-5`}>
+      <div className={`${GLASS_PANEL} mt-4 min-h-16 rounded-[24px] p-4 sm:mt-7 sm:min-h-20 sm:rounded-[30px] sm:p-5`}>
         <p className="m-0 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">LAST WORDS ANCHOR CAUGHT</p>
-        <p className="mt-3 max-w-2xl text-lg italic leading-8 text-[#5f5a55]">
+        <p className="mt-2 max-w-2xl text-base italic leading-7 text-[#5f5a55] sm:mt-3 sm:text-lg sm:leading-8">
           {latestUserLine || "No need to make it coherent yet. Just start where it hurts."}
         </p>
       </div>
@@ -1508,15 +1508,15 @@ function ProcessingView({ phrase }: { phrase: string }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -18 }}
       transition={{ duration: 0.7 }}
-      className="flex min-h-[520px] max-w-3xl flex-col justify-center"
+      className="flex min-h-[380px] max-w-3xl flex-col justify-center sm:min-h-[520px]"
     >
-      <div className={`${GLASS_PANEL} mb-10 flex h-28 w-fit items-center gap-2 rounded-[32px] px-8`}>
+      <div className={`${GLASS_PANEL} mb-7 flex h-20 w-fit items-center gap-2 rounded-[28px] px-6 sm:mb-10 sm:h-28 sm:rounded-[32px] sm:px-8`}>
         {[0, 1, 2, 3, 4].map((index) => (
           <motion.div
             key={index}
-            animate={{ height: [30, 104, 42, 76, 30], opacity: [0.35, 0.95, 0.58, 0.8, 0.35] }}
+            animate={{ height: [22, 76, 32, 58, 22], opacity: [0.35, 0.95, 0.58, 0.8, 0.35] }}
             transition={{ duration: 2.6, repeat: Infinity, delay: index * 0.18, ease: "easeInOut" }}
-            className="w-4 rounded-full bg-gradient-to-b from-[#d7cbe8] to-[#d9b8c6]"
+            className="w-3 rounded-full bg-gradient-to-b from-[#d7cbe8] to-[#d9b8c6] sm:w-4"
           />
         ))}
       </div>
@@ -1527,12 +1527,12 @@ function ProcessingView({ phrase }: { phrase: string }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -18 }}
           transition={{ duration: 0.55 }}
-          className={`text-5xl font-normal leading-none sm:text-7xl ${SOFT_GRADIENT_TEXT}`}
+          className={`text-3xl font-normal leading-tight sm:text-5xl lg:text-7xl ${SOFT_GRADIENT_TEXT}`}
         >
           {phrase}
         </motion.h1>
       </AnimatePresence>
-      <p className="mt-7 max-w-xl text-lg leading-8 text-[#5f5a55]">
+      <p className="mt-5 max-w-xl text-base leading-7 text-[#5f5a55] sm:mt-7 sm:text-lg sm:leading-8">
         Anchor is holding the emotional signal next to guideline-grounded next steps.
       </p>
     </motion.div>
@@ -1581,17 +1581,17 @@ function ResultsView({
       exit={{ opacity: 0, y: -16 }}
       className="max-w-4xl"
     >
-      <motion.p variants={itemVariants} className="mb-5 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">
+      <motion.p variants={itemVariants} className="mb-3 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">
         YOUR NEXT MOVES FOR YOUR {lovedOne.toUpperCase()}&apos;S {cancerType.toUpperCase()} CANCER
       </motion.p>
       <motion.blockquote
         variants={itemVariants}
-        className={`m-0 max-w-4xl text-5xl font-normal leading-none sm:text-7xl lg:text-8xl ${SOFT_GRADIENT_TEXT}`}
+        className={`m-0 max-w-4xl text-2xl font-normal leading-tight sm:text-4xl lg:text-6xl xl:text-8xl ${SOFT_GRADIENT_TEXT}`}
       >
         &quot;{mirrorResult.fearQuote}&quot;
       </motion.blockquote>
 
-      <motion.div variants={itemVariants} className="mt-12 grid gap-4">
+      <motion.div variants={itemVariants} className="mt-6 grid gap-3 sm:mt-12 sm:gap-4">
         <ResultBand label="What Anchor hears" icon={<HeartHandshake className="h-5 w-5" />}>
           {mirrorResult.mirror}
         </ResultBand>
@@ -1600,9 +1600,8 @@ function ResultsView({
         </ResultBand>
       </motion.div>
 
-      <motion.div variants={itemVariants} className="mt-10">
-        <p className="mb-2 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NCCN-ALIGNED NEXT STEPS</p>
-        <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NEXT MOVES</p>
+      <motion.div variants={itemVariants} className="mt-6 sm:mt-10">
+        <p className="mb-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NCCN-ALIGNED NEXT STEPS</p>
         <div className="grid gap-3">
           {mirrorResult.actions.slice(0, 3).map((action, index) => (
             <motion.div
@@ -1617,23 +1616,23 @@ function ResultsView({
         </div>
       </motion.div>
 
-      <motion.div variants={itemVariants} className="mt-10 flex flex-col gap-3 sm:flex-row">
+      <motion.div variants={itemVariants} className="mt-6 flex flex-col gap-3 sm:mt-10">
         <button
           type="button"
           onClick={onPlan}
           disabled={isPlanning}
-          className="flex items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-6 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 disabled:opacity-55"
+          className="flex w-full items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-6 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-55"
         >
           {isPlanning ? "Building your 72-hour plan..." : "Get your 72-hour plan"}
-          <CalendarClock className="h-5 w-5" />
+          <CalendarClock className="h-5 w-5 shrink-0" />
         </button>
         <button
           type="button"
           onClick={() => onCopy("note", noteText)}
-          className={`${GLASS_BUTTON} flex items-center justify-center gap-3 rounded-[26px] px-6 py-4 text-[#3f3a36]`}
+          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-3 rounded-[26px] px-6 py-4 text-[#3f3a36]`}
         >
           {copied === "note" ? "Saved to clipboard" : "Save this note"}
-          {copied === "note" ? <Check className="h-5 w-5" /> : <Clipboard className="h-5 w-5" />}
+          {copied === "note" ? <Check className="h-5 w-5 shrink-0" /> : <Clipboard className="h-5 w-5 shrink-0" />}
         </button>
       </motion.div>
 
@@ -1646,8 +1645,8 @@ function ResultsView({
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             className="mt-12"
           >
-            <p className="mb-5 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">72 HOURS, MADE SMALL ENOUGH TO HOLD</p>
-            <div className="grid gap-4 xl:grid-cols-3">
+            <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">72 HOURS, MADE SMALL ENOUGH TO HOLD</p>
+            <div className="grid gap-3 sm:gap-4 xl:grid-cols-3">
               <PlanColumn actions={planResult.tonight} label="First steps" onHoverRegret={onHoverRegret} />
               <PlanColumn actions={planResult.tomorrow} label="Tomorrow" onHoverRegret={onHoverRegret} />
               <PlanColumn actions={planResult.next48} label="Next 48" onHoverRegret={onHoverRegret} />
@@ -1671,30 +1670,30 @@ function ResultsView({
         )}
       </AnimatePresence>
 
-      <motion.div variants={itemVariants} className="mt-10 grid gap-3 sm:grid-cols-2">
+      <motion.div variants={itemVariants} className="mt-6 grid gap-3 sm:mt-10 sm:grid-cols-2">
         <button
           type="button"
           onClick={() => onCopy("handoff", handoffText)}
-          className={`${GLASS_BUTTON} flex items-center justify-between rounded-[26px] p-4 text-left text-[#3f3a36]`}
+          className={`${GLASS_BUTTON} flex items-center justify-between rounded-[26px] p-4 text-left text-[#3f3a36] active:scale-[0.98]`}
         >
           <span>
-            <span className="block text-base text-[#242230]">Send a handoff text</span>
-            <span className="mt-1 block text-sm text-[#756f68]">
+            <span className="block text-sm font-medium text-[#242230] sm:text-base">Send a handoff text</span>
+            <span className="mt-1 block text-xs text-[#756f68] sm:text-sm">
               {copied === "handoff" ? "Copied for your support person." : "A concise update for your support circle."}
             </span>
           </span>
-          <Phone className="h-5 w-5 text-[#9b829c]" />
+          <Phone className="h-5 w-5 shrink-0 text-[#9b829c]" />
         </button>
         <button
           type="button"
           onClick={onReset}
-          className={`${GLASS_BUTTON} flex items-center justify-between rounded-[26px] p-4 text-left text-[#3f3a36]`}
+          className={`${GLASS_BUTTON} flex items-center justify-between rounded-[26px] p-4 text-left text-[#3f3a36] active:scale-[0.98]`}
         >
           <span>
-            <span className="block text-base text-[#242230]">Speak again</span>
-            <span className="mt-1 block text-sm text-[#756f68]">Another fear, another path.</span>
+            <span className="block text-sm font-medium text-[#242230] sm:text-base">Speak again</span>
+            <span className="mt-1 block text-xs text-[#756f68] sm:text-sm">Another fear, another path.</span>
           </span>
-          <Mic className="h-5 w-5 text-[#b98da0]" />
+          <Mic className="h-5 w-5 shrink-0 text-[#b98da0]" />
         </button>
       </motion.div>
 
@@ -1708,12 +1707,12 @@ function ResultsView({
 
 function ResultBand({ children, icon, label }: { children: React.ReactNode; icon: React.ReactNode; label: string }) {
   return (
-    <div className={`${GLASS_PANEL} rounded-[30px] p-5`}>
-      <div className="mb-3 flex items-center gap-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">
+    <div className={`${GLASS_PANEL} rounded-[24px] p-4 sm:rounded-[30px] sm:p-5`}>
+      <div className="mb-2 flex items-center gap-2 font-mono text-xs tracking-[0.16em] text-[#8f7e9b] sm:mb-3 sm:gap-3">
         {icon}
-        {label}
+        <span className="uppercase">{label}</span>
       </div>
-      <p className="m-0 text-lg leading-8 text-[#3f3a36]">{children}</p>
+      <p className="m-0 text-sm leading-7 text-[#3f3a36] sm:text-base sm:leading-7 lg:text-lg lg:leading-8">{children}</p>
     </div>
   )
 }
@@ -1839,17 +1838,59 @@ function SidePanel({
   uploadLabel: string
   uploadState: "idle" | "uploading" | "done" | "error"
 }) {
+  const [mobileOpen, setMobileOpen] = useState(false)
+
   return (
-    <aside className={`${GLASS_PANEL} rounded-[36px] p-5 lg:sticky lg:top-6`}>
-      <PathologyPanel
-        onUpload={onUpload}
-        pathologyText={pathologyText}
-        setPathologyText={setPathologyText}
-        uploadLabel={uploadLabel}
-        uploadState={uploadState}
-      />
-      <div className="my-5 h-px bg-[#d8cec5]/70" />
-      <FearTimeline memories={fearTimeline} />
+    <aside>
+      {/* Mobile: collapsible toggle */}
+      <div className="lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen((v) => !v)}
+          className={`${GLASS_BUTTON} flex w-full items-center justify-between rounded-[24px] px-4 py-3 text-sm text-[#3f3a36]`}
+        >
+          <span className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-[#8f7e9b]" />
+            <span>Clinical anchor {uploadState === "done" ? "· added" : ""} · Fear log</span>
+          </span>
+          <span className="font-mono text-xs text-[#8f7e9b]">{mobileOpen ? "▲" : "▼"}</span>
+        </button>
+        <AnimatePresence>
+          {mobileOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              <div className={`${GLASS_PANEL} mt-2 rounded-[28px] p-4`}>
+                <PathologyPanel
+                  onUpload={onUpload}
+                  pathologyText={pathologyText}
+                  setPathologyText={setPathologyText}
+                  uploadLabel={uploadLabel}
+                  uploadState={uploadState}
+                />
+                <div className="my-4 h-px bg-[#d8cec5]/70" />
+                <FearTimeline memories={fearTimeline} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      {/* Desktop: always visible sticky sidebar */}
+      <div className={`${GLASS_PANEL} hidden rounded-[36px] p-5 lg:sticky lg:top-6 lg:block`}>
+        <PathologyPanel
+          onUpload={onUpload}
+          pathologyText={pathologyText}
+          setPathologyText={setPathologyText}
+          uploadLabel={uploadLabel}
+          uploadState={uploadState}
+        />
+        <div className="my-5 h-px bg-[#d8cec5]/70" />
+        <FearTimeline memories={fearTimeline} />
+      </div>
     </aside>
   )
 }
@@ -1883,16 +1924,16 @@ function PathologyPanel({
           <p className="m-0 text-sm text-[#756f68]">Add report context before or after speaking.</p>
         </div>
       </div>
-      <label className={`${GLASS_BUTTON} flex cursor-pointer items-center justify-between rounded-[24px] p-4 text-sm text-[#3f3a36]`}>
+      <label className={`${GLASS_BUTTON} flex cursor-pointer items-center justify-between rounded-[22px] p-3 text-sm text-[#3f3a36] active:scale-[0.98] sm:rounded-[24px] sm:p-4`}>
         <span>{uploadText}</span>
-        {uploadState === "done" ? <Check className="h-5 w-5 text-[#8f7e9b]" /> : <Upload className="h-5 w-5 text-[#b98da0]" />}
+        {uploadState === "done" ? <Check className="h-5 w-5 shrink-0 text-[#8f7e9b]" /> : <Upload className="h-5 w-5 shrink-0 text-[#b98da0]" />}
         <input type="file" accept="application/pdf" className="sr-only" onChange={onUpload} />
       </label>
       <textarea
         value={pathologyText}
         onChange={(event) => setPathologyText(event.target.value)}
         placeholder="Optional: paste stage, biomarkers, impression, or a confusing line."
-        className="mt-3 min-h-24 w-full resize-none rounded-[22px] border border-white/70 bg-white/60 p-3 text-sm leading-6 text-[#3f3a36] shadow-inner outline-none placeholder:text-[#a09a93] backdrop-blur-[20px] focus:border-[#c9b8d8]/80"
+        className="mt-3 min-h-20 w-full resize-none rounded-[20px] border border-white/70 bg-white/60 p-3 text-sm leading-6 text-[#3f3a36] shadow-inner outline-none placeholder:text-[#a09a93] backdrop-blur-[20px] focus:border-[#c9b8d8]/80 sm:min-h-24 sm:rounded-[22px]"
       />
     </section>
   )
@@ -1933,8 +1974,26 @@ function CompanionNav({ onOpen }: { onOpen: (screen: CompanionScreen) => void })
   ]
 
   return (
-    <nav className="relative z-10 pb-5">
-      <div className="mx-auto flex w-fit flex-wrap items-center justify-center gap-2 rounded-full border border-white/70 bg-white/46 p-2 shadow-[0_18px_58px_rgba(116,100,91,0.1)] backdrop-blur-[20px]">
+    <nav className="relative z-10 pb-4 pt-2 sm:pb-5">
+      {/* Mobile: horizontal scrollable pill row */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] sm:hidden sm:pb-0">
+        {items.map((item) => {
+          const Icon = item.icon
+          return (
+            <button
+              type="button"
+              key={item.id}
+              onClick={() => onOpen(item.id)}
+              className="flex shrink-0 items-center gap-2 rounded-full border border-white/70 bg-white/55 px-4 py-2.5 text-sm text-[#5f5a55] shadow-[0_8px_24px_rgba(116,100,91,0.08)] backdrop-blur-[20px] active:scale-[0.97]"
+            >
+              <Icon className="h-4 w-4 shrink-0 text-[#9b829c]" />
+              <span className="whitespace-nowrap">{item.label}</span>
+            </button>
+          )
+        })}
+      </div>
+      {/* Desktop: centered pill cluster */}
+      <div className="mx-auto hidden w-fit flex-wrap items-center justify-center gap-2 rounded-full border border-white/70 bg-white/46 p-2 shadow-[0_18px_58px_rgba(116,100,91,0.1)] backdrop-blur-[20px] sm:flex">
         {items.map((item) => {
           const Icon = item.icon
           return (
@@ -1947,7 +2006,7 @@ function CompanionNav({ onOpen }: { onOpen: (screen: CompanionScreen) => void })
               <Icon className="h-4 w-4 shrink-0" />
               <span>
                 <span className="block text-sm">{item.label}</span>
-                <span className="block max-w-32 text-[11px] leading-4 text-[#8a827a] opacity-80 sm:opacity-0 sm:transition sm:group-hover:opacity-100">
+                <span className="block max-w-32 text-[11px] leading-4 text-[#8a827a] opacity-0 transition group-hover:opacity-100">
                   {item.subtitle}
                 </span>
               </span>
@@ -1989,14 +2048,14 @@ function CompanionOverlay({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: "100%", opacity: 0.88 }}
       transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed inset-0 z-50 overflow-y-auto bg-[#fbf7f0]/94 px-5 py-6 text-[#242230] backdrop-blur-[18px] sm:px-8"
+      className="fixed inset-0 z-50 overflow-y-auto bg-[#fbf7f0]/94 px-4 py-5 text-[#242230] backdrop-blur-[18px] sm:px-8 sm:py-6"
     >
       <AmbientOrbs />
       <div className="relative z-10 mx-auto max-w-5xl">
         <button
           type="button"
           onClick={onClose}
-          className={`${GLASS_BUTTON} mb-8 flex items-center gap-2 rounded-full px-4 py-2 text-sm text-[#3f3a36]`}
+          className={`${GLASS_BUTTON} mb-6 flex items-center gap-2 rounded-full px-4 py-2 text-sm text-[#3f3a36] sm:mb-8`}
         >
           <ArrowLeft className="h-4 w-4" />
           Back
@@ -2021,36 +2080,34 @@ function BreatheScreen({ breathCycles, breathStep }: { breathCycles: number; bre
   const phase = BREATHE_PHASES[breathStep]
 
   return (
-    <section className="grid min-h-[70vh] place-items-center">
-      <div className="text-center">
-        <p className="mb-4 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">BREATHE</p>
-        <h2 className={`text-5xl font-normal sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>For when the mind will not stop.</h2>
-        <div className="mt-12 grid place-items-center">
-          <motion.div
-            animate={{ scale: phase.scale }}
-            transition={{ duration: 4, ease: "easeInOut" }}
-            className={`${GLASS_PANEL} grid h-56 w-56 place-items-center rounded-full bg-[#f7efe7]/70`}
-          >
-            <div className="text-center">
-              <p className="text-4xl text-[#242230]">{phase.label}</p>
-              <p className="mt-2 text-sm text-[#756f68]">4 seconds</p>
-            </div>
-          </motion.div>
-        </div>
-        <p className="mt-8 text-sm text-[#756f68]">Cycles completed: {breathCycles}</p>
-        <AnimatePresence>
-          {breathCycles >= 3 && (
-            <motion.p
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="mx-auto mt-5 max-w-md text-lg leading-8 text-[#5f5a55]"
-            >
-              You made a little room inside the moment. That counts.
-            </motion.p>
-          )}
-        </AnimatePresence>
+    <section className="flex min-h-[70vh] flex-col items-center justify-center py-8 text-center">
+      <p className="mb-3 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">BREATHE</p>
+      <h2 className={`text-3xl font-normal leading-tight sm:text-5xl lg:text-7xl ${SOFT_GRADIENT_TEXT}`}>For when the mind will not stop.</h2>
+      <div className="mt-10 grid place-items-center sm:mt-12">
+        <motion.div
+          animate={{ scale: phase.scale }}
+          transition={{ duration: 4, ease: "easeInOut" }}
+          className={`${GLASS_PANEL} grid h-48 w-48 place-items-center rounded-full bg-[#f7efe7]/70 sm:h-56 sm:w-56`}
+        >
+          <div className="text-center">
+            <p className="text-3xl text-[#242230] sm:text-4xl">{phase.label}</p>
+            <p className="mt-2 text-sm text-[#756f68]">4 seconds</p>
+          </div>
+        </motion.div>
       </div>
+      <p className="mt-6 text-sm text-[#756f68] sm:mt-8">Cycles completed: {breathCycles}</p>
+      <AnimatePresence>
+        {breathCycles >= 3 && (
+          <motion.p
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mx-auto mt-4 max-w-md text-base leading-7 text-[#5f5a55] sm:mt-5 sm:text-lg sm:leading-8"
+          >
+            You made a little room inside the moment. That counts.
+          </motion.p>
+        )}
+      </AnimatePresence>
     </section>
   )
 }
@@ -2099,10 +2156,10 @@ function ClearMyHeadScreen({ cancerType }: { cancerType: CancerType }) {
 
   return (
     <section>
-      <p className="mb-4 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">CLEAR MY HEAD</p>
-      <h2 className={`text-5xl font-normal sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>What thought keeps coming back?</h2>
+      <p className="mb-3 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">CLEAR MY HEAD</p>
+      <h2 className={`text-3xl font-normal leading-tight sm:text-5xl lg:text-7xl ${SOFT_GRADIENT_TEXT}`}>What thought keeps coming back?</h2>
 
-      <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+      <div className="mt-6 flex flex-col gap-3 sm:mt-10">
         <input
           value={thought}
           onChange={(event) => setThought(event.target.value)}
@@ -2110,13 +2167,13 @@ function ClearMyHeadScreen({ cancerType }: { cancerType: CancerType }) {
             if (event.key === "Enter") submitThought()
           }}
           placeholder="Type it exactly as it sounds in your head."
-          className={`${GLASS_PANEL} min-h-16 flex-1 rounded-[26px] px-5 text-xl text-[#242230] outline-none placeholder:text-[#a09a93]`}
+          className={`${GLASS_PANEL} min-h-[56px] w-full rounded-[26px] px-5 text-lg text-[#242230] outline-none placeholder:text-[#a09a93] sm:text-xl`}
         />
         <button
           type="button"
           onClick={submitThought}
           disabled={isThinking || !thought.trim()}
-          className="rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-white shadow-[0_18px_52px_rgba(151,128,163,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
+          className="w-full rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-white shadow-[0_18px_52px_rgba(151,128,163,0.22)] transition hover:-translate-y-0.5 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
         >
           {isThinking ? "Listening underneath..." : "Untangle it"}
         </button>
@@ -2181,20 +2238,20 @@ function SayItScreen({ entries, onSave }: { entries: JournalEntry[]; onSave: (te
 
   return (
     <section>
-      <p className="mb-4 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">SAY IT</p>
-      <h2 className={`text-5xl font-normal sm:text-7xl ${SOFT_GRADIENT_TEXT}`}>A private place for the unpolished sentence.</h2>
-      <p className="mt-6 text-lg leading-8 text-[#5f5a55]">{prompt}</p>
+      <p className="mb-3 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">SAY IT</p>
+      <h2 className={`text-3xl font-normal leading-tight sm:text-5xl lg:text-7xl ${SOFT_GRADIENT_TEXT}`}>A private place for the unpolished sentence.</h2>
+      <p className="mt-4 text-base leading-7 text-[#5f5a55] sm:mt-6 sm:text-lg sm:leading-8">{prompt}</p>
       <textarea
         value={text}
         onChange={(event) => setText(event.target.value)}
         placeholder="Write without making it useful yet."
-        className={`${GLASS_PANEL} mt-8 min-h-72 w-full resize-none rounded-[34px] p-6 text-xl leading-9 text-[#242230] outline-none placeholder:text-[#aaa199]`}
+        className={`${GLASS_PANEL} mt-5 min-h-48 w-full resize-none rounded-[28px] p-5 text-lg leading-8 text-[#242230] outline-none placeholder:text-[#aaa199] sm:mt-8 sm:min-h-72 sm:rounded-[34px] sm:p-6 sm:text-xl sm:leading-9`}
       />
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-        <button type="button" onClick={release} className={`${GLASS_BUTTON} rounded-[24px] px-6 py-3 text-[#3f3a36]`}>
+      <div className="mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:gap-3">
+        <button type="button" onClick={release} className={`${GLASS_BUTTON} w-full rounded-[24px] px-6 py-3 text-[#3f3a36] active:scale-[0.98] sm:w-auto`}>
           Release
         </button>
-        <button type="button" onClick={keep} className="rounded-[24px] border border-white/80 bg-[#b7a6c9] px-6 py-3 text-white shadow-[0_18px_52px_rgba(151,128,163,0.22)]">
+        <button type="button" onClick={keep} className="w-full rounded-[24px] border border-white/80 bg-[#b7a6c9] px-6 py-3 text-white shadow-[0_18px_52px_rgba(151,128,163,0.22)] active:scale-[0.98] sm:w-auto">
           Keep
         </button>
       </div>
@@ -2230,23 +2287,23 @@ function OneThingScreen({
   oneThingCount: number
 }) {
   return (
-    <section className="grid min-h-[70vh] place-items-center text-center">
-      <div className="max-w-3xl">
-        <p className="mb-4 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">ONE THING</p>
-        <div className={`${GLASS_PANEL} rounded-[44px] p-8 sm:p-12`}>
-          <Sparkles className="mx-auto h-9 w-9 text-[#9b829c]" />
-          <h2 className="mt-8 text-4xl font-normal leading-tight text-[#242230] sm:text-6xl">
+    <section className="flex min-h-[70vh] flex-col items-center justify-center py-8 text-center">
+      <div className="w-full max-w-3xl">
+        <p className="mb-3 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">ONE THING</p>
+        <div className={`${GLASS_PANEL} rounded-[32px] p-7 sm:rounded-[44px] sm:p-12`}>
+          <Sparkles className="mx-auto h-8 w-8 text-[#9b829c] sm:h-9 sm:w-9" />
+          <h2 className="mt-6 text-2xl font-normal leading-snug text-[#242230] sm:mt-8 sm:text-4xl lg:text-6xl">
             {ONE_THING_ITEMS[currentOneThing]}
           </h2>
           <button
             type="button"
             onClick={onComplete}
-            className="mt-10 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5"
+            className="mt-8 w-full rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 active:scale-[0.98] sm:mt-10 sm:w-auto"
           >
             Done. Give me another.
           </button>
         </div>
-        <p className="mt-6 text-sm text-[#756f68]">Completed: {oneThingCount}</p>
+        <p className="mt-5 text-sm text-[#756f68]">Completed: {oneThingCount}</p>
         <AnimatePresence>
           {oneThingCount >= 5 && (
             <motion.p
@@ -2294,7 +2351,9 @@ function AuthScreen({
   otpCode: string
 }) {
   const primaryButtonClass =
-    "flex min-h-14 flex-1 items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 disabled:opacity-40"
+    "flex w-full items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-6 py-4 text-base text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40 min-h-[56px]"
+  const secondaryButtonClass =
+    "flex w-full items-center justify-center gap-3 rounded-[26px] border border-[#c9b8d8]/70 bg-white/70 px-6 py-4 text-base text-[#3f3a36] shadow-[0_14px_44px_rgba(116,100,91,0.1)] backdrop-blur-[20px] transition hover:-translate-y-0.5 active:scale-[0.98] min-h-[56px]"
 
   return (
     <motion.section
@@ -2303,34 +2362,34 @@ function AuthScreen({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, y: -16 }}
       transition={{ duration: 0.65 }}
-      className="relative z-10 grid min-h-screen place-items-center px-5 py-10"
+      className="relative z-10 flex min-h-screen flex-col items-center justify-center px-5 py-10 sm:py-16"
     >
-      <div className={`${GLASS_PANEL} w-full max-w-2xl rounded-[40px] p-8 sm:p-12`}>
-        <p className="mb-6 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">ANCHOR</p>
-        <h1 className={`text-4xl font-normal leading-tight sm:text-5xl ${SOFT_GRADIENT_TEXT}`}>
+      <div className={`${GLASS_PANEL} w-full max-w-lg rounded-[32px] p-7 sm:max-w-2xl sm:rounded-[40px] sm:p-12`}>
+        <p className="mb-5 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">ANCHOR</p>
+        <h1 className={`text-3xl font-normal leading-tight sm:text-5xl ${SOFT_GRADIENT_TEXT}`}>
           Your space. Private to you.
         </h1>
-        <p className="mt-4 text-lg leading-8 text-[#5f5a55]">
+        <p className="mt-3 text-base leading-7 text-[#5f5a55] sm:mt-4 sm:text-lg sm:leading-8">
           When everything feels like too much, Anchor shows you what to do next.
         </p>
 
         {magicLinkSent ? (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-10">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-8">
             <p className="text-xl text-[#242230]">Check your inbox.</p>
-            <p className="mt-3 text-base leading-7 text-[#5f5a55]">
+            <p className="mt-3 text-sm leading-7 text-[#5f5a55] sm:text-base">
               We sent a sign-in link to <strong>{email}</strong>. Click it to continue.
             </p>
-            <div className="mt-8">
-              <p className="text-base leading-7 text-[#5f5a55]">
-                We also sent a code — enter it here to verify instantly without leaving this tab.
+            <div className="mt-7">
+              <p className="text-sm leading-7 text-[#5f5a55] sm:text-base">
+                We also sent a 6-digit code — enter it here to verify without leaving this tab.
               </p>
-              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="mt-4 flex flex-col gap-4">
                 <InputOTP
                   maxLength={6}
                   value={otpCode}
                   onChange={onOtpChange}
                   disabled={isOtpVerifying}
-                  containerClassName="justify-center sm:justify-start"
+                  containerClassName="justify-center"
                 >
                   <InputOTPGroup>
                     {Array.from({ length: 6 }).map((_, index) => (
@@ -2346,14 +2405,14 @@ function AuthScreen({
                   type="button"
                   onClick={onVerifyOtp}
                   disabled={isOtpVerifying || otpCode.length !== 6}
-                  className={`${primaryButtonClass} sm:flex-none`}
+                  className={primaryButtonClass}
                 >
                   {isOtpVerifying ? "Verifying..." : "Verify code"}
                 </button>
               </div>
               {error && <div className="mt-4"><ErrorText message={error} /></div>}
             </div>
-            <p className="mt-6 text-sm text-[#756f68]">
+            <p className="mt-5 text-sm text-[#756f68]">
               Wrong address?{" "}
               <button type="button" onClick={onResetMagicLink} className="underline underline-offset-2 hover:text-[#242230]">
                 Try again
@@ -2361,7 +2420,7 @@ function AuthScreen({
             </p>
           </motion.div>
         ) : (
-          <div className="mt-10 flex flex-col gap-5">
+          <div className="mt-8 flex flex-col gap-4 sm:mt-10">
             <input
               autoFocus
               type="email"
@@ -2369,10 +2428,10 @@ function AuthScreen({
               onChange={(e) => onEmailChange(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") onSendMagicLink() }}
               placeholder="your@email.com"
-              className="min-h-16 border-b border-[#c9b8d8]/70 bg-transparent text-2xl text-[#242230] outline-none placeholder:text-[#b9afa7] focus:border-[#b98da0]"
+              className="min-h-[56px] border-b border-[#c9b8d8]/70 bg-transparent text-xl text-[#242230] outline-none placeholder:text-[#b9afa7] focus:border-[#b98da0] sm:text-2xl"
             />
             {error && <ErrorText message={error} />}
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-col gap-3">
               <button
                 type="button"
                 onClick={onSendMagicLink}
@@ -2384,22 +2443,22 @@ function AuthScreen({
               <button
                 type="button"
                 onClick={onContinueAsGuest}
-                className={primaryButtonClass}
+                className={secondaryButtonClass}
               >
                 Continue as guest
               </button>
             </div>
             {onSeeExample && (
-              <>
+              <div className="mt-2 flex flex-col items-center gap-1 border-t border-[#d8cec5]/50 pt-5">
                 <button
                   type="button"
                   onClick={onSeeExample}
-                  className="self-center text-sm text-[#8f7e9b] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#6f6280]"
+                  className="rounded-[20px] border border-[#c9b8d8]/60 bg-white/60 px-5 py-3 text-sm font-medium text-[#7a6b8a] shadow-[0_10px_30px_rgba(178,150,176,0.14)] backdrop-blur-[20px] transition hover:-translate-y-0.5 hover:bg-white/80 active:scale-[0.98]"
                 >
                   Try a live demo first →
                 </button>
-                <p className="self-center text-sm text-[#756f68]">See exactly what Anchor does before you begin.</p>
-              </>
+                <p className="mt-1 text-xs text-[#9a9490]">See exactly what Anchor does before you begin.</p>
+              </div>
             )}
           </div>
         )}
