@@ -2,6 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Mobile: prevent horizontal overflow across the whole app */
+html,
+body {
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile: smooth momentum scrolling in overflow containers */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile: hide scrollbars on horizontal companion nav */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 .audio-indicator {
   @apply inline-block w-5 h-5 rounded-full align-middle bg-gray-400;
 }
