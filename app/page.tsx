@@ -22,6 +22,14 @@ import {
 } from "lucide-react"
 import useWebRTCAudioSession from "@/hooks/use-webrtc"
 import { tools } from "@/lib/tools"
+import {
+  SARAH_DEMO_ACTION_PREFIXES,
+  SARAH_DEMO_ACTION_SCRIPTS,
+  SARAH_DEMO_CONCERN,
+  SARAH_DEMO_MIRROR_RESULT,
+  SARAH_DEMO_ORIENTATION_LINES,
+  SARAH_FALLBACK_PLAN_RESULT,
+} from "@/lib/demo/sarah-case"
 import { getAccount, getDatabases, ID, Query, DB_ID, COLLECTIONS } from "@/lib/appwrite"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 
@@ -38,6 +46,17 @@ interface MirrorResult {
   actions: string[]
   fearSummary: string
   fearQuote: string
+}
+
+function isValidMirrorResult(value: unknown): value is MirrorResult {
+  if (!value || typeof value !== "object") return false
+  const o = value as Record<string, unknown>
+  if (typeof o.mirror !== "string" || o.mirror.trim().length < 3) return false
+  if (typeof o.ground !== "string" || o.ground.trim().length < 3) return false
+  if (typeof o.fearSummary !== "string" || o.fearSummary.trim().length < 2) return false
+  if (typeof o.fearQuote !== "string" || o.fearQuote.trim().length < 2) return false
+  if (!Array.isArray(o.actions) || o.actions.length === 0) return false
+  return o.actions.every((a) => typeof a === "string" && (a as string).trim().length > 0)
 }
 
 interface PlanAction {
@@ -96,12 +115,14 @@ const RELATIONSHIPS = [
 ] as const
 
 const PROCESSING_PHRASES = [
-  "Reading between the words...",
-  "Finding what matters most...",
-  "Separating fear from the next step...",
-  "Looking for the clinical ground...",
-  "Building your path forward...",
+  "Anchor is turning the concern into next steps…",
+  "Preparing a caregiver plan…",
+  "Sorting what matters for the visit ahead…",
+  "Holding the worry next to practical next steps…",
+  "Almost ready — gathering what to ask and what to confirm…",
 ]
+
+const SARAH_MIRROR_RESULT: MirrorResult = { ...SARAH_DEMO_MIRROR_RESULT }
 
 const BREATHE_PHASES = [
   { label: "Inhale", scale: 1.28 },
@@ -132,40 +153,11 @@ const CAREGIVER_QUOTES = [
   "I could love them and still admit I was exhausted.",
 ]
 
-const EXAMPLE_INPUT =
-  "i dont know what to do i feel like im messing everything up and i dont even know what questions to ask"
+const EXAMPLE_INPUT = SARAH_DEMO_CONCERN
 
-const EXAMPLE_MIRROR_RESULT: MirrorResult = {
-  fearQuote: EXAMPLE_INPUT,
-  fearSummary: "terrified of failing her because you do not know what to ask",
-  mirror:
-    "You're carrying the weight of something no one prepared you for — the fear of getting it wrong when it matters most. That fear means you're paying attention. That's exactly what she needs right now.",
-  ground:
-    "Colon cancer is staged I–IV using the TNM system. Stage determines everything — surgery type, whether chemotherapy follows, and surveillance schedule. Surgery (partial colectomy) is typically the first step for Stages I–III. Chemotherapy such as FOLFOX or CAPOX follows for Stage III. Knowing the exact stage and lymph node involvement from the pathology report is the single most important next move.",
-  actions: [
-    "Request the complete pathology report — confirm tumor stage, lymph node count (12+ nodes required for accurate staging per NCCN v.5.2025), and MMR/MSI status for treatment decisions.",
-    "Schedule a medical oncologist consult within 7 days — standard NCCN timeline for non-metastatic colon cancer. Ask specifically about adjuvant chemotherapy eligibility based on stage.",
-    "Ask about CEA baseline blood test before any treatment begins — carcinoembryonic antigen is the standard NCI-recommended tumor marker for tracking colon cancer recurrence over time.",
-  ],
-}
-
-const EXAMPLE_ACTION_SCRIPTS = [
-  "Hi, I'm calling about my mom's recent colon cancer diagnosis. We need the complete pathology report including tumor stage, how many lymph nodes were examined, and MMR/MSI testing results. Our oncologist needs this before our next appointment. Can you send it directly to us?",
-  "Hi, my mom was just diagnosed with colon cancer and we need to schedule an urgent medical oncology consultation. NCCN guidelines recommend this within 7 days of diagnosis. What's the earliest available appointment with a GI oncologist?",
-  "Before my mom starts any treatment, should we establish a CEA tumor marker baseline? We understand this is used to track recurrence over time. Can we order that blood test now?",
-]
-
-const EXAMPLE_ACTION_PREFIXES = [
-  "Request the complete",
-  "Schedule a medical oncologist consult",
-  "Ask about CEA baseline blood",
-]
-
-const EXAMPLE_CLINICAL_SOURCES = [
-  "NCCN Colon Cancer Guidelines v.5.2025",
-  "National Cancer Institute — Colon Cancer Treatment PDQ",
-  "American Cancer Society — Colorectal Cancer Treatment by Stage",
-]
+const EXAMPLE_MIRROR_RESULT = SARAH_MIRROR_RESULT
+const EXAMPLE_ACTION_SCRIPTS = SARAH_DEMO_ACTION_SCRIPTS
+const EXAMPLE_ACTION_PREFIXES = SARAH_DEMO_ACTION_PREFIXES
 
 const ACTION_SCRIPTS = [
   {
@@ -182,6 +174,27 @@ const ACTION_SCRIPTS = [
     match: "CEA tumor marker baseline",
     script:
       "Before treatment begins, should we establish a CEA tumor marker baseline? Our oncologist mentioned this tracks recurrence — can we order that test now?",
+  },
+  {
+    match: "write down the exact questions",
+    script:
+      "Tonight, open one note and write three headings: \"Confirmed,\" \"Still unclear,\" and \"Questions for tomorrow.\" Add bullets as you remember — then confirm details with your care team.",
+  },
+  {
+    match: "gather reports",
+    script:
+      "Hi, I'm calling for my mom. We were told she may have possible stage III colon cancer, and we have an appointment tomorrow. Before we come in, can you help us confirm what records we should bring, whether the full pathology report is finalized, and whether any imaging or biomarker testing is still pending?",
+  },
+  {
+    match: "ask your care team what is confirmed",
+    script: [
+      "What is confirmed right now, and what is still uncertain?",
+      "Is the stage confirmed or still being worked up?",
+      "Are imaging and pathology complete?",
+      "Are any biomarkers or MMR/MSI tests pending?",
+      "What decisions are expected at this appointment?",
+      "What should we watch for or call about before the next visit?",
+    ].join(" "),
   },
 ]
 
@@ -318,6 +331,7 @@ export default function App() {
   const [uploadLabel, setUploadLabel] = useState("")
   const [copied, setCopied] = useState<"note" | "handoff" | null>(null)
   const [showExampleOutput, setShowExampleOutput] = useState(false)
+  const [isBackupDemoMirror, setIsBackupDemoMirror] = useState(false)
   const [fearTimeline, setFearTimeline] = useState<FearMemory[]>([])
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([])
   const [oneThingCount, setOneThingCount] = useState(0)
@@ -549,38 +563,75 @@ export default function App() {
     setPhase("processing")
     setError(null)
     setPlanResult(null)
+    setIsBackupDemoMirror(false)
+
+    const useSarahFallbackMirror = () => {
+      setMirrorResult(SARAH_MIRROR_RESULT)
+      setIsBackupDemoMirror(true)
+      setPhase("results")
+    }
 
     try {
-      const [mirrorRes] = await Promise.all([
-        fetch("/api/mirror", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transcript, cancerType, pathologyText }),
-        }),
-        fetch("/api/fear", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transcript,
-            sessionId,
-            contextTag: `${lovedOne}-${cancerType}-night-note`,
-            ...(userId ? { userId } : {}),
+      let mirrorRes: Response
+      try {
+        ;[mirrorRes] = await Promise.all([
+          fetch("/api/mirror", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript, cancerType, pathologyText }),
           }),
-        }),
-      ])
+          fetch("/api/fear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transcript,
+              sessionId,
+              contextTag: `${lovedOne}-${cancerType}-night-note`,
+              ...(userId ? { userId } : {}),
+            }),
+          }),
+        ])
+      } catch (networkErr) {
+        console.error(networkErr)
+        useSarahFallbackMirror()
+        return
+      }
 
-      if (!mirrorRes.ok) throw new Error("Mirror API failed")
+      if (!mirrorRes.ok) {
+        useSarahFallbackMirror()
+        return
+      }
 
-      const mirror = (await mirrorRes.json()) as MirrorResult
-      setMirrorResult(mirror)
-      rememberFear(mirror)
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(await mirrorRes.text()) as unknown
+      } catch {
+        useSarahFallbackMirror()
+        return
+      }
+
+      if (!isValidMirrorResult(parsed)) {
+        useSarahFallbackMirror()
+        return
+      }
+
+      setMirrorResult(parsed)
+      setIsBackupDemoMirror(false)
+      rememberFear(parsed)
       setPhase("results")
     } catch (err) {
       console.error(err)
-      setError("Anchor lost the thread for a moment. Take a breath and try again.")
-      setPhase("idle")
+      useSarahFallbackMirror()
     }
   }, [cancerType, lovedOne, pathologyText, rememberFear, sessionId, userId])
+
+  const showSarahBackupDemo = useCallback(() => {
+    setMirrorResult(SARAH_MIRROR_RESULT)
+    setIsBackupDemoMirror(true)
+    setPlanResult(null)
+    setError(null)
+    setPhase("results")
+  }, [])
 
   useEffect(() => {
     if (wasActiveRef.current && !isSessionActive) {
@@ -604,6 +655,10 @@ export default function App() {
     setIsPlanning(true)
     setError(null)
 
+    const applySarahPlanFallback = () => {
+      setPlanResult(SARAH_FALLBACK_PLAN_RESULT as PlanResult)
+    }
+
     try {
       const response = await fetch("/api/plan", {
         method: "POST",
@@ -616,11 +671,35 @@ export default function App() {
         }),
       })
 
-      if (!response.ok) throw new Error("Plan API failed")
-      setPlanResult((await response.json()) as PlanResult)
+      if (!response.ok) {
+        if (isBackupDemoMirror) {
+          applySarahPlanFallback()
+        } else {
+          throw new Error("Plan API failed")
+        }
+        return
+      }
+
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(await response.text()) as unknown
+      } catch {
+        if (isBackupDemoMirror) {
+          applySarahPlanFallback()
+        } else {
+          throw new Error("Plan JSON invalid")
+        }
+        return
+      }
+
+      setPlanResult(parsed as PlanResult)
     } catch (err) {
       console.error(err)
-      setError("The 72-hour plan did not land. Try once more when you are ready.")
+      if (isBackupDemoMirror) {
+        applySarahPlanFallback()
+      } else {
+        setError("The 72-hour plan did not land. Try once more when you are ready.")
+      }
     } finally {
       setIsPlanning(false)
     }
@@ -701,7 +780,9 @@ export default function App() {
     setOnboardingStep("name")
     setMirrorResult(null)
     setPlanResult(null)
+    setError(null)
     setShowExampleOutput(false)
+    setIsBackupDemoMirror(false)
     setFearTimeline([])
     setJournalEntries([])
     setOneThingCount(0)
@@ -729,6 +810,7 @@ export default function App() {
     setError(null)
     setCopied(null)
     setShowExampleOutput(false)
+    setIsBackupDemoMirror(false)
     setPhase("idle")
   }
 
@@ -851,6 +933,7 @@ export default function App() {
     setCopied(null)
     setPhase("idle")
     setShowExampleOutput(true)
+    setIsBackupDemoMirror(false)
   }
 
   function resetMagicLink() {
@@ -997,6 +1080,7 @@ export default function App() {
                       lovedOneLabel={lovedOneLabel}
                       onCancerTypeChange={handleCancerTypeChange}
                       error={error}
+                      onSarahBackupDemo={showSarahBackupDemo}
                       showExampleOutput={showExampleOutput}
                     />
                   )}
@@ -1022,6 +1106,7 @@ export default function App() {
                       error={error}
                       handoffText={handoffText}
                       hoveredRegret={hoveredRegret}
+                      isBackupDemoMirror={isBackupDemoMirror}
                       isPlanning={isPlanning}
                       lovedOne={lovedOne}
                       mirrorResult={mirrorResult}
@@ -1030,6 +1115,7 @@ export default function App() {
                       onHoverRegret={setHoveredRegret}
                       onPlan={requestPlan}
                       onReset={resetVoice}
+                      onSarahBackupDemo={showSarahBackupDemo}
                       planResult={planResult}
                     />
                   )}
@@ -1269,6 +1355,7 @@ function IdleView({
   lovedOne,
   lovedOneLabel,
   onCancerTypeChange,
+  onSarahBackupDemo,
   showExampleOutput,
 }: {
   cancerType: CancerType
@@ -1278,6 +1365,7 @@ function IdleView({
   lovedOne: string
   lovedOneLabel: string
   onCancerTypeChange: (value: CancerType) => void
+  onSarahBackupDemo: () => void
   showExampleOutput: boolean
 }) {
   return (
@@ -1327,8 +1415,20 @@ function IdleView({
       </motion.div>
       {showExampleOutput && (
         <p className="mt-3 text-sm leading-6 text-[#756f68]">
-          This is a live demo — speak your own fear to try it yourself, or Start over to enter your own details.
+          This is a live demo — speak your own concern to try it yourself, or Start over to enter your own details. Sarah is an adult child supporting her mom before a tomorrow-morning visit (sample colon scenario).
         </p>
+      )}
+
+      {(showExampleOutput || error) && (
+        <motion.div variants={itemVariants} className="mt-6">
+          <button
+            type="button"
+            onClick={onSarahBackupDemo}
+            className={`${GLASS_BUTTON} rounded-[26px] px-6 py-3 text-sm text-[#3f3a36]`}
+          >
+            {showExampleOutput ? "Show Sarah demo result" : "Use backup demo"}
+          </button>
+        </motion.div>
       )}
 
       {error && <ErrorText message={error} />}
@@ -1340,7 +1440,7 @@ function ExampleOutputPanel() {
   return (
     <motion.div variants={itemVariants} className={`${GLASS_PANEL} mt-8 rounded-[34px] p-5`}>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <p className="m-0 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">INPUT SHOWN:</p>
+        <p className="m-0 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">SAMPLE INPUT (SARAH · ADULT CHILD · MOM · COLON · TOMORROW MORNING)</p>
         <span className="rounded-full border border-[#c9b8d8]/60 bg-white/60 px-3 py-1 font-mono text-[0.68rem] tracking-[0.14em] text-[#8f7e9b]">
           EXAMPLE · Try it yourself below
         </span>
@@ -1355,13 +1455,13 @@ function ExampleOutputPanel() {
         <ResultBand label="WHAT ANCHOR HEARS" icon={<HeartHandshake className="h-5 w-5" />}>
           {EXAMPLE_MIRROR_RESULT.mirror}
         </ResultBand>
-        <ResultBand label="WHAT IS CLINICALLY TRUE RIGHT NOW (NCCN-aligned)" icon={<ShieldCheck className="h-5 w-5" />}>
+        <ResultBand label="WHAT WE KNOW AND WHAT STILL NEEDS CONFIRMATION" icon={<ShieldCheck className="h-5 w-5" />}>
           {EXAMPLE_MIRROR_RESULT.ground}
         </ResultBand>
       </div>
 
       <div className="mt-7">
-        <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NCCN-ALIGNED NEXT STEPS</p>
+        <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NEXT MOVES FOR TOMORROW&apos;S VISIT</p>
         <div className="grid gap-3">
           {EXAMPLE_MIRROR_RESULT.actions.map((action, index) => (
             <ExpandableActionItem
@@ -1377,14 +1477,14 @@ function ExampleOutputPanel() {
       </div>
 
       <div className="mt-7">
-        <p className="mb-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">CLINICAL SOURCES</p>
+        <p className="mb-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">ORIENTATION</p>
         <div className="space-y-1 text-sm leading-6 text-[#756f68]">
-          {EXAMPLE_CLINICAL_SOURCES.map((source) => (
+          {SARAH_DEMO_ORIENTATION_LINES.map((source) => (
             <p className="m-0" key={source}>· {source}</p>
           ))}
         </div>
         <p className="mt-4 text-sm leading-6 text-[#756f68]">
-          This is support for orientation and preparation, not emergency care or a substitute for your oncology team.
+          Anchor helps families prepare for doctors. This is support for orientation and preparation, not emergency care or a substitute for your oncology team.
         </p>
       </div>
     </motion.div>
@@ -1533,7 +1633,7 @@ function ProcessingView({ phrase }: { phrase: string }) {
         </motion.h1>
       </AnimatePresence>
       <p className="mt-7 max-w-xl text-lg leading-8 text-[#5f5a55]">
-        Anchor is holding the emotional signal next to guideline-grounded next steps.
+        Anchor is turning what you said into clear next steps you can bring to your care team.
       </p>
     </motion.div>
   )
@@ -1546,6 +1646,7 @@ function ResultsView({
   error,
   handoffText,
   hoveredRegret,
+  isBackupDemoMirror,
   isPlanning,
   lovedOne,
   mirrorResult,
@@ -1554,6 +1655,7 @@ function ResultsView({
   onHoverRegret,
   onPlan,
   onReset,
+  onSarahBackupDemo,
   planResult,
 }: {
   cancerType: CancerType
@@ -1562,6 +1664,7 @@ function ResultsView({
   error: string | null
   handoffText: string
   hoveredRegret: string | null
+  isBackupDemoMirror: boolean
   isPlanning: boolean
   lovedOne: string
   mirrorResult: MirrorResult
@@ -1570,6 +1673,7 @@ function ResultsView({
   onHoverRegret: (value: string | null) => void
   onPlan: () => void
   onReset: () => void
+  onSarahBackupDemo: () => void
   planResult: PlanResult | null
 }) {
   return (
@@ -1581,6 +1685,16 @@ function ResultsView({
       exit={{ opacity: 0, y: -16 }}
       className="max-w-4xl"
     >
+      {isBackupDemoMirror && (
+        <motion.div
+          variants={itemVariants}
+          className="mb-6 rounded-[24px] border border-[#c9b8d8]/70 bg-[#f5eef8]/90 px-4 py-3 text-sm leading-6 text-[#6f6280]"
+          role="status"
+        >
+          Showing backup demo response — sample only; confirm everything with your care team.
+        </motion.div>
+      )}
+
       <motion.p variants={itemVariants} className="mb-5 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">
         YOUR NEXT MOVES FOR YOUR {lovedOne.toUpperCase()}&apos;S {cancerType.toUpperCase()} CANCER
       </motion.p>
@@ -1595,14 +1709,27 @@ function ResultsView({
         <ResultBand label="What Anchor hears" icon={<HeartHandshake className="h-5 w-5" />}>
           {mirrorResult.mirror}
         </ResultBand>
-        <ResultBand label="What is clinically true right now" icon={<ShieldCheck className="h-5 w-5" />}>
+        <ResultBand
+          label={
+            isBackupDemoMirror
+              ? "What we know and what still needs confirmation"
+              : "What is clinically true right now"
+          }
+          icon={<ShieldCheck className="h-5 w-5" />}
+        >
           {mirrorResult.ground}
         </ResultBand>
       </motion.div>
 
       <motion.div variants={itemVariants} className="mt-10">
-        <p className="mb-2 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NCCN-ALIGNED NEXT STEPS</p>
-        <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NEXT MOVES</p>
+        {isBackupDemoMirror ? (
+          <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NEXT MOVES</p>
+        ) : (
+          <>
+            <p className="mb-2 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NCCN-ALIGNED NEXT STEPS</p>
+            <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NEXT MOVES</p>
+          </>
+        )}
         <div className="grid gap-3">
           {mirrorResult.actions.slice(0, 3).map((action, index) => (
             <motion.div
@@ -1653,7 +1780,9 @@ function ResultsView({
               <PlanColumn actions={planResult.next48} label="Next 48" onHoverRegret={onHoverRegret} />
             </div>
             <p className="mt-5 text-sm leading-6 text-[#756f68]">
-              Steps grounded in NCCN oncology guidelines · Always verify with your care team
+              {isBackupDemoMirror
+                ? "Sample caregiver checklist — confirm timing and details with your care team."
+                : "Steps grounded in NCCN oncology guidelines · Always verify with your care team"}
             </p>
             <AnimatePresence>
               {hoveredRegret && (
@@ -1698,7 +1827,20 @@ function ResultsView({
         </button>
       </motion.div>
 
-      {error && <ErrorText message={error} />}
+      {error && (
+        <div className="mt-6">
+          <ErrorText message={error} />
+          {!isBackupDemoMirror && (
+            <button
+              type="button"
+              onClick={onSarahBackupDemo}
+              className={`${GLASS_BUTTON} mt-4 rounded-[26px] px-6 py-3 text-sm text-[#3f3a36]`}
+            >
+              Show Sarah demo result
+            </button>
+          )}
+        </div>
+      )}
       <p className="mt-7 text-sm leading-6 text-[#756f68]">
         Hi {displayName}. This is support for orientation and preparation, not emergency care or a substitute for your oncology team.
       </p>
@@ -1713,7 +1855,7 @@ function ResultBand({ children, icon, label }: { children: React.ReactNode; icon
         {icon}
         {label}
       </div>
-      <p className="m-0 text-lg leading-8 text-[#3f3a36]">{children}</p>
+      <p className="m-0 text-lg leading-8 whitespace-pre-line text-[#3f3a36]">{children}</p>
     </div>
   )
 }
