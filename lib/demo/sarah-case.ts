@@ -9,15 +9,15 @@ export interface SarahMirrorResult {
 export const SARAH_DEMO_CONCERN =
   "I feel like I'm missing everything. My mom may have stage III colon cancer, and I don't even know what questions to ask tomorrow."
 
-/** Memory tab (Prompt 6) — prototype disclaimer copy. */
-export const MEMORY_PROTO_BADGE = "Prototype memory · local only"
+/** Memory tab — soft demo framing (Prompt 8.5). */
+export const MEMORY_PROTO_BADGE = "Demo case · sample only"
 
 export const MEMORY_ANCHOR_ORGANIZED_LINE =
-  "Anchor keeps the case organized so the caregiver does not restart from zero."
+  "Anchor keeps a light thread so you do not restart from zero when the next call or visit arrives."
 
 export const MEMORY_SUBTITLE_LINES = [
-  "Stored locally for this demo. Start over clears this demo case.",
-  "Not HIPAA-grade or production memory.",
+  "Saved only in this browser for the walkthrough — Start over clears it.",
+  "Not a medical record and not HIPAA-grade storage.",
 ] as const
 
 export const MEMORY_EMPTY_QUESTIONS_ASKED =
@@ -33,7 +33,21 @@ export const MEMORY_EMPTY_TIMELINE_ARTIFACTS =
   "Nothing saved from Guide me yet — open a task in Plan and tap Guide me, then save to the demo timeline if you want a record here."
 
 export const MEMORY_CARE_TIMELINE_INTRO =
-  "A lightweight story of what happened in this browser session — not a medical record."
+  "Only the key moments from this session — not a full medical timeline."
+
+/** Short narrative for the Memory tab “holding” card (Prompt 8.5). */
+export function buildMemoryHoldingNarrative(input: {
+  caregiverName: string
+  lovedOneLabel: string
+  cancerLine: string
+  isSarahDemo: boolean
+}): string {
+  const { caregiverName, lovedOneLabel, cancerLine, isSarahDemo } = input
+  if (isSarahDemo) {
+    return `${caregiverName}, Anchor is holding onto the worry you voiced about tomorrow’s visit and supporting ${lovedOneLabel} through possible ${cancerLine} workup — not as a diagnosis, but as a place to park questions, tasks, and what still needs confirmation until your care team explains the plan.`
+  }
+  return `${caregiverName}, Anchor is holding onto who ${lovedOneLabel} is to you, the concern you shared, and ${cancerLine} — so you can listen for what is confirmed, what is pending, and what to ask next without re-explaining the whole story each time you open this tab.`
+}
 
 /** Intro paragraph for the NCCN-aware care preparation card (all result paths). */
 export const CARE_TEAM_ALIGNED_INTRO =
@@ -343,11 +357,14 @@ export interface StoredAdaptivePlanTask {
   familySupportRoleId?: string
 }
 
-/** Records tab (Prompt 7) — prototype disclaimer. */
-export const RECORDS_PROTO_BADGE = "Prototype records preview · sample only"
+/** Records tab (Prompt 8.5) — first-72-hour framing. */
+export const RECORDS_PROTO_BADGE = "First 72 hours · prep only"
 
 export const RECORDS_TAB_SUBTITLE =
-  "Organize what you have, what is missing, and what to ask the care team. Anchor does not diagnose from documents."
+  "In the first days after worrisome news, Anchor helps you see what you already have, what is still missing, and what to ask next — without treating this like a full patient portal."
+
+export const RECORDS_THREE_THINGS_INTRO =
+  "Start here. Three short checks keep the next visit from feeling like a scavenger hunt."
 
 export const RECORDS_WHAT_CAN_CLARIFY_BULLETS = [
   "Records can help you list dates, test names, and what you were told — so you do not rely on memory alone in the visit.",
@@ -408,39 +425,56 @@ export interface RecordsDocumentStackDef {
   checklistId?: string
 }
 
+/** UI labels for document stack statuses (Prompt 8.5). */
+export function recordsDocStackStatusLabel(status: RecordsDocStackStatus): string {
+  switch (status) {
+    case "sample":
+      return "Have sample"
+    case "missing":
+      return "Need to find"
+    case "optional":
+      return "Optional later"
+    default: {
+      const _exhaustive: never = status
+      return _exhaustive
+    }
+  }
+}
+
 export const RECORDS_DOCUMENT_STACK_DEFS: RecordsDocumentStackDef[] = [
   {
     id: "pathology",
-    label: "Pathology",
+    label: "Pathology report",
     status: "sample",
-    body: "Sample available — de-identified sample-pathology.txt / sample-pathology.pdf style placeholder. Not your real chart.",
+    body: "The biopsy write-up your oncologist leans on — bring the full report, including addenda, when you have it.",
+    checklistId: "path-final-copy",
   },
   {
     id: "imaging",
-    label: "Imaging",
+    label: "Imaging summaries or disc",
     status: "missing",
-    body: "Not uploaded in this demo — add when your team names which scans matter.",
+    body: "Radiology summaries (or disc instructions) your team names — ask which scans matter for the next conversation.",
     checklistId: "imaging-summary",
   },
   {
     id: "visit-summary",
-    label: "Visit summary",
+    label: "Visit note or after-visit summary",
     status: "missing",
-    body: "Optional until you have a written after-visit summary to bring or upload.",
+    body: "A short note of what you were told last time — not to replace the chart, but so you remember the wording you heard.",
     checklistId: "visit-synopsis",
   },
   {
     id: "portal-message",
-    label: "Portal message",
+    label: "Portal thread",
     status: "optional",
-    body: "Optional — capture threads about timing, instructions, or follow-up questions.",
+    body: "Screenshots or exports about timing, prep, or follow-up — handy if instructions lived only in the portal.",
     checklistId: "portal-thread",
   },
   {
     id: "insurance-letter",
-    label: "Insurance letter",
+    label: "Insurance packet",
     status: "optional",
-    body: "Optional — keep authorization or records-request letters if your team asked for them.",
+    body: "Letters or authorization checklists if billing is already asking for paperwork — administrative, not medical advice.",
     checklistId: "insurance-packet",
   },
 ]
@@ -698,11 +732,11 @@ export function normalizeFollowUpChipKind(kind: string): FollowUpChipId | "custo
   return mapped ?? null
 }
 
-/** Family tab (Prompt 8) — prototype disclaimer. */
-export const FAMILY_PROTO_BADGE = "Prototype coordination · caregiver approves"
+/** Family tab (Prompt 8.5). */
+export const FAMILY_PROTO_BADGE = "Caregiver approves · nothing sent"
 
 export const FAMILY_TAB_SUBTITLE =
-  "Turn support into clear jobs. Anchor prepares drafts and tasks — nothing is sent automatically."
+  "Get help without explaining the whole medical story twice — ask for one concrete thing, copy language if it helps, and keep tasks local until you choose what to send."
 
 export const FAMILY_SAFETY_FOOTER =
   "Anchor prepares family drafts and support tasks. It does not send messages, make decisions, or replace the care team. Use what fits your family and confirm medical details with clinicians."
@@ -712,56 +746,102 @@ export interface FamilySupportRoleCardDef {
   roleTitle: string
   taskSummary: string
   askDraft: string
+  /** One sentence: why this ask lowers overwhelm (Prompt 8.5). */
+  whyThisHelps: string
 }
 
-export const FAMILY_SUPPORT_ROLE_CARDS: FamilySupportRoleCardDef[] = [
+/** Four primary “one concrete thing” cards (Prompt 8.5). */
+export const FAMILY_PRIMARY_ASK_CARDS: FamilySupportRoleCardDef[] = [
   {
     id: "appointment-buddy",
     roleTitle: "Appointment buddy",
-    taskSummary: "Come to the appointment, take notes, ask follow-up questions.",
+    taskSummary: "Listen for confirmed, pending, and next questions — capture key answers.",
+    whyThisHelps:
+      "You stay present in the room while someone else writes down what was confirmed, what is still pending, and what to ask next — not to replace doctor notes, but so nothing disappears on the drive home.",
     askDraft:
       "Can you help tomorrow by being the appointment note-taker? The most helpful thing would be writing down what is confirmed, what is still pending, and what we need to ask next.",
   },
   {
     id: "records-helper",
     roleTitle: "Records helper",
-    taskSummary: "Gather pathology, imaging summaries, portal messages, medication list.",
+    taskSummary: "One pass to gather pathology, imaging summaries, portal threads, and meds in one folder.",
+    whyThisHelps:
+      "One person gathers papers once so the rest of the family is not duplicating calls or screenshots the night before.",
     askDraft:
       "Could you take one records pass — pathology, imaging summaries, key portal messages, and a medication list — so we have one folder before the visit? Nothing needs to be perfect, just collected.",
   },
   {
     id: "driver-logistics",
     roleTitle: "Driver / logistics",
-    taskSummary: "Handle transportation, parking, timing, food/water.",
+    taskSummary: "Parking, timing, snacks, and getting there — so the caregiver can focus on listening.",
+    whyThisHelps:
+      "Removing parking and timing stress is a real form of care; it keeps bandwidth free for the conversation inside.",
     askDraft:
       "Can you own tomorrow’s logistics — drive or rideshare, parking, timing, and making sure we have water/snacks? That frees us to focus on the conversation in the room.",
   },
   {
-    id: "insurance-caller",
-    roleTitle: "Insurance caller",
-    taskSummary: "Ask what records are needed, where to send them, and deadlines.",
-    askDraft:
-      "Would you be willing to call insurance once and ask exactly which records they need, where to send them, any deadline, and a reference number? We’ll loop the care team if anything is unclear.",
-  },
-  {
-    id: "family-updater",
-    roleTitle: "Family updater",
-    taskSummary: "Send one calm update to relatives after facts are confirmed.",
-    askDraft:
-      "When we’re ready, could you send one short update to relatives — calm, factual, and only after we’ve heard from the care team? We’ll share a draft you can edit in your own words.",
-  },
-  {
     id: "patient-comfort",
-    roleTitle: "Patient comfort support",
-    taskSummary: "Check on meals, rest, comfort items, and emotional support.",
+    roleTitle: "Comfort support",
+    taskSummary: "Meals, rest, small errands, and steady check-ins — no medical decisions needed.",
+    whyThisHelps:
+      "Concrete comfort tasks prevent everyone from hovering with the same anxious question — one person owns warmth and basics.",
     askDraft:
       "Can you help with comfort support — meals, rest, small errands, and checking in emotionally? No medical decisions needed; just steady presence.",
   },
 ]
 
+/** Collapsible “more ways” — insurance, meals, relatives, portal, transport (Prompt 8.5). */
+export const FAMILY_MORE_HELP_ROLE_CARDS: FamilySupportRoleCardDef[] = [
+  {
+    id: "insurance-caller",
+    roleTitle: "Insurance caller",
+    taskSummary: "One call to clarify which records go where and any deadline.",
+    whyThisHelps:
+      "Insurance questions are repetitive; one focused caller keeps the rest of the family out of hold music.",
+    askDraft:
+      "Would you be willing to call insurance once and ask exactly which records they need, where to send them, any deadline, and a reference number? We’ll loop the care team if anything is unclear.",
+  },
+  {
+    id: "meals-organizer",
+    roleTitle: "Meals organizer",
+    taskSummary: "Coordinate a few meals or groceries without turning it into a group project.",
+    whyThisHelps:
+      "Food is practical love — a single coordinator avoids five casseroles on the same day.",
+    askDraft:
+      "Could you own meals for a few days — simple groceries or a meal train link — so we are not managing a dozen offers at once?",
+  },
+  {
+    id: "family-updater",
+    roleTitle: "Relatives update",
+    taskSummary: "One calm message after facts are confirmed — edit in your own words.",
+    whyThisHelps:
+      "One updater stops the group chat from becoming a second triage line while results are still pending.",
+    askDraft:
+      "When we’re ready, could you send one short update to relatives — calm, factual, and only after we’ve heard from the care team? We’ll share a draft you can edit in your own words.",
+  },
+  {
+    id: "portal-helper",
+    roleTitle: "Portal / paperwork buddy",
+    taskSummary: "Logins, downloads, and printing the few pages we actually need.",
+    whyThisHelps:
+      "Portals are fiddly; a second pair of eyes reduces last-minute password panic.",
+    askDraft:
+      "Can you be the portal buddy for a bit — logins, downloading visit summaries, and printing the few pages we need for the appointment?",
+  },
+  {
+    id: "transport-liaison",
+    roleTitle: "Transport for follow-up",
+    taskSummary: "Rides for scans, labs, or return visits after the first appointment.",
+    whyThisHelps:
+      "Follow-up rides are easy to forget until the day-of; naming one person prevents missed appointments later.",
+    askDraft:
+      "Would you own rides for the next couple of visits — scans, labs, or treatment days — and text us the night before to confirm timing?",
+  },
+]
+
 export function buildFamilySupportAdaptiveTask(card: FamilySupportRoleCardDef): StoredAdaptivePlanTask {
   return {
-    id: `family-role:${card.id}:${Date.now()}`,
+    id: `family-role:${card.id}`,
     title: `${card.roleTitle}: ${card.taskSummary}`,
     detail: "Prototype coordination — your care team confirms medical details. Nothing sent from Anchor.",
     initialStatus: "active",

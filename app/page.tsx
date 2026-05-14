@@ -47,6 +47,7 @@ import {
   MEMORY_EMPTY_TIMELINE_ARTIFACTS,
   MEMORY_PROTO_BADGE,
   MEMORY_SUBTITLE_LINES,
+  buildMemoryHoldingNarrative,
   SARAH_KNOW_NOW_BULLETS,
   SARAH_NEEDS_CONFIRMATION_BULLETS,
   SARAH_NOT_TONIGHT_BULLETS,
@@ -60,8 +61,9 @@ import {
   RECORDS_SECOND_OPINION_CHECKLIST_LINES,
   RECORDS_SECOND_OPINION_INTRO,
   RECORDS_TAB_SUBTITLE,
+  RECORDS_THREE_THINGS_INTRO,
   RECORDS_TRANSFER_CHECKLIST_BULLETS,
-  RECORDS_WHAT_CAN_CLARIFY_BULLETS,
+  recordsDocStackStatusLabel,
   SAMPLE_PATHOLOGY_QUESTIONS,
   SAMPLE_PATHOLOGY_RECORD_LINES,
   buildRecordsChecklistAdaptiveTask,
@@ -71,9 +73,10 @@ import {
   FAMILY_AVOID_PRESSURE_LINES,
   FAMILY_EXPLAIN_CARDS,
   FAMILY_HELPS_LINES,
+  FAMILY_MORE_HELP_ROLE_CARDS,
+  FAMILY_PRIMARY_ASK_CARDS,
   FAMILY_PROTO_BADGE,
   FAMILY_SAFETY_FOOTER,
-  FAMILY_SUPPORT_ROLE_CARDS,
   FAMILY_TAB_SUBTITLE,
   FAMILY_UPDATE_DRAFT_CALM,
   FAMILY_UPDATE_DRAFT_DETAIL,
@@ -4019,6 +4022,13 @@ function ResultsView({
   const [familyInlineNote, setFamilyInlineNote] = useState<string | null>(null)
   const [pathologyQuestionsOpen, setPathologyQuestionsOpen] = useState(false)
   const pathologyBlockRef = useRef<HTMLDivElement | null>(null)
+  const recordsDocStackRef = useRef<HTMLDivElement | null>(null)
+  const recordsMissingRef = useRef<HTMLDivElement | null>(null)
+  const [memoryTimelineExpanded, setMemoryTimelineExpanded] = useState(false)
+
+  function scrollToRecordsSection(ref: React.RefObject<HTMLDivElement | null>) {
+    window.requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
+  }
 
   function appendFamilyActivityEntry(taskTitle: string) {
     const id =
@@ -4061,7 +4071,7 @@ function ResultsView({
       appendFamilyActivityEntry(`Family board: marked done · ${titleForLog}`)
     } else if ("owner" in patch && patch.owner && patch.owner !== "none") {
       appendFamilyActivityEntry(
-        `Family board: ${patch.owner === "sibling" ? "Suggested for sibling" : "Suggested for family"} · ${titleForLog}`,
+        `Support tasks: ${patch.owner === "sibling" ? "Marked as taken (sibling lane)" : "Someone can take this"} · ${titleForLog}`,
       )
     }
   }
@@ -4130,6 +4140,17 @@ function ResultsView({
     return "Not added yet"
   }, [displayName, isSarahVoiceCase])
 
+  const memoryHoldingNarrative = useMemo(
+    () =>
+      buildMemoryHoldingNarrative({
+        caregiverName: caregiverCardName,
+        lovedOneLabel,
+        cancerLine: cancerType ? `${titleCase(cancerType)} cancer` : "the cancer context you add next",
+        isSarahDemo: isSarahVoiceCase,
+      }),
+    [cancerType, caregiverCardName, isSarahVoiceCase, lovedOneLabel],
+  )
+
   const voiceConcernResolved = useMemo(
     () => resolvedVoiceConcernForMemory(resultsTranscriptEcho, isBackupDemoMirror, mirrorResult),
     [isBackupDemoMirror, mirrorResult, resultsTranscriptEcho],
@@ -4173,6 +4194,20 @@ function ResultsView({
       voiceConcernResolved,
     ],
   )
+
+  const memoryTimelineLowRisk = useMemo(
+    () =>
+      !adaptivePlanTasks.some(
+        (t) => t.initialStatus === "urgent" && !completedPlanTaskIds.includes(t.id),
+      ),
+    [adaptivePlanTasks, completedPlanTaskIds],
+  )
+
+  const visibleCareTimelineRows = useMemo(() => {
+    if (!memoryTimelineLowRisk || careTimelineRows.length <= 5) return careTimelineRows
+    if (memoryTimelineExpanded) return careTimelineRows
+    return careTimelineRows.slice(0, 5)
+  }, [careTimelineRows, memoryTimelineExpanded, memoryTimelineLowRisk])
 
   const appointmentHandoffText = useMemo(() => {
     const concern =
@@ -4858,11 +4893,76 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Sample document stack</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Today · Start with three things</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{RECORDS_THREE_THINGS_INTRO}</p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                  <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                    <span className="font-semibold text-[#5f5a55]">What do we have? </span>
+                    Real copies you can lay out before the visit — not perfect, just gathered.
+                  </li>
+                  <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                    <span className="font-semibold text-[#5f5a55]">What is missing? </span>
+                    Tests, summaries, or instructions still only in voicemail or the portal.
+                  </li>
+                  <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                    <span className="font-semibold text-[#5f5a55]">What should we ask? </span>
+                    A few plain questions about what is confirmed, what is pending, and what happens next.
+                  </li>
+                </ul>
+                <div className="mt-2.5 flex min-w-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => scrollToRecordsSection(recordsDocStackRef)}
+                    className="rounded-full border border-[#8f7e9b]/45 bg-[#faf7f4]/95 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                  >
+                    Jump to what we have
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToRecordsSection(recordsMissingRef)}
+                    className="rounded-full border border-[#8f7e9b]/45 bg-[#faf7f4]/95 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                  >
+                    Jump to what is missing
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePathologyFromStack}
+                    className="rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                  >
+                    Jump to what to ask
+                  </button>
+                </div>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-3.5`}>
+                <div className="mb-2 flex min-w-0 items-start gap-2">
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Bring these to the appointment</p>
+                    <p className="mt-1 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px] sm:leading-relaxed">
+                      First-72-hour visit packet — same thread as Memory, plus a records add-on. Copy into your own notes; nothing
+                      is sent.
+                    </p>
+                  </div>
+                </div>
+                <pre className="m-0 max-h-36 min-w-0 overflow-x-auto whitespace-pre-wrap break-words rounded-[12px] border border-[#ece4dc] bg-white/70 p-2 font-sans text-[10px] leading-snug text-[#3f3a36] sm:max-h-40 sm:text-[11px]">
+                  {recordsOnePagerPreview}
+                </pre>
+                <button
+                  type="button"
+                  onClick={() => void onCopy("recordsOnePager", recordsOnePagerText, "Copied appointment one-pager")}
+                  className={`${GLASS_BUTTON} mt-2 flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2 text-[11px] font-medium sm:rounded-[16px] sm:text-sm`}
+                >
+                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                  Copy visit packet
+                </button>
+              </div>
+
+              <div ref={recordsDocStackRef} className={`${GLASS_PANEL} min-w-0 scroll-mt-24 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">What you have vs. what to find</p>
                 <div className="grid min-w-0 gap-2 sm:gap-2.5">
                   {RECORDS_DOCUMENT_STACK_DEFS.map((doc) => {
-                    const statusLabel =
-                      doc.status === "sample" ? "Sample available" : doc.status === "missing" ? "Missing / not uploaded" : "Optional"
+                    const statusLabel = recordsDocStackStatusLabel(doc.status)
                     const statusClass =
                       doc.status === "sample"
                         ? "border-[#b8d4c4]/80 bg-[#f4faf6]/95 text-[#3d5c4f]"
@@ -4891,7 +4991,7 @@ function ResultsView({
                               onClick={handlePathologyFromStack}
                               className="w-full rounded-full border border-[#8f7e9b]/45 bg-[#faf7f4]/95 px-3 py-1.5 text-left text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:w-auto sm:text-[11px]"
                             >
-                              View what to ask
+                              Prep sample questions
                             </button>
                           ) : doc.checklistId ? (
                             <button
@@ -4899,7 +4999,7 @@ function ResultsView({
                               onClick={() => handleDocumentStackAdd(doc.checklistId)}
                               className="w-full rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-3 py-1.5 text-left text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:w-auto sm:text-[11px]"
                             >
-                              Add to checklist
+                              Add plan task
                             </button>
                           ) : (
                             <span className="text-[10px] text-[#9b829c] sm:text-[11px]">No auto task</span>
@@ -4911,13 +5011,29 @@ function ResultsView({
                 </div>
               </div>
 
-              <ResultPacketCard icon={<Clipboard className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What records can clarify">
-                <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  Records help you prepare questions and spot gaps — they do not replace clinician judgment, diagnosis, staging,
-                  or treatment decisions.
+              <div ref={recordsMissingRef} className={`${GLASS_PANEL} min-w-0 scroll-mt-24 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Today · What is missing</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Tap Add as task to place a row on your Plan board — deduped so the same checklist line does not stack twice.
                 </p>
-                <ResultBulletList items={[...RECORDS_WHAT_CAN_CLARIFY_BULLETS]} />
-              </ResultPacketCard>
+                <ul className="mt-2 m-0 grid list-none gap-2 p-0">
+                  {RECORDS_MISSING_CHECKLIST_DEFS.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:flex-row sm:items-center sm:justify-between sm:rounded-[14px] sm:p-3"
+                    >
+                      <p className="m-0 min-w-0 flex-1 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{item.title}</p>
+                      <button
+                        type="button"
+                        onClick={() => handleAddRecordsChecklistItem(item)}
+                        className="shrink-0 rounded-full border border-[#8f7e9b]/45 bg-[#faf7f4]/95 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                      >
+                        Add as task
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
               <div ref={pathologyBlockRef} className={`${GLASS_PANEL} min-w-0 scroll-mt-28 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Sample pathology record</p>
@@ -4973,114 +5089,77 @@ function ResultsView({
                 </AnimatePresence>
               </div>
 
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">What is missing</p>
-                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  Tap Add as task to place a row on your Plan board — deduped so the same checklist line does not stack twice.
-                </p>
-                <ul className="mt-2 m-0 grid list-none gap-2 p-0">
-                  {RECORDS_MISSING_CHECKLIST_DEFS.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:flex-row sm:items-center sm:justify-between sm:rounded-[14px] sm:p-3"
+              <details className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  Later · if needed
+                  <span className="mt-1 block text-[10px] font-normal leading-snug text-[#756f68] sm:text-[11px]">
+                    Second opinion packet, record transfer hygiene, and quick-add plan rows — open when you are past the first
+                    touchpoint.
+                  </span>
+                </summary>
+                <div className="mt-3 grid min-w-0 gap-3 border-t border-[#ece4dc]/90 pt-3">
+                  <div className="rounded-[14px] border border-[#e8dfd8] bg-white/65 p-3 sm:rounded-[16px]">
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Second-opinion packet checklist</p>
+                    <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{RECORDS_SECOND_OPINION_INTRO}</p>
+                    <ul className="mt-2 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                      {RECORDS_SECOND_OPINION_CHECKLIST_LINES.map((line) => (
+                        <li key={line} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void onCopy("recordsSecondOpinion", secondOpinionChecklistCopyText, "Copied second-opinion checklist")
+                      }
+                      className={`${GLASS_BUTTON} mt-2 flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
                     >
-                      <p className="m-0 min-w-0 flex-1 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{item.title}</p>
-                      <button
-                        type="button"
-                        onClick={() => handleAddRecordsChecklistItem(item)}
-                        className="shrink-0 rounded-full border border-[#8f7e9b]/45 bg-[#faf7f4]/95 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
-                      >
-                        Add as task
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                      <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                      Copy second-opinion checklist
+                    </button>
+                  </div>
 
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <div className="mb-2 flex min-w-0 items-start gap-2">
-                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" aria-hidden />
-                  <div className="min-w-0 flex-1">
-                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Appointment one-pager</p>
-                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">
-                      Built from this session&apos;s case memory — same handoff memo as Memory, plus a records add-on for your
-                      clipboard.
+                  <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="Record transfer checklist">
+                    <ResultBulletList items={[...RECORDS_TRANSFER_CHECKLIST_BULLETS]} />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void onCopy("recordsTransfer", recordTransferChecklistCopyText, "Copied record transfer checklist")
+                      }
+                      className={`${GLASS_BUTTON} mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
+                    >
+                      <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                      Copy record transfer checklist
+                    </button>
+                  </ResultPacketCard>
+
+                  <div className="rounded-[14px] border border-[#e8dfd8] bg-white/65 p-3 sm:rounded-[16px]">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Records quick-add tasks</p>
+                    <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      These land on your Plan board with the same persistence as other adaptive tasks — demo only, not sent to your
+                      clinic.
                     </p>
+                    <div className="mt-2 grid min-w-0 gap-2">
+                      {RECORDS_QUICK_ADD_TASK_DEFS.map((def) => (
+                        <div
+                          key={def.id}
+                          className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:flex-row sm:items-center sm:justify-between sm:rounded-[14px] sm:p-3"
+                        >
+                          <p className="m-0 min-w-0 flex-1 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{def.title}</p>
+                          <button
+                            type="button"
+                            onClick={() => handleAddRecordsQuick(def)}
+                            className="shrink-0 rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                          >
+                            Add to plan
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <pre className="m-0 max-h-48 min-w-0 overflow-x-auto whitespace-pre-wrap break-words rounded-[12px] border border-[#ece4dc] bg-white/70 p-2.5 font-sans text-[10px] leading-snug text-[#3f3a36] sm:text-[11px]">
-                  {recordsOnePagerPreview}
-                </pre>
-                <button
-                  type="button"
-                  onClick={() => void onCopy("recordsOnePager", recordsOnePagerText, "Copied appointment one-pager")}
-                  className={`${GLASS_BUTTON} mt-2 flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
-                >
-                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
-                  Copy appointment one-pager
-                </button>
-              </div>
-
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Second-opinion packet checklist</p>
-                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{RECORDS_SECOND_OPINION_INTRO}</p>
-                <ul className="mt-2 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
-                  {RECORDS_SECOND_OPINION_CHECKLIST_LINES.map((line) => (
-                    <li key={line} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void onCopy("recordsSecondOpinion", secondOpinionChecklistCopyText, "Copied second-opinion checklist")
-                  }
-                  className={`${GLASS_BUTTON} mt-2 flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
-                >
-                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
-                  Copy second-opinion checklist
-                </button>
-              </div>
-
-              <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="Record transfer checklist">
-                <ResultBulletList items={[...RECORDS_TRANSFER_CHECKLIST_BULLETS]} />
-                <button
-                  type="button"
-                  onClick={() =>
-                    void onCopy("recordsTransfer", recordTransferChecklistCopyText, "Copied record transfer checklist")
-                  }
-                  className={`${GLASS_BUTTON} mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
-                >
-                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
-                  Copy record transfer checklist
-                </button>
-              </ResultPacketCard>
-
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Records quick-add tasks</p>
-                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  These land on your Plan board with the same persistence as other adaptive tasks — demo only, not sent to your
-                  clinic.
-                </p>
-                <div className="mt-2 grid min-w-0 gap-2">
-                  {RECORDS_QUICK_ADD_TASK_DEFS.map((def) => (
-                    <div
-                      key={def.id}
-                      className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:flex-row sm:items-center sm:justify-between sm:rounded-[14px] sm:p-3"
-                    >
-                      <p className="m-0 min-w-0 flex-1 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{def.title}</p>
-                      <button
-                        type="button"
-                        onClick={() => handleAddRecordsQuick(def)}
-                        className="shrink-0 rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
-                      >
-                        Add to plan
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              </details>
 
               {(copied === "recordsPathology" ||
                 copied === "recordsSecondOpinion" ||
@@ -5110,7 +5189,7 @@ function ResultsView({
           {activeResultTab === "family" && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
               <div className="min-w-0">
-                <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-base">Family coordination</p>
+                <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-base">Family support</p>
                 <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{FAMILY_TAB_SUBTITLE}</p>
                 <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                   <span className="inline-flex max-w-full shrink-0 items-center rounded-full border border-[#c9b8d8]/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-[#6f6280] sm:text-[11px]">
@@ -5123,14 +5202,16 @@ function ResultsView({
                 <div className="mb-2 flex min-w-0 items-start gap-2">
                   <Users className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" aria-hidden />
                   <div className="min-w-0 flex-1">
-                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Who can help with what?</p>
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Ask for one concrete thing</p>
                     <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                      Add a row to your Plan board as a reminder — you choose who to ask in real life.
+                      Pick a single job someone can own — Anchor drafts language and can add a Plan reminder. Nothing sends until
+                      you copy it yourself. Listen for confirmed, pending, and next questions; capture key answers here — not to
+                      replace your care team&apos;s visit note, which may arrive later.
                     </p>
                   </div>
                 </div>
                 <div className="grid min-w-0 gap-2.5">
-                  {FAMILY_SUPPORT_ROLE_CARDS.map((card) => (
+                  {FAMILY_PRIMARY_ASK_CARDS.map((card) => (
                     <div
                       key={card.id}
                       className="flex min-w-0 flex-col gap-2 rounded-[14px] border border-[#e8dfd8] bg-white/70 p-2.5 sm:rounded-[16px] sm:p-3"
@@ -5138,6 +5219,10 @@ function ResultsView({
                       <div className="min-w-0">
                         <p className="m-0 text-[12px] font-semibold text-[#3f3a36] sm:text-sm">{card.roleTitle}</p>
                         <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{card.taskSummary}</p>
+                        <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px] sm:leading-relaxed">
+                          <span className="font-semibold text-[#6f6280]">Why this helps · </span>
+                          {card.whyThisHelps}
+                        </p>
                       </div>
                       <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap">
                         <button
@@ -5145,7 +5230,7 @@ function ResultsView({
                           onClick={() => handleAddFamilySupportTask(card)}
                           className="inline-flex min-w-0 flex-1 items-center justify-center rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:flex-none sm:text-[11px]"
                         >
-                          Add as task
+                          Add to plan
                         </button>
                         <button
                           type="button"
@@ -5165,12 +5250,58 @@ function ResultsView({
                     </div>
                   ))}
                 </div>
+
+                <details className="mt-3 rounded-[12px] border border-[#ece4dc] bg-[#faf7f4]/80 p-2.5 sm:p-3">
+                  <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#3f3a36] sm:text-xs [&::-webkit-details-marker]:hidden">
+                    More ways people can help
+                    <span className="mt-0.5 block text-[10px] font-normal leading-snug text-[#756f68]">
+                      Insurance, meals, relative updates, portal help, follow-up rides — still one task at a time.
+                    </span>
+                  </summary>
+                  <div className="mt-2.5 grid min-w-0 gap-2 border-t border-[#ece4dc]/90 pt-2.5">
+                    {FAMILY_MORE_HELP_ROLE_CARDS.map((card) => (
+                      <div
+                        key={card.id}
+                        className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/80 p-2.5 sm:p-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{card.roleTitle}</p>
+                          <p className="mt-1 m-0 text-[10px] leading-snug text-[#756f68] sm:text-[11px]">{card.whyThisHelps}</p>
+                        </div>
+                        <div className="flex min-w-0 flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleAddFamilySupportTask(card)}
+                            className="rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-2.5 py-1 text-[9px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[10px]"
+                          >
+                            Add to plan
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void onCopy("familyClip", card.askDraft, "Copied family ask draft", {
+                                taskTitle: "Copied family ask draft",
+                                badge: "Family",
+                                taskId: "family-activity",
+                              })
+                            }
+                            className={`${GLASS_BUTTON} inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-medium sm:text-[10px]`}
+                          >
+                            <Copy className="h-3 w-3 shrink-0" aria-hidden />
+                            Copy ask
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Family update drafts</p>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Later · texts to relatives</p>
                 <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  Nothing is sent from Anchor — copy and edit in your own words.
+                  Listen for confirmed versus pending before you text the group chat. Nothing is sent from Anchor — copy and edit
+                  in your own words.
                 </p>
                 <div className="mt-2.5 grid min-w-0 gap-3">
                   {[
@@ -5265,13 +5396,13 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Family task board</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Support tasks</p>
                 <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  Demo-only columns — assign suggestions for your own follow-through. Persists with this local case.
+                  Three gentle columns — you still choose who does what in real life. Persists with this local case.
                 </p>
                 <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-3">
                   <div className="min-w-0 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:p-3">
-                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Needs owner</p>
+                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Needs help</p>
                     <ul className="mt-2 m-0 list-none space-y-2 p-0">
                       {familyNeedsOwnerRows.map((r) => (
                         <li key={r.id} className="rounded-[10px] border border-[#ece4dc] bg-[#faf7f4]/90 p-2">
@@ -5282,14 +5413,14 @@ function ResultsView({
                               onClick={() => patchFamilyCoordRow(r.id, { owner: "sibling" })}
                               className="rounded-full border border-[#8f7e9b]/40 bg-white/90 px-2 py-0.5 text-[9px] font-medium text-[#5c4a62] sm:text-[10px]"
                             >
-                              Assign to sibling
+                              Someone can take this · sibling
                             </button>
                             <button
                               type="button"
                               onClick={() => patchFamilyCoordRow(r.id, { owner: "family-member" })}
                               className="rounded-full border border-[#8f7e9b]/40 bg-white/90 px-2 py-0.5 text-[9px] font-medium text-[#5c4a62] sm:text-[10px]"
                             >
-                              Assign to family member
+                              Someone can take this · family
                             </button>
                           </div>
                         </li>
@@ -5297,13 +5428,13 @@ function ResultsView({
                     </ul>
                   </div>
                   <div className="min-w-0 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:p-3">
-                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Assigned / suggested</p>
+                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Someone can take this</p>
                     <ul className="mt-2 m-0 list-none space-y-2 p-0">
                       {familyAssignedRows.map((r) => (
                         <li key={r.id} className="rounded-[10px] border border-[#ece4dc] bg-[#faf7f4]/90 p-2">
                           <p className="m-0 text-[11px] font-medium text-[#3f3a36] sm:text-xs">{r.title}</p>
                           <p className="mt-0.5 m-0 text-[10px] text-[#9b829c] sm:text-[11px]">
-                            {r.owner === "sibling" ? "Suggested · sibling" : "Suggested · family member"}
+                            {r.owner === "sibling" ? "Taken · sibling lane" : "Taken · family lane"}
                           </p>
                           <button
                             type="button"
@@ -5352,9 +5483,9 @@ function ResultsView({
           {activeResultTab === "memory" && (
             <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
               <div className="min-w-0 max-w-full">
-                <p className="m-0 text-[13px] font-semibold leading-snug text-[#3f3a35] sm:text-base">Case memory preview</p>
+                <p className="m-0 text-[13px] font-semibold leading-snug text-[#3f3a35] sm:text-base">Memory</p>
                 <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">
-                  {MEMORY_SUBTITLE_LINES[0]} {MEMORY_SUBTITLE_LINES[1]} Prototype memory preview · stored locally for this demo.
+                  {MEMORY_SUBTITLE_LINES[0]} {MEMORY_SUBTITLE_LINES[1]}
                 </p>
                 <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                   <span className="inline-flex max-w-full shrink-0 items-center rounded-full border border-[#c9b8d8]/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-[#6f6280] sm:text-[11px]">
@@ -5365,30 +5496,23 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Case snapshot</p>
-                <ul className="m-0 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What Anchor is holding onto</p>
+                <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{memoryHoldingNarrative}</p>
+                <ul className="mt-2 m-0 list-none space-y-1 p-0 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px] sm:leading-relaxed">
                   <li>
-                    <span className="font-medium text-[#5f5a55]">Caregiver · </span>
+                    <span className="font-medium text-[#6f6280]">Caregiver · </span>
                     {caregiverCardName}
                   </li>
                   <li>
-                    <span className="font-medium text-[#5f5a55]">Relationship · </span>
+                    <span className="font-medium text-[#6f6280]">Loved one · </span>
                     {lovedOneLabel}
                   </li>
                   <li>
-                    <span className="font-medium text-[#5f5a55]">Cancer context · </span>
+                    <span className="font-medium text-[#6f6280]">Cancer context · </span>
                     {cancerType ? `${titleCase(cancerType)} cancer` : "Not added yet"}
                   </li>
                   <li>
-                    <span className="font-medium text-[#5f5a55]">Mode · </span>
-                    {isBackupDemoMirror ? "Backup demo mirror" : "Demo"}
-                  </li>
-                  <li>
-                    <span className="font-medium text-[#5f5a55]">72-hour plan · </span>
-                    {planResult ? "Generated for this case snapshot." : "Not generated yet — use the Plan tab."}
-                  </li>
-                  <li>
-                    <span className="font-medium text-[#5f5a55]">Last updated · </span>
+                    <span className="font-medium text-[#6f6280]">Last touched · </span>
                     {memoryLastUpdated}
                   </li>
                 </ul>
@@ -5399,7 +5523,7 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Voice/text detail</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Original concern</p>
                 <p className="m-0 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-[#3f3a35] sm:text-sm">
                   {voiceConcernResolved.trim() || "No voice/text concern captured yet."}
                 </p>
@@ -5419,6 +5543,37 @@ function ResultsView({
                 </p>
                 <ResultBulletList items={mergedNeedsConfirmation} />
               </ResultPacketCard>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Questions asked</p>
+                {followUpResponses.length === 0 ? (
+                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">{MEMORY_EMPTY_QUESTIONS_ASKED}</p>
+                ) : (
+                  <ul className="m-0 grid list-none gap-2 p-0">
+                    {followUpResponses.map((item) => (
+                      <li
+                        key={item.id}
+                        className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:flex-row sm:items-start sm:justify-between sm:rounded-[14px] sm:p-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <span className="inline-flex max-w-full rounded-full border border-[#cbc4be] bg-[#faf7f4] px-2 py-0.5 text-[10px] font-medium text-[#3f3a35] sm:text-[11px]">
+                            {item.questionLabel}
+                          </span>
+                          <p className="mt-1.5 m-0 text-[12px] font-semibold leading-snug text-[#3f3a35] sm:text-sm">{item.title}</p>
+                          <p className="mt-1 m-0 text-[10px] text-[#9b829c] sm:text-[11px]">{formatDemoTimelineLabel(item.timestamp)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onActiveResultTabChange("ask")}
+                          className="shrink-0 self-start rounded-full border border-[#b98da0]/50 bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                        >
+                          View in Ask
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">New information added</p>
@@ -5458,71 +5613,6 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Questions asked</p>
-                {followUpResponses.length === 0 ? (
-                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">{MEMORY_EMPTY_QUESTIONS_ASKED}</p>
-                ) : (
-                  <ul className="m-0 grid list-none gap-2 p-0">
-                    {followUpResponses.map((item) => (
-                      <li
-                        key={item.id}
-                        className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:flex-row sm:items-start sm:justify-between sm:rounded-[14px] sm:p-3"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <span className="inline-flex max-w-full rounded-full border border-[#cbc4be] bg-[#faf7f4] px-2 py-0.5 text-[10px] font-medium text-[#3f3a35] sm:text-[11px]">
-                            {item.questionLabel}
-                          </span>
-                          <p className="mt-1.5 m-0 text-[12px] font-semibold leading-snug text-[#3f3a35] sm:text-sm">{item.title}</p>
-                          <p className="mt-1 m-0 text-[10px] text-[#9b829c] sm:text-[11px]">{formatDemoTimelineLabel(item.timestamp)}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => onActiveResultTabChange("ask")}
-                          className="shrink-0 self-start rounded-full border border-[#b98da0]/50 bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
-                        >
-                          View in Ask
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
-                  Family coordination (demo)
-                </p>
-                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  Local task board from the Family tab — not sent to anyone. Open the Family tab to assign jobs or copy drafts.
-                </p>
-                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
-                  <li>
-                    <span className="font-medium text-[#5f5a55]">Needs owner · </span>
-                    {familyNeedsOwnerRows.length
-                      ? familyNeedsOwnerRows.map((r) => r.title).join(" · ")
-                      : "All rows have an assignee or are done."}
-                  </li>
-                  <li>
-                    <span className="font-medium text-[#5f5a55]">Assigned · </span>
-                    {familyAssignedRows.length
-                      ? familyAssignedRows.map((r) => `${r.title} (${r.owner === "sibling" ? "sibling" : "family"})`).join(" · ")
-                      : "None yet."}
-                  </li>
-                  <li>
-                    <span className="font-medium text-[#5f5a55]">Done · </span>
-                    {familyDoneRows.length ? familyDoneRows.map((r) => r.title).join(" · ") : "None yet."}
-                  </li>
-                </ul>
-                <button
-                  type="button"
-                  onClick={() => onActiveResultTabChange("family")}
-                  className="mt-2 rounded-full border border-[#b98da0]/50 bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
-                >
-                  Open Family tab
-                </button>
-              </div>
-
-              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Tasks completed</p>
                 {completedPlanTaskIds.length === 0 ? (
                   <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">{MEMORY_EMPTY_TASKS_DONE}</p>
@@ -5542,8 +5632,10 @@ function ResultsView({
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Plan changes (adaptive board)</p>
                 <p className="m-0 text-[12px] font-medium leading-snug text-[#3f3a36] sm:text-sm">{boardCountsLine}</p>
                 <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  Counts follow the same buckets as the Plan tab (active includes urgent + active next steps). Generate the plan
-                  when you are ready for the full checklist.
+                  Counts follow the same buckets as the Plan tab (active includes urgent + active next steps).{" "}
+                  <span className="font-medium text-[#5f5a55]">
+                    {planResult ? "A plan snapshot is on your Plan tab." : "Generate the plan on the Plan tab when you want the full checklist."}
+                  </span>
                 </p>
               </div>
 
@@ -5563,30 +5655,6 @@ function ResultsView({
                     ))}
                   </ul>
                 )}
-              </div>
-
-              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <div className="mb-2 flex min-w-0 items-start gap-2">
-                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" />
-                  <div className="min-w-0 flex-1">
-                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Care timeline</p>
-                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{MEMORY_CARE_TIMELINE_INTRO}</p>
-                  </div>
-                </div>
-                <div className="grid max-w-full gap-3">
-                  {careTimelineRows.map((row, idx) => (
-                    <div key={row.id} className="flex min-w-0 max-w-full gap-3">
-                      <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#b98da0]/90" aria-hidden />
-                      <div
-                        className={`min-w-0 flex-1 pb-3 ${idx < careTimelineRows.length - 1 ? "border-b border-[#ece4dc]/90" : ""}`}
-                      >
-                        <p className="m-0 text-[12px] font-semibold leading-snug text-[#3f3a36] sm:text-sm">{row.title}</p>
-                        <p className="mt-0.5 m-0 break-words text-[11px] leading-snug text-[#756f68] sm:text-xs">{row.description}</p>
-                        <p className="mt-1 m-0 text-[10px] text-[#9b829c] sm:text-[11px]">{row.timeLabel}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
@@ -5652,6 +5720,71 @@ function ResultsView({
                     Copied. Anchor did not send anything.
                   </p>
                 )}
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <div className="mb-2 flex min-w-0 items-start gap-2">
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Care timeline</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{MEMORY_CARE_TIMELINE_INTRO}</p>
+                  </div>
+                </div>
+                <div className={`grid max-w-full ${memoryTimelineLowRisk ? "gap-3" : "gap-1.5"}`}>
+                  {visibleCareTimelineRows.map((row, idx) => (
+                    <div key={row.id} className="flex min-w-0 max-w-full gap-3">
+                      <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#b98da0]/90" aria-hidden />
+                      <div
+                        className={`min-w-0 flex-1 pb-3 ${idx < visibleCareTimelineRows.length - 1 ? "border-b border-[#ece4dc]/90" : ""}`}
+                      >
+                        <p className="m-0 text-[12px] font-semibold leading-snug text-[#3f3a36] sm:text-sm">{row.title}</p>
+                        <p className="mt-0.5 m-0 break-words text-[11px] leading-snug text-[#756f68] sm:text-xs">{row.description}</p>
+                        <p className="mt-1 m-0 text-[10px] text-[#9b829c] sm:text-[11px]">{row.timeLabel}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {memoryTimelineLowRisk && careTimelineRows.length > 5 && (
+                  <button
+                    type="button"
+                    onClick={() => setMemoryTimelineExpanded((v) => !v)}
+                    className="mt-2 w-full rounded-full border border-[#8f7e9b]/40 bg-[#faf7f4]/95 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                  >
+                    {memoryTimelineExpanded ? "Show fewer moments" : "Show more moments"}
+                  </button>
+                )}
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Later · Support snapshot</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  From your Family tab — local only, not sent. Open there to move cards or copy drafts.
+                </p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Needs help · </span>
+                    {familyNeedsOwnerRows.length
+                      ? familyNeedsOwnerRows.map((r) => r.title).join(" · ")
+                      : "Everything is claimed or done for now."}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Someone can take this · </span>
+                    {familyAssignedRows.length
+                      ? familyAssignedRows.map((r) => `${r.title} (${r.owner === "sibling" ? "sibling lane" : "family lane"})`).join(" · ")
+                      : "None yet."}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Done · </span>
+                    {familyDoneRows.length ? familyDoneRows.map((r) => r.title).join(" · ") : "None yet."}
+                  </li>
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => onActiveResultTabChange("family")}
+                  className="mt-2 rounded-full border border-[#b98da0]/50 bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                >
+                  Open Family tab
+                </button>
               </div>
 
               <ResultPacketCard icon={<HeartHandshake className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What Anchor heard (mirror)">
