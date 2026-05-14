@@ -32,6 +32,7 @@ import {
   buildDocumentGuideClipboardBlock,
   buildDocumentPasteClipboardBlock,
   buildDocumentPasteOutput,
+  classifyInsuranceDenialPaste,
   classifyDocumentPasteText,
   DOCUMENT_AGENT_BOUNDARY_LINE,
   DOCUMENT_AGENT_SAMPLE_CANNOT_CONFIRM_BULLETS,
@@ -48,7 +49,12 @@ import {
   buildHeroInsuranceIssuePlanTasks,
   buildHeroVisitPrepPlanTasks,
   buildHumanOutreachApprovalChecklistBlock,
-  buildInsuranceIssueClipboardBlock,
+  buildInsuranceAgentFrontDeskClipboardBlock,
+  buildInsuranceDenialAgentOutput,
+  buildInsuranceDenialAppealDraftClipboard,
+  buildInsuranceDenialPhoneScriptClipboard,
+  buildInsuranceRecordsRequestClipboardBlock,
+  buildInsuranceSchedulingBlockerClipboardBlock,
   buildMemoryHoldingNarrative,
   buildPhoneDocumentFollowupTask,
   buildPhoneFamilyFollowupTask,
@@ -97,14 +103,25 @@ import {
   HUMAN_OUTREACH_STEPS,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
-  HERO_INSURANCE_PLAN_IDS,
   HERO_VISIT_PLAN_IDS,
-  INSURANCE_ISSUE_CALL_SCRIPT,
-  INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE,
-  INSURANCE_ISSUE_IF_UNKNOWN_LINE,
+  INSURANCE_AGENT_BOUNDARY_CONFIRM,
+  INSURANCE_AGENT_BOUNDARY_PRIMARY,
+  INSURANCE_AGENT_FRONT_DESK_PURPOSE,
+  INSURANCE_AGENT_PASTE_DISCLAIMER,
+  INSURANCE_DENIAL_APPEAL_DRAFT_BODY,
+  INSURANCE_DENIAL_APPEAL_DRAFT_TITLE,
+  INSURANCE_DENIAL_PHONE_SCRIPT_COMBINED,
+  INSURANCE_DENIAL_WHAT_TO_ASK_BULLETS,
+  INSURANCE_DENIAL_WRITE_DOWN_BULLETS,
+  INSURANCE_RECORDS_CHECKLIST_AGENT,
+  INSURANCE_RECORDS_REQUEST_PURPOSE,
+  INSURANCE_RECORDS_REQUEST_SCRIPT,
+  INSURANCE_RECORDS_REQUEST_WHAT_TO_ASK,
+  INSURANCE_SCHEDULING_BLOCKER_MAY_BE,
+  INSURANCE_SCHEDULING_BLOCKER_SCRIPT,
+  INSURANCE_SCHEDULING_WHAT_TO_GET,
   INSURANCE_ISSUE_PANEL_SUBTITLE,
   INSURANCE_ISSUE_PANEL_TITLE,
-  INSURANCE_ISSUE_WHAT_TO_GET,
   MEMORY_CARE_TIMELINE_INTRO,
   MEMORY_EMPTY_CASE_UPDATES,
   MEMORY_EMPTY_QUESTIONS_ASKED,
@@ -118,7 +135,11 @@ import {
   PHONE_SCRIPT_DOCUMENT,
   PHONE_SCRIPT_FAMILY_UPDATE,
   PHONE_SCRIPT_FRONT_DESK,
+  PHONE_SCRIPT_INSURANCE_DENIAL,
+  PHONE_SCRIPT_INSURANCE_FRONT_BRIEF,
   PHONE_SCRIPT_INSURANCE_RECORDS,
+  PHONE_SCRIPT_RECORDS_REQUEST,
+  PHONE_SCRIPT_SCHEDULING_BLOCKER,
   PHONE_SCRIPT_VISIT_PREP,
   PLAN_CHANGE_FACTORS_BULLETS,
   PLAN_CHANGE_URGENT_SAFETY,
@@ -169,6 +190,7 @@ import {
   type AdaptivePlanTaskInitialStatus,
   type FamilyCoordBoardRow,
   type FamilySupportRoleCardDef,
+  type InsuranceDenialAgentOutput,
   type DocumentPasteOutput,
   type DocumentReportChipId,
   type FollowUpChipId,
@@ -203,7 +225,11 @@ type ResultCopyKind =
   | "documentChecklistCopy"
   | "documentPasteBlockCopy"
   | "documentChipBlockCopy"
-  | "insuranceIssueCopy"
+  | "insuranceDenialPhoneCopy"
+  | "insuranceAppealDraftCopy"
+  | "insuranceRecordsPackCopy"
+  | "insuranceSchedulingCopy"
+  | "insuranceFrontDeskAgentCopy"
   | "futureMapperQuestions"
   | "futureFrontDeskBrief"
   | "futureOutreachChecklist"
@@ -3709,7 +3735,10 @@ function PhoneModeReader({
   const showAdminExtra =
     s.phoneFollowUpProfile === "insurance" ||
     s.phoneFollowUpProfile === "frontDesk" ||
-    s.id.includes("insurance")
+    s.id.includes("insurance") ||
+    s.id.includes("records-request") ||
+    s.id.includes("scheduling-blocker") ||
+    s.id.includes("front-brief")
 
   return (
     <AnimatePresence>
@@ -4644,6 +4673,11 @@ function ResultsView({
   const [docPasteField, setDocPasteField] = useState("")
   const [docPasteOutput, setDocPasteOutput] = useState<DocumentPasteOutput | null>(null)
   const [docChipId, setDocChipId] = useState<DocumentReportChipId | null>(null)
+  type InsAgentHome = "pick" | "denial" | "records" | "scheduling" | "frontdesk"
+  const [insAgentHome, setInsAgentHome] = useState<InsAgentHome>("pick")
+  const [insDenialPaste, setInsDenialPaste] = useState("")
+  const [insDenialExplained, setInsDenialExplained] = useState(false)
+  const [insDenialOut, setInsDenialOut] = useState<InsuranceDenialAgentOutput | null>(null)
 
   useEffect(() => {
     if (todayHeroModal !== "document") {
@@ -4652,6 +4686,15 @@ function ResultsView({
       setDocPasteField("")
       setDocPasteOutput(null)
       setDocChipId(null)
+    }
+  }, [todayHeroModal])
+
+  useEffect(() => {
+    if (todayHeroModal !== "insurance") {
+      setInsAgentHome("pick")
+      setInsDenialPaste("")
+      setInsDenialExplained(false)
+      setInsDenialOut(null)
     }
   }, [todayHeroModal])
 
@@ -4768,18 +4811,7 @@ function ResultsView({
     setDocChipId(null)
   }
 
-  function handleAddInsuranceFollowUpTask() {
-    const solo: StoredAdaptivePlanTask = {
-      id: HERO_INSURANCE_PLAN_IDS.follow,
-      title: INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE,
-      detail: "From insurance/records hero flow — you follow up; nothing sent from Anchor.",
-      initialStatus: "waiting",
-      fromUpdate: false,
-    }
-    appendDedupedPlanTasks([solo], "Added follow-up task to your 72-hour plan (Tools).", "That follow-up is already on your plan.")
-  }
-
-  function handleSaveInsuranceHeroTimeline() {
+  function appendInsuranceAgentTimeline(taskTitle: string) {
     const id =
       typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
         ? globalThis.crypto.randomUUID()
@@ -4787,11 +4819,43 @@ function ResultsView({
     appendActionGuideDemoTimeline({
       id,
       taskId: "hero-insurance",
-      taskTitle: "Saved insurance/records prep notes to demo timeline",
-      badge: "Hero flow",
+      taskTitle,
+      badge: "Insurance agent",
       savedAt: new Date().toISOString(),
     })
-    setVisitPrepInlineNote("Saved to Saved → scripts and timeline (local demo).")
+  }
+
+  function handleInsuranceAgentBackToModes() {
+    setInsAgentHome("pick")
+    setInsDenialPaste("")
+    setInsDenialExplained(false)
+    setInsDenialOut(null)
+  }
+
+  function handleInsuranceDenialExplain() {
+    const trimmed = insDenialPaste.trim()
+    if (!trimmed) {
+      setVisitPrepInlineNote("Paste a short excerpt first.")
+      window.setTimeout(() => setVisitPrepInlineNote(null), 2400)
+      return
+    }
+    const kind = classifyInsuranceDenialPaste(trimmed)
+    setInsDenialOut(buildInsuranceDenialAgentOutput(kind))
+    setInsDenialExplained(true)
+    appendInsuranceAgentTimeline("Insurance agent: explained pasted denial or authorization text")
+  }
+
+  function handleAddInsuranceFollowUpTask() {
+    appendDedupedPlanTasks(
+      buildHeroInsuranceIssuePlanTasks(),
+      "Added insurance agent follow-up tasks to your 72-hour plan (Tools).",
+      "Those insurance agent tasks are already on your plan.",
+    )
+  }
+
+  function handleSaveInsuranceHeroTimeline() {
+    appendInsuranceAgentTimeline("Saved insurance agent notes to demo case")
+    setVisitPrepInlineNote("Saved locally to this demo case.")
     window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
   }
 
@@ -4817,6 +4881,12 @@ function ResultsView({
       setDocPasteField("")
       setDocPasteOutput(null)
       setDocChipId(null)
+    }
+    if (flow === "insurance") {
+      setInsAgentHome("pick")
+      setInsDenialPaste("")
+      setInsDenialExplained(false)
+      setInsDenialOut(null)
     }
     setTodayHeroModal(flow)
   }
@@ -5401,7 +5471,7 @@ function ResultsView({
                   <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 sm:rounded-[20px] sm:p-4`}>
                     <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-sm">Handle an insurance / records issue</p>
                     <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                      Prepare a call script, records checklist, and follow-up task without sending anything automatically.
+                      Denials, records, referrals, and front-desk scripts — local prep only. Nothing is sent or filed from Anchor.
                     </p>
                     <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
                       {["Call script", "Records request", "Insurance questions", "Follow-up task"].map((c) => (
@@ -5418,7 +5488,7 @@ function ResultsView({
                       onClick={() => openHeroModal("insurance")}
                       className="mt-3 w-full rounded-[14px] border border-[#b98da0]/45 bg-white/90 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] shadow-sm transition hover:bg-white sm:rounded-[16px] sm:text-sm"
                     >
-                      Open issue guide
+                      Open Insurance Agent
                     </button>
                   </div>
                 </div>
@@ -6198,86 +6268,422 @@ function ResultsView({
 
                   {todayHeroModal === "insurance" && (
                     <>
-                      <p className="mt-3 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
-                        Administrative prep only. Anchor does not dial, email, or text. You place any calls yourself. Nothing sent
-                        automatically.
-                      </p>
-                      <div className="mt-4 grid gap-3">
-                        <div>
-                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">1 · Call script</p>
-                          <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{INSURANCE_ISSUE_CALL_SCRIPT}</p>
-                        </div>
-                        <div>
-                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">2 · What to get</p>
-                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                            {INSURANCE_ISSUE_WHAT_TO_GET.map((line) => (
-                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                                {line}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                        <div>
-                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">3 · If they say they do not know</p>
-                          <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{INSURANCE_ISSUE_IF_UNKNOWN_LINE}</p>
-                        </div>
-                        <div>
-                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">4 · Follow-up task</p>
-                          <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE}</p>
-                        </div>
+                      <div className="mt-3 min-w-0 space-y-2 rounded-[12px] border border-[#e5ddd4] bg-white/75 p-2.5">
+                        <p className="m-0 text-[11px] font-medium leading-snug text-[#2a2420] sm:text-xs">{INSURANCE_AGENT_BOUNDARY_PRIMARY}</p>
+                        <p className="m-0 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">{INSURANCE_AGENT_BOUNDARY_CONFIRM}</p>
+                        <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
+                          Prototype preview — nothing sent, filed, or called from Anchor. Local demo memory only.
+                        </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => openPhoneMode(PHONE_SCRIPT_INSURANCE_RECORDS)}
-                        className="mt-3 w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-3 text-[13px] font-semibold leading-snug text-[#fdf6f0] shadow-sm sm:py-3.5"
-                      >
-                        Phone Mode — read line by line
-                      </button>
-                      <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+
+                      {insAgentHome !== "pick" && (
                         <button
                           type="button"
-                          onClick={() =>
-                            void onCopy("insuranceIssueCopy", buildInsuranceIssueClipboardBlock(), "Copied insurance/records script", {
-                              taskTitle: "Copied insurance/records script",
-                              badge: "Hero flow",
-                              taskId: "hero-insurance",
-                            })
-                          }
-                          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                          onClick={handleInsuranceAgentBackToModes}
+                          className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#d8cec5] bg-white/80 px-3 py-1.5 text-[11px] font-medium text-[#5f5a55] transition hover:bg-white sm:text-xs"
                         >
-                          <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
-                          Copy call script
+                          <ArrowLeft className="h-3.5 w-3.5 shrink-0 text-[#9b829c]" aria-hidden />
+                          Back to modes
                         </button>
-                        <button
-                          type="button"
-                          onClick={handleAddInsuranceFollowUpTask}
-                          className="w-full rounded-[16px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:rounded-[18px] sm:text-sm"
-                        >
-                          Add follow-up task to plan
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSaveInsuranceHeroTimeline}
-                          className={`${GLASS_BUTTON} w-full rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
-                        >
-                          Save to case timeline
-                        </button>
-                      </div>
-                      <div className="mt-3">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            appendDedupedPlanTasks(
-                              buildHeroInsuranceIssuePlanTasks(),
-                              "Added insurance/records prep reminders to your plan.",
-                              "Those reminders are already on your plan.",
-                            )
-                          }
-                          className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2 text-[11px] font-medium text-[#3f3a36] sm:text-xs`}
-                        >
-                          Add full insurance/records prep bundle to plan (optional)
-                        </button>
-                      </div>
+                      )}
+
+                      {insAgentHome === "pick" && (
+                        <div className="mt-4 grid min-w-0 gap-2 sm:gap-3">
+                          <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">
+                            Choose one lane. Anchor stays on checklists and words — you place calls and send anything yourself.
+                          </p>
+                          {(
+                            [
+                              {
+                                id: "denial" as const,
+                                title: "1 · Denial or prior authorization",
+                                body: "Paste an excerpt to sort denial vs pending auth vs missing paperwork.",
+                              },
+                              {
+                                id: "records" as const,
+                                title: "2 · Records request",
+                                body: "Exact records, destination, deadline, and how to confirm receipt.",
+                              },
+                              {
+                                id: "scheduling" as const,
+                                title: "3 · Referral / scheduling blocker",
+                                body: "Name what might be blocking the appointment and what to capture next.",
+                              },
+                              {
+                                id: "frontdesk" as const,
+                                title: "4 · Front-Desk Brief",
+                                body: "Opening script for scheduler, records desk, or insurer — same brief as the live agent path.",
+                              },
+                            ] as const
+                          ).map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => setInsAgentHome(m.id)}
+                              className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 text-left transition hover:border-[#b98da0]/45 hover:bg-white/90 sm:rounded-[18px] sm:p-4`}
+                            >
+                              <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{m.title}</p>
+                              <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{m.body}</p>
+                              <span className="mt-3 inline-block rounded-full border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-1.5 text-[11px] font-semibold text-[#4a3548]">
+                                Open
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {insAgentHome === "denial" && (
+                        <div className="mt-4 min-w-0 space-y-3">
+                          <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 sm:p-4`}>
+                            <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Paste denial or prior authorization text</p>
+                            <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{INSURANCE_AGENT_PASTE_DISCLAIMER}</p>
+                            <label className="m-0 mt-2 block min-w-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                              Excerpt
+                              <textarea
+                                value={insDenialPaste}
+                                onChange={(e) => setInsDenialPaste(e.target.value)}
+                                rows={4}
+                                placeholder="Paste a denial letter excerpt, portal message, or what insurance said. Use de-identified text for this demo."
+                                className="mt-1.5 w-full min-w-0 max-w-full resize-y rounded-[14px] border border-[#d8cec5] bg-white/90 p-2.5 text-[12px] leading-snug text-[#2a2420] placeholder:text-[#9a928a] sm:text-sm"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={handleInsuranceDenialExplain}
+                              className="mt-3 w-full rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
+                            >
+                              Explain and prepare response
+                            </button>
+                          </div>
+
+                          {insDenialExplained && insDenialOut && (
+                            <div className="min-w-0 space-y-2.5">
+                              <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Agent output</p>
+                              <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                                <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">A · What this probably means</p>
+                                <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                  {insDenialOut.probablyMeans.map((line) => (
+                                    <li
+                                      key={line}
+                                      className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                    >
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                                <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">B · What to ask next</p>
+                                <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                  {INSURANCE_DENIAL_WHAT_TO_ASK_BULLETS.map((line) => (
+                                    <li
+                                      key={line}
+                                      className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                    >
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                                <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">C · Phone script</p>
+                                <p className="mt-1.5 m-0 whitespace-pre-wrap break-words text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                  {INSURANCE_DENIAL_PHONE_SCRIPT_COMBINED}
+                                </p>
+                              </div>
+                              <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                                <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">D · {INSURANCE_DENIAL_APPEAL_DRAFT_TITLE}</p>
+                                <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{INSURANCE_DENIAL_APPEAL_DRAFT_BODY}</p>
+                                <p className="mt-2 m-0 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]">
+                                  Review before sending. Anchor does not send this. Draft only — not a filed appeal.
+                                </p>
+                              </div>
+                              <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                                <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">E · What to write down</p>
+                                <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                  {INSURANCE_DENIAL_WRITE_DOWN_BULLETS.map((line) => (
+                                    <li
+                                      key={line}
+                                      className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                    >
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => openPhoneMode(PHONE_SCRIPT_INSURANCE_DENIAL)}
+                                className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-3 text-[13px] font-semibold leading-snug text-[#fdf6f0] shadow-sm sm:py-3.5"
+                              >
+                                Open Phone Mode
+                              </button>
+                              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void onCopy(
+                                      "insuranceDenialPhoneCopy",
+                                      buildInsuranceDenialPhoneScriptClipboard(),
+                                      "Copied insurance phone script",
+                                      {
+                                        taskTitle: "Copied insurance phone script",
+                                        badge: "Insurance agent",
+                                        taskId: "hero-insurance",
+                                      },
+                                    )
+                                  }
+                                  className={`${GLASS_BUTTON} flex w-full min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                                >
+                                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                                  Copy phone script
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void onCopy(
+                                      "insuranceAppealDraftCopy",
+                                      buildInsuranceDenialAppealDraftClipboard(),
+                                      "Copied appeal / portal draft",
+                                      {
+                                        taskTitle: "Copied appeal / portal draft",
+                                        badge: "Insurance agent",
+                                        taskId: "hero-insurance",
+                                      },
+                                    )
+                                  }
+                                  className={`${GLASS_BUTTON} flex w-full min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                                >
+                                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                                  Copy appeal/message draft
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleAddInsuranceFollowUpTask}
+                                className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px] sm:text-sm"
+                              >
+                                Add follow-up tasks to Plan
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveInsuranceHeroTimeline}
+                                className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
+                              >
+                                Save to case
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {insAgentHome === "records" && (
+                        <div className="mt-4 min-w-0 space-y-3">
+                          <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Records request</p>
+                          <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">{INSURANCE_RECORDS_REQUEST_PURPOSE}</p>
+                          <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                            <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">What to ask</p>
+                            <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                              {INSURANCE_RECORDS_REQUEST_WHAT_TO_ASK.map((line) => (
+                                <li
+                                  key={line}
+                                  className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                >
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                            <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">Script</p>
+                            <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{INSURANCE_RECORDS_REQUEST_SCRIPT}</p>
+                          </div>
+                          <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                            <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">Records checklist</p>
+                            <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                              {INSURANCE_RECORDS_CHECKLIST_AGENT.map((line) => (
+                                <li
+                                  key={line}
+                                  className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                >
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
+                            Follow-up: confirm receipt and deadlines with the office or insurer — not from Anchor.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => openPhoneMode(PHONE_SCRIPT_RECORDS_REQUEST)}
+                            className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold leading-snug text-[#fdf6f0] sm:py-3"
+                          >
+                            Open Phone Mode
+                          </button>
+                          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void onCopy(
+                                  "insuranceRecordsPackCopy",
+                                  buildInsuranceRecordsRequestClipboardBlock(),
+                                  "Copied records request pack",
+                                  {
+                                    taskTitle: "Copied records request pack",
+                                    badge: "Insurance agent",
+                                    taskId: "hero-insurance",
+                                  },
+                                )
+                              }
+                              className={`${GLASS_BUTTON} flex w-full min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                            >
+                              <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                              Copy records script & checklist
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAddInsuranceFollowUpTask}
+                            className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px] sm:text-sm"
+                          >
+                            Add records follow-up tasks
+                          </button>
+                        </div>
+                      )}
+
+                      {insAgentHome === "scheduling" && (
+                        <div className="mt-4 min-w-0 space-y-3">
+                          <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Referral or scheduling blocker</p>
+                          <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                            <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">A · What might be blocking this</p>
+                            <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                              {INSURANCE_SCHEDULING_BLOCKER_MAY_BE.map((line) => (
+                                <li
+                                  key={line}
+                                  className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                >
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                            <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">B · What to say</p>
+                            <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{INSURANCE_SCHEDULING_BLOCKER_SCRIPT}</p>
+                          </div>
+                          <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/85 p-2.5 sm:p-3">
+                            <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">C · What to get</p>
+                            <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                              {INSURANCE_SCHEDULING_WHAT_TO_GET.map((line) => (
+                                <li
+                                  key={line}
+                                  className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                >
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openPhoneMode(PHONE_SCRIPT_SCHEDULING_BLOCKER)}
+                            className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold leading-snug text-[#fdf6f0] sm:py-3"
+                          >
+                            Open Phone Mode
+                          </button>
+                          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void onCopy(
+                                  "insuranceSchedulingCopy",
+                                  buildInsuranceSchedulingBlockerClipboardBlock(),
+                                  "Copied scheduling blocker script",
+                                  {
+                                    taskTitle: "Copied scheduling blocker script",
+                                    badge: "Insurance agent",
+                                    taskId: "hero-insurance",
+                                  },
+                                )
+                              }
+                              className={`${GLASS_BUTTON} flex w-full min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                            >
+                              <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                              Copy scheduling script
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAddInsuranceFollowUpTask}
+                            className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px] sm:text-sm"
+                          >
+                            Add blocker follow-up tasks
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveInsuranceHeroTimeline}
+                            className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
+                          >
+                            Save to case
+                          </button>
+                        </div>
+                      )}
+
+                      {insAgentHome === "frontdesk" && (
+                        <div className="mt-4 min-w-0 space-y-3">
+                          <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Front-Desk Brief</p>
+                          <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">{INSURANCE_AGENT_FRONT_DESK_PURPOSE}</p>
+                          <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-[#2a2420] px-3 py-3 sm:px-4 sm:py-4">
+                            <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-[#e8dfd8] sm:text-xs">Brief</p>
+                            <p className="mt-2 m-0 text-[12px] font-medium leading-snug text-[#fdf6f0] sm:text-sm">{FRONT_DESK_BRIEF_SCRIPT}</p>
+                          </div>
+                          <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
+                            Task Anchor can add: follow-up on call details after you speak with the office (local plan only).
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => openPhoneMode(PHONE_SCRIPT_INSURANCE_FRONT_BRIEF)}
+                            className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold leading-snug text-[#fdf6f0] sm:py-3"
+                          >
+                            Open Phone Mode
+                          </button>
+                          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void onCopy(
+                                  "insuranceFrontDeskAgentCopy",
+                                  buildInsuranceAgentFrontDeskClipboardBlock(),
+                                  "Copied Front-Desk Brief",
+                                  {
+                                    taskTitle: "Copied Front-Desk Brief",
+                                    badge: "Insurance agent",
+                                    taskId: "hero-insurance",
+                                  },
+                                )
+                              }
+                              className={`${GLASS_BUTTON} flex w-full min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                            >
+                              <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                              Copy brief
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              appendDedupedPlanTasks(
+                                [buildFrontDeskBriefFollowupTask()],
+                                "Added front-desk follow-up from Insurance agent.",
+                                "That front-desk follow-up is already on your plan.",
+                              )
+                            }
+                            className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px] sm:text-sm"
+                          >
+                            Add follow-up task
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -6286,7 +6692,11 @@ function ResultsView({
                     copied === "documentChecklistCopy" ||
                     copied === "documentPasteBlockCopy" ||
                     copied === "documentChipBlockCopy" ||
-                    copied === "insuranceIssueCopy" ||
+                    copied === "insuranceDenialPhoneCopy" ||
+                    copied === "insuranceAppealDraftCopy" ||
+                    copied === "insuranceRecordsPackCopy" ||
+                    copied === "insuranceSchedulingCopy" ||
+                    copied === "insuranceFrontDeskAgentCopy" ||
                     copied === "phoneModeLine" ||
                     copied === "phoneModeFull") && (
                     <p className="mt-3 m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
@@ -6526,6 +6936,10 @@ function ResultsView({
                   {futurePreviewModal === "brief" && (
                     <div className="mt-3 grid gap-3">
                       <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{FRONT_DESK_BRIEF_PREVIEW_INTRO}</p>
+                      <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
+                        The same opening brief also lives under Today → Handle insurance / records issue → Front-Desk Brief (Insurance
+                        agent).
+                      </p>
                       <div className="rounded-[12px] border border-[#ece4dc] bg-white/75 p-2.5 sm:p-3">
                         <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Structured brief</p>
                         <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{FRONT_DESK_BRIEF_SCRIPT}</p>

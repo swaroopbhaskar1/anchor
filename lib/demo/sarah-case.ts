@@ -1388,30 +1388,287 @@ export function buildHeroDocumentGuidePlanTasks(): StoredAdaptivePlanTask[] {
 export const HERO_INSURANCE_PLAN_IDS = {
   call: "local:hero-ins-call",
   ref: "local:hero-ins-reference",
+  records: "local:hero-ins-records",
   follow: "local:hero-ins-followup",
+  careTeam: "local:hero-ins-careteam",
 } as const
 
+export const INSURANCE_AGENT_PLAN_BADGE = "Added from insurance agent"
+
+/** Shown on every Insurance / Denial / Records Agent output. */
+export const INSURANCE_AGENT_BOUNDARY_PRIMARY =
+  "Anchor prepares questions, scripts, and drafts. It does not file appeals, contact insurance, send messages, make calls, or guarantee approval."
+
+export const INSURANCE_AGENT_BOUNDARY_CONFIRM =
+  "Confirm insurance and medical decisions with the insurer, care team, or appropriate office."
+
+export const INSURANCE_AGENT_PASTE_DISCLAIMER = "Use de-identified text in this prototype."
+
+export type InsuranceDenialClass =
+  | "denial_prior_auth"
+  | "missing_documentation"
+  | "coverage_network"
+  | "referral_auth_requirement"
+  | "generic"
+
+export function classifyInsuranceDenialPaste(raw: string): InsuranceDenialClass {
+  const t = raw.trim().toLowerCase()
+  if (!t) return "generic"
+  if (
+    /\b(denied|denial|not\s+approved|not approved|prior\s*auth|pre-?authorization|preauthorization|precert|pre-?cert)\b/i.test(t)
+  ) {
+    return "denial_prior_auth"
+  }
+  if (/\b(out of network|in-?network|benefit|coverage)\b/i.test(t)) return "coverage_network"
+  if (/\b(missing information|missing\s+documentation|records needed|documentation needed|documentation|information needed)\b/i.test(t)) {
+    return "missing_documentation"
+  }
+  if (/\breferral required\b|\bauthorization required\b/i.test(t)) return "referral_auth_requirement"
+  if (/\b(insurance|insurer|authorization|appeal|claim|portal)\b/i.test(t)) return "generic"
+  return "generic"
+}
+
+export const INSURANCE_DENIAL_WHAT_TO_ASK_BULLETS: string[] = [
+  "What exactly is missing?",
+  "Is this a denial, a pending authorization, or a request for more documentation?",
+  "What records are needed?",
+  "Is there a reference or case number?",
+  "Is there a deadline?",
+  "Who can submit the missing information?",
+  "Who should we follow up with?",
+]
+
+export const INSURANCE_DENIAL_PHONE_SCRIPT_COMBINED = [
+  "Hi, I'm calling about a cancer-care insurance or authorization issue for my family member. Can you help me understand whether this is a denial, a pending authorization, or a request for more documentation?",
+  "Can you tell me exactly what is missing, where it should be sent, the deadline, and the reference number?",
+].join("\n\n")
+
+export const INSURANCE_DENIAL_APPEAL_DRAFT_TITLE = "Draft appeal / portal message"
+
+export const INSURANCE_DENIAL_APPEAL_DRAFT_BODY =
+  "Hello, I'm writing about the recent insurance or authorization issue. We are trying to understand what information is missing and what is needed for review. Could you please confirm the reason for the denial or delay, the records required, the deadline, and where the care team or family should send supporting documentation?"
+
+export const INSURANCE_DENIAL_WRITE_DOWN_BULLETS: string[] = [
+  "Person spoken to",
+  "Reference/case number",
+  "Denial or authorization status",
+  "Exact records needed",
+  "Deadline",
+  "Where to send documents",
+  "Who follows up next",
+]
+
+export interface InsuranceDenialAgentOutput {
+  kind: InsuranceDenialClass
+  probablyMeans: string[]
+}
+
+export function buildInsuranceDenialAgentOutput(kind: InsuranceDenialClass): InsuranceDenialAgentOutput {
+  const intro =
+    "This looks like an insurance or authorization issue, not a medical decision from Anchor."
+  const base: Record<InsuranceDenialClass, string[]> = {
+    denial_prior_auth: [
+      intro,
+      "The request may not be approved yet, or the insurer may be asking for clarification before they continue review.",
+      "There may be a prior authorization or documentation step before the next covered step.",
+    ],
+    missing_documentation: [
+      intro,
+      "Insurance may be asking for more documentation before they can process the request.",
+      "The next action may be gathering and sending specific records by a stated channel.",
+    ],
+    coverage_network: [
+      intro,
+      "There may be a coverage, benefit, or network question that needs clarification with the insurer.",
+      "This does not tell you the final medical plan — your care team and insurer both play a role.",
+    ],
+    referral_auth_requirement: [
+      intro,
+      "There may be a referral, authorization, or coverage step blocking the next scheduling or treatment action.",
+      "Ask who submits each piece and what the clinic expects on file before moving forward.",
+    ],
+    generic: [
+      intro,
+      "The excerpt may point to an administrative hold — denial, pending authorization, missing records, or a combination.",
+      "Treat the next step as a fact-finding call or message you draft and send yourself after review.",
+    ],
+  }
+  return { kind, probablyMeans: base[kind] }
+}
+
+export function buildInsuranceDenialPhoneScriptClipboard(): string {
+  return [
+    "ANCHOR — INSURANCE / DENIAL PHONE SCRIPT (LOCAL DEMO)",
+    INSURANCE_AGENT_PASTE_DISCLAIMER,
+    INSURANCE_AGENT_BOUNDARY_PRIMARY,
+    INSURANCE_AGENT_BOUNDARY_CONFIRM,
+    "",
+    "PHONE SCRIPT",
+    INSURANCE_DENIAL_PHONE_SCRIPT_COMBINED,
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+export function buildInsuranceDenialAppealDraftClipboard(): string {
+  return [
+    "ANCHOR — DRAFT APPEAL / PORTAL MESSAGE (LOCAL DEMO)",
+    INSURANCE_AGENT_PASTE_DISCLAIMER,
+    INSURANCE_AGENT_BOUNDARY_PRIMARY,
+    INSURANCE_AGENT_BOUNDARY_CONFIRM,
+    "",
+    INSURANCE_DENIAL_APPEAL_DRAFT_TITLE.toUpperCase(),
+    INSURANCE_DENIAL_APPEAL_DRAFT_BODY,
+    "",
+    "Review before sending. Anchor does not send this.",
+    "This is a draft, not a filed appeal.",
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+export const INSURANCE_RECORDS_REQUEST_PURPOSE =
+  "Find out exactly which records are needed and where they should go."
+
+export const INSURANCE_RECORDS_REQUEST_SCRIPT =
+  "Can you tell me which exact records are needed, where they should be sent, whether there is a deadline, and how we confirm they were received?"
+
+export const INSURANCE_RECORDS_REQUEST_WHAT_TO_ASK: string[] = [
+  "Which exact documents are on the checklist?",
+  "Should we upload, fax, mail, or hand-deliver?",
+  "Is there a deadline tied to authorization or scheduling?",
+  "How do we confirm receipt?",
+]
+
+export const INSURANCE_RECORDS_CHECKLIST_AGENT: string[] = [
+  "Pathology report",
+  "Imaging summaries",
+  "Image files, discs, or links if needed",
+  "Visit notes",
+  "Medication list",
+  "Referral or authorization information",
+  "Insurance letter or case number",
+]
+
+export function buildInsuranceRecordsRequestClipboardBlock(): string {
+  return [
+    "ANCHOR — RECORDS REQUEST (INSURANCE AGENT · LOCAL DEMO)",
+    INSURANCE_AGENT_BOUNDARY_PRIMARY,
+    INSURANCE_AGENT_BOUNDARY_CONFIRM,
+    "",
+    "PURPOSE",
+    INSURANCE_RECORDS_REQUEST_PURPOSE,
+    "",
+    "WHAT TO ASK",
+    ...INSURANCE_RECORDS_REQUEST_WHAT_TO_ASK.map((l) => `• ${l}`),
+    "",
+    "SCRIPT",
+    INSURANCE_RECORDS_REQUEST_SCRIPT,
+    "",
+    "RECORDS CHECKLIST",
+    ...INSURANCE_RECORDS_CHECKLIST_AGENT.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+export const INSURANCE_SCHEDULING_BLOCKER_MAY_BE: string[] = [
+  "Referral required",
+  "Authorization required",
+  "Missing records",
+  "Pending review",
+  "Wrong department",
+  "Appointment type unclear",
+]
+
+export const INSURANCE_SCHEDULING_BLOCKER_SCRIPT =
+  "Can you help me understand what is blocking scheduling right now: referral, authorization, missing records, or something else?"
+
+export const INSURANCE_SCHEDULING_WHAT_TO_GET: string[] = [
+  "Blocker type",
+  "Who owns it",
+  "What is needed",
+  "Deadline",
+  "Next follow-up step",
+]
+
+export function buildInsuranceSchedulingBlockerClipboardBlock(): string {
+  return [
+    "ANCHOR — REFERRAL / SCHEDULING BLOCKER (LOCAL DEMO)",
+    INSURANCE_AGENT_BOUNDARY_PRIMARY,
+    INSURANCE_AGENT_BOUNDARY_CONFIRM,
+    "",
+    "A · WHAT MIGHT BE BLOCKING THIS",
+    ...INSURANCE_SCHEDULING_BLOCKER_MAY_BE.map((l) => `• ${l}`),
+    "",
+    "B · WHAT TO SAY",
+    INSURANCE_SCHEDULING_BLOCKER_SCRIPT,
+    "",
+    "C · WHAT TO GET",
+    ...INSURANCE_SCHEDULING_WHAT_TO_GET.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+export const INSURANCE_AGENT_FRONT_DESK_PURPOSE =
+  "Sound organized when calling a scheduler, front desk, records office, or insurer."
+
+export function buildInsuranceAgentFrontDeskClipboardBlock(): string {
+  return [
+    "ANCHOR — FRONT-DESK BRIEF (INSURANCE AGENT · LOCAL DEMO)",
+    INSURANCE_AGENT_BOUNDARY_PRIMARY,
+    INSURANCE_AGENT_BOUNDARY_CONFIRM,
+    "",
+    "PURPOSE",
+    INSURANCE_AGENT_FRONT_DESK_PURPOSE,
+    "",
+    "BRIEF",
+    FRONT_DESK_BRIEF_SCRIPT,
+    "",
+    "FIELDS TO CAPTURE AFTER THE CALL",
+    ...FRONT_DESK_BRIEF_FIELD_LIST.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. Anchor did not place a call or send a message.",
+  ].join("\n")
+}
+
 export function buildHeroInsuranceIssuePlanTasks(): StoredAdaptivePlanTask[] {
+  const b = INSURANCE_AGENT_PLAN_BADGE
   return [
     {
       id: HERO_INSURANCE_PLAN_IDS.call,
-      title: "Call insurer or records office",
-      detail: "You place the call — Anchor prepares words only; nothing is dialed or sent from Anchor.",
+      title: "Call insurer or records office about status",
+      detail: `${b} — you place the call; Anchor does not dial or send anything.`,
       initialStatus: "active",
       fromUpdate: false,
     },
     {
       id: HERO_INSURANCE_PLAN_IDS.ref,
-      title: "Write down reference number",
-      detail: "Capture deadline, reference/case number, and who to follow up with.",
+      title: "Write down reference number and deadline",
+      detail: `${b} — capture numbers, dates, and who to call back.`,
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+    {
+      id: HERO_INSURANCE_PLAN_IDS.records,
+      title: "Send or request missing records",
+      detail: `${b} — administrative only; your care team confirms medical content.`,
       initialStatus: "active",
       fromUpdate: false,
     },
     {
       id: HERO_INSURANCE_PLAN_IDS.follow,
-      title: "Follow up on records or authorization status",
-      detail: "Administrative follow-up — your care team confirms medical details.",
+      title: "Follow up on authorization or referral status",
+      detail: `${b} — confirm next steps with the insurer or clinic, not Anchor.`,
       initialStatus: "waiting",
+      fromUpdate: false,
+    },
+    {
+      id: HERO_INSURANCE_PLAN_IDS.careTeam,
+      title: "Ask care team who submits supporting documentation",
+      detail: `${b} — clarify roles so the right office sends each item.`,
+      initialStatus: "active",
       fromUpdate: false,
     },
   ]
@@ -1473,7 +1730,7 @@ export function buildDocumentGuideClipboardBlock(): string {
 export const INSURANCE_ISSUE_PANEL_TITLE = "Handle an insurance or records issue"
 
 export const INSURANCE_ISSUE_PANEL_SUBTITLE =
-  "Anchor prepares the words. You review and decide what to send or say."
+  "Insurance / Denial / Records Agent — scripts and drafts only. Nothing is filed, sent, or called from Anchor."
 
 export const INSURANCE_ISSUE_CALL_SCRIPT =
   "Hi, I'm calling about records or authorization for my family member's cancer care. Can you tell me exactly what documents are needed, where they should be sent, whether there is a deadline, and whether there is a reference number?"
@@ -1490,7 +1747,7 @@ export const INSURANCE_ISSUE_WHAT_TO_GET: string[] = [
 export const INSURANCE_ISSUE_IF_UNKNOWN_LINE =
   "Who would know, when should I call back, and what can I do today to keep the appointment or review from being delayed?"
 
-export const INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE = "Follow up on records/insurance status"
+export const INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE = "Follow up on authorization or referral status"
 
 export function buildInsuranceIssueClipboardBlock(): string {
   return [
@@ -1640,7 +1897,7 @@ export const FRONT_DESK_BRIEF_PREVIEW_INTRO =
   "Use this when calling a scheduler, records office, insurer, or clinic front desk."
 
 export const FRONT_DESK_BRIEF_SCRIPT =
-  "Hi, I'm calling for my mom. We are trying to prepare for a cancer-care appointment or records review. Can you help us confirm what records are needed, where to send them, whether a referral or authorization is required, and who we should follow up with?"
+  "Hi, I'm calling for my mom. We are trying to prepare for a cancer-care appointment or records review. Can you help us confirm what records are needed, where they should be sent, whether a referral or authorization is required, and who we should follow up with?"
 
 export const FRONT_DESK_BRIEF_FIELD_LIST: string[] = [
   "Name of person spoken to",
@@ -1825,6 +2082,54 @@ export const PHONE_SCRIPT_INSURANCE_RECORDS: PhoneModeScript = {
   ],
   safetyNote: `${PHONE_MODE_SAFETY_CORE} ${PHONE_MODE_NOTHING_SENT}`,
   phoneFollowUpProfile: "insurance",
+}
+
+export const PHONE_SCRIPT_INSURANCE_DENIAL: PhoneModeScript = {
+  id: "anchor-phone-insurance-denial",
+  typeLabel: "Denial / prior authorization",
+  goal: "Learn whether this is a denial, pending authorization, or request for more documentation.",
+  lines: INSURANCE_DENIAL_PHONE_SCRIPT_COMBINED.split(/\n\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean),
+  writeDown: INSURANCE_DENIAL_WRITE_DOWN_BULLETS,
+  safetyNote: `${PHONE_MODE_SAFETY_CORE} ${PHONE_MODE_NOTHING_SENT}`,
+  phoneFollowUpProfile: "insurance",
+}
+
+export const PHONE_SCRIPT_RECORDS_REQUEST: PhoneModeScript = {
+  id: "anchor-phone-records-request",
+  typeLabel: "Records request",
+  goal: "Learn exactly which records are needed and where to send them.",
+  lines: [INSURANCE_RECORDS_REQUEST_SCRIPT],
+  writeDown: ["Exact record names", "Destination", "Deadline", "Confirmation of receipt", "Reference number"],
+  safetyNote: `${PHONE_MODE_SAFETY_CORE} ${PHONE_MODE_NOTHING_SENT}`,
+  phoneFollowUpProfile: "insurance",
+}
+
+export const PHONE_SCRIPT_SCHEDULING_BLOCKER: PhoneModeScript = {
+  id: "anchor-phone-scheduling-blocker",
+  typeLabel: "Scheduling blocker",
+  goal: "Identify what is blocking the appointment and who owns the next step.",
+  lines: [
+    INSURANCE_SCHEDULING_BLOCKER_SCRIPT,
+    "What is the deadline, and who should we contact next if this is still stuck?",
+  ],
+  writeDown: INSURANCE_SCHEDULING_WHAT_TO_GET,
+  safetyNote: `${PHONE_MODE_SAFETY_CORE} ${PHONE_MODE_NOTHING_SENT}`,
+  phoneFollowUpProfile: "insurance",
+}
+
+export const PHONE_SCRIPT_INSURANCE_FRONT_BRIEF: PhoneModeScript = {
+  id: "anchor-phone-insurance-front-brief",
+  typeLabel: "Front-Desk Brief",
+  goal: "Sound organized when calling a scheduler, front desk, records office, or insurer.",
+  lines: [
+    "Hi, I'm calling for my mom. We are trying to prepare for a cancer-care appointment or records review.",
+    "Can you help us confirm what records are needed, where they should be sent, whether a referral or authorization is required, and who we should follow up with?",
+  ],
+  writeDown: FRONT_DESK_BRIEF_FIELD_LIST,
+  safetyNote: `${PHONE_MODE_SAFETY_CORE} ${PHONE_MODE_NOTHING_SENT}`,
+  phoneFollowUpProfile: "frontDesk",
 }
 
 export const PHONE_SCRIPT_FRONT_DESK: PhoneModeScript = {
