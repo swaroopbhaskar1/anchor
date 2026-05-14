@@ -12,6 +12,7 @@ import {
   Copy,
   FileText,
   HeartHandshake,
+  HelpCircle,
   Info,
   Users,
   Mic,
@@ -21,6 +22,7 @@ import {
   Square,
   Upload,
   Wind,
+  X,
 } from "lucide-react"
 import useWebRTCAudioSession from "@/hooks/use-webrtc"
 import { tools } from "@/lib/tools"
@@ -35,6 +37,7 @@ import {
   buildDocumentPasteOutput,
   classifyInsuranceDenialPaste,
   classifyDocumentPasteText,
+  classifySentinelChangeText,
   DOCUMENT_AGENT_BOUNDARY_LINE,
   DOCUMENT_AGENT_SAMPLE_CANNOT_CONFIRM_BULLETS,
   DOCUMENT_AGENT_SAMPLE_CARE_TEAM_QUESTIONS,
@@ -66,6 +69,7 @@ import {
   buildRecordsQuickAdaptiveTask,
   buildSentinelDelayedFollowupTask,
   buildSentinelOneNextActionTask,
+  buildSentinelPrototypePlanTask,
   buildSystemMapperComparisonQuestionsBlock,
   buildVisitGuideClipboardBlock,
   CARE_TEAM_ALIGNED_INTRO,
@@ -80,7 +84,6 @@ import {
   FRONT_DESK_BRIEF_FIELD_LIST,
   FRONT_DESK_BRIEF_PREVIEW_INTRO,
   FRONT_DESK_BRIEF_PREVIEW_TITLE,
-  FRONT_DESK_BRIEF_SCRIPT,
   FUTURE_PREVIEW_BOUNDARY,
   FUTURE_PREVIEW_TOOLS_SUBTITLE,
   FUTURE_PREVIEW_TOOLS_TITLE,
@@ -102,12 +105,14 @@ import {
   HUMAN_OUTREACH_PREVIEW_TITLE,
   HUMAN_OUTREACH_PROTOTYPE_NOTE,
   HUMAN_OUTREACH_STEPS,
+  HUMAN_OUTREACH_TOOL_BOUNDARY,
+  HUMAN_OUTREACH_TOOL_SUBTITLE,
+  HUMAN_OUTREACH_TOOL_TITLE,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
   HERO_VISIT_PLAN_IDS,
   INSURANCE_AGENT_BOUNDARY_CONFIRM,
   INSURANCE_AGENT_BOUNDARY_PRIMARY,
-  INSURANCE_AGENT_FRONT_DESK_PURPOSE,
   INSURANCE_AGENT_PASTE_DISCLAIMER,
   INSURANCE_DENIAL_APPEAL_DRAFT_BODY,
   INSURANCE_DENIAL_APPEAL_DRAFT_TITLE,
@@ -129,7 +134,14 @@ import {
   MEMORY_EMPTY_TASKS_DONE,
   MEMORY_EMPTY_TIMELINE_ARTIFACTS,
   MEMORY_PROTO_BADGE,
+  MAPPER_BLOCKER_CHIPS,
+  MAPPER_BLOCKER_GUIDES,
+  MAPPER_CONTACT_GOAL_CHIPS,
+  MAPPER_CONTACT_GUIDES,
+  MAPPER_RECORDS_CHECKLIST,
+  MAPPER_SECOND_OPINION_QUESTIONS,
   normalizeFollowUpChipKind,
+  OUTREACH_STANDARD_FRONT_BRIEF,
   PHONE_MODE_NOTHING_SENT,
   PHONE_MODE_SAFETY_CORE,
   PHONE_MODE_URGENT_REMINDER,
@@ -211,18 +223,24 @@ import {
   TRUST_TOOLS_CARD_CTA,
   TRUST_TOOLS_CARD_DESCRIPTION,
   TRUST_TOOLS_CARD_TITLE,
+  TRUST_PROTOTYPE_AGENTS_BULLETS,
   TRUST_WISDOM_LANE_VISUAL,
   SYSTEM_MAPPER_COMPARISON_QUESTIONS,
   SYSTEM_MAPPER_FACTORS,
   SYSTEM_MAPPER_NOT_RANKING_LINE,
   SYSTEM_MAPPER_PREVIEW_INTRO,
   SYSTEM_MAPPER_PREVIEW_TITLE,
+  SYSTEM_MAPPER_TOOL_BOUNDARY,
+  SYSTEM_MAPPER_TOOL_SUBTITLE,
+  SYSTEM_MAPPER_TOOL_TITLE,
   SARAH_NIGHT_NOTE,
   SENTINEL_DEMO_OUTPUT_LINE,
   SENTINEL_NOT_EMERGENCY_LINE,
   SENTINEL_PREVIEW_INTRO,
   SENTINEL_PREVIEW_TITLE,
   SENTINEL_SIGNAL_ROWS,
+  SENTINEL_TOOL_BOUNDARY,
+  SENTINEL_TOOL_SUBTITLE,
   VISIT_GUIDE_AFTER_VISIT,
   VISIT_GUIDE_END_LINE,
   VISIT_GUIDE_IF_CONFUSED,
@@ -241,10 +259,12 @@ import {
   type DocumentReportChipId,
   type FollowUpChipId,
   type LastHeroFlowUsed,
+  type MapperContactGuide,
   type NightNoteContent,
   type PhoneModeFollowUpProfile,
   type PhoneModeScript,
   type RecordsChecklistItemDef,
+  type SentinelLocalClassification,
   type StoredAdaptivePlanTask,
   type WordsToSayScriptDef,
 } from "@/lib/demo/sarah-case"
@@ -254,7 +274,52 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 type CancerType = "colon" | "breast" | "lymphoma"
 type AppPhase = "idle" | "recording" | "processing" | "results"
 type WorkspaceTab = "today" | "tools" | "saved"
-type ToolPanelId = "ask" | "updates" | "plan" | "actions" | "records" | "family" | "trust"
+type ToolPanelId =
+  | "ask"
+  | "updates"
+  | "plan"
+  | "actions"
+  | "records"
+  | "family"
+  | "trust"
+  | "sentinel"
+  | "mapper"
+  | "outreach"
+
+/** Queued navigation executed once the results cockpit is mounted (ref bridge). */
+type CockpitIntent =
+  | { kind: "hero"; flow: LastHeroFlowUsed }
+  | { kind: "phone"; script: PhoneModeScript }
+  | { kind: "tool"; panel: ToolPanelId }
+  | { kind: "workspace"; tab: WorkspaceTab }
+
+interface CockpitNavBridge {
+  openHeroModal: (flow: LastHeroFlowUsed) => void
+  openPhoneMode: (script: PhoneModeScript) => void
+  onOpenToolPanel: (panel: ToolPanelId | null) => void
+  onWorkspaceTabChange: (tab: WorkspaceTab) => void
+}
+
+function applyCockpitIntent(bridge: CockpitNavBridge, intent: CockpitIntent): void {
+  switch (intent.kind) {
+    case "hero":
+      bridge.openHeroModal(intent.flow)
+      return
+    case "phone":
+      bridge.openPhoneMode(intent.script)
+      return
+    case "tool":
+      bridge.onWorkspaceTabChange("tools")
+      bridge.onOpenToolPanel(intent.panel)
+      return
+    case "workspace":
+      bridge.onWorkspaceTabChange(intent.tab)
+      if (intent.tab !== "tools") bridge.onOpenToolPanel(null)
+      return
+    default:
+      return
+  }
+}
 
 type ResultCopyKind =
   | "note"
@@ -279,6 +344,10 @@ type ResultCopyKind =
   | "futureMapperQuestions"
   | "futureFrontDeskBrief"
   | "futureOutreachChecklist"
+  | "outreachPortalDraft"
+  | "outreachFamilyText"
+  | "outreachFrontBrief"
+  | "mapperRecordsQuestions"
   | "phoneModeLine"
   | "phoneModeFull"
   | "trustSourceReceipt"
@@ -441,7 +510,10 @@ function isToolPanelId(value: unknown): value is ToolPanelId {
     value === "actions" ||
     value === "records" ||
     value === "family" ||
-    value === "trust"
+    value === "trust" ||
+    value === "sentinel" ||
+    value === "mapper" ||
+    value === "outreach"
   )
 }
 
@@ -694,6 +766,29 @@ function titleCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
+function buildClearMyHeadKnownBullets(input: {
+  hasCase: boolean
+  isBackupDemoMirror: boolean
+  lovedOneLabel: string
+  cancerType: CancerType
+}): string[] {
+  if (!input.hasCase) {
+    return [
+      "Add a short concern on the home screen to generate a demo case — then Anchor can mirror a few steady facts here.",
+      "Until then, treat worries as signal, not settled facts — your care team confirms medical details.",
+    ]
+  }
+  if (input.isBackupDemoMirror) {
+    return SARAH_KNOW_NOW_BULLETS.slice(0, 4)
+  }
+  const ct = titleCase(input.cancerType)
+  return [
+    `There is a concern about ${input.lovedOneLabel.toLowerCase()}'s possible ${ct} cancer.`,
+    "Some details may still need care-team confirmation.",
+    "The next useful step is preparing questions and records.",
+  ]
+}
+
 function currentDateLabel() {
   return new Intl.DateTimeFormat("en", {
     weekday: "short",
@@ -809,6 +904,9 @@ export default function App() {
   const [resultsTranscriptEcho, setResultsTranscriptEcho] = useState("")
   const [lastHeroFlowUsed, setLastHeroFlowUsed] = useState<LastHeroFlowUsed | null>(null)
   const [intakeUpdatesSignal, setIntakeUpdatesSignal] = useState(0)
+  const [sidekickHint, setSidekickHint] = useState<string | null>(null)
+  const cockpitNavBridgeRef = useRef<CockpitNavBridge | null>(null)
+  const pendingCockpitIntentRef = useRef<CockpitIntent | null>(null)
 
   const {
     isSessionActive,
@@ -867,6 +965,11 @@ export default function App() {
       `Helpful next steps: ${mirrorResult.actions.slice(0, 2).join(" Also, ")}.`,
     ].join(" ")
   }, [cancerType, displayName, lovedOneLabel, mirrorResult])
+
+  const sidekickCaseSummaryLine = useMemo(() => {
+    if (!mirrorResult) return "No demo case yet — share one concern on the home screen."
+    return `Local demo case: ${caseInformationUpdates.length} saved updates · ${actionGuideDemoTimeline.length} timeline entries.`
+  }, [actionGuideDemoTimeline.length, caseInformationUpdates.length, mirrorResult])
 
   useEffect(() => {
     async function init() {
@@ -1260,6 +1363,36 @@ export default function App() {
       window.scrollTo({ top: 0, left: 0, behavior: "smooth" })
     })
   }, [scheduleResultsCockpitScroll])
+
+  const runCockpitIntent = useCallback(
+    (intent: CockpitIntent) => {
+      if (!mirrorResult) {
+        setSidekickHint("Add a short concern on the home screen first — then Anchor can open these tools.")
+        window.setTimeout(() => setSidekickHint(null), 4500)
+        return
+      }
+      if (phase !== "results") {
+        pendingCockpitIntentRef.current = intent
+        returnToCase()
+        return
+      }
+      const bridge = cockpitNavBridgeRef.current
+      if (bridge) {
+        applyCockpitIntent(bridge, intent)
+        return
+      }
+      pendingCockpitIntentRef.current = intent
+    },
+    [mirrorResult, phase, returnToCase],
+  )
+
+  const showSidekickStartOverHint = useCallback(() => {
+    setSidekickHint(
+      "Start over lives in the top header — it clears this local demo in your browser only. Anchor did not send anything.",
+    )
+    window.setTimeout(() => setSidekickHint(null), 6500)
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" })
+  }, [])
 
   const processRant = useCallback(async (transcript: string) => {
     setPhase("processing")
@@ -1912,6 +2045,7 @@ export default function App() {
                       appendDemoCaseUpdate={appendDemoCaseUpdate}
                       cancerType={cancerType}
                       caseInformationUpdates={caseInformationUpdates}
+                      cockpitNavBridgeRef={cockpitNavBridgeRef}
                       completedPlanTaskIds={completedPlanTaskIds}
                       copied={copied}
                       displayName={displayName}
@@ -1937,6 +2071,7 @@ export default function App() {
                         setToolPanel(panel)
                       }}
                       onOpenUpdatesIntake={openUpdatesTextVoiceIntake}
+                      onOpenClearMyHead={() => setActiveScreen("control")}
                       onPlan={requestPlan}
                       onSarahBackupDemo={showSarahBackupDemo}
                       onStartOver={startOver}
@@ -1944,6 +2079,7 @@ export default function App() {
                         setWorkspaceTab(tab)
                         if (tab !== "tools") setToolPanel(null)
                       }}
+                      pendingCockpitIntentRef={pendingCockpitIntentRef}
                       planResult={planResult}
                       resultsTranscriptEcho={resultsTranscriptEcho}
                       setFamilyCoordBoard={setFamilyCoordBoard}
@@ -1973,15 +2109,21 @@ export default function App() {
         {activeScreen && (
           <CompanionOverlay
             activeScreen={activeScreen}
+            appendActionGuideDemoTimeline={appendActionGuideDemoTimeline}
+            appendDemoCaseUpdate={appendDemoCaseUpdate}
             breathCycles={breathCycles}
             breathStep={breathStep}
             cancerType={cancerType}
             currentOneThing={currentOneThing}
+            isBackupDemoMirror={isBackupDemoMirror}
             journalEntries={journalEntries}
+            lovedOneLabel={lovedOneLabel}
+            mirrorResult={mirrorResult}
             onClose={() => setActiveScreen(null)}
             onCompleteOneThing={completeOneThing}
             onSaveJournal={saveJournalEntry}
             oneThingCount={oneThingCount}
+            runCockpitIntent={runCockpitIntent}
           />
         )}
       </AnimatePresence>
@@ -2052,6 +2194,16 @@ export default function App() {
           animation: cloud-drift-c 26s ease-in-out infinite;
         }
       `}</style>
+      <AnchorSidekick
+        caseSummaryLine={sidekickCaseSummaryLine}
+        mirrorResult={mirrorResult}
+        onDismissHint={() => setSidekickHint(null)}
+        onOpenClearMyHead={() => setActiveScreen("control")}
+        onShowStartOverHint={showSidekickStartOverHint}
+        runCockpitIntent={runCockpitIntent}
+        sidekickHint={sidekickHint}
+        visible={hydrated && onboarded && !welcomeBack && authStatus !== "auth"}
+      />
     </main>
   )
 }
@@ -3426,6 +3578,175 @@ function buildWordsToSayPhoneScript(def: WordsToSayScriptDef): PhoneModeScript {
   }
 }
 
+function extractDialablePhoneDigits(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "")
+  if (digits.length < 10) return null
+  return digits.slice(0, 15)
+}
+
+const OUTREACH_CALL_WHO_LABELS: Record<string, string> = {
+  clinic: "oncology clinic front desk",
+  scheduler: "scheduler",
+  records: "medical records",
+  pathology: "pathology department",
+  imaging: "radiology or imaging records",
+  insurance: "insurance member services",
+  referral: "referral office",
+  other: "the office you are trying to reach",
+}
+
+const OUTREACH_CALL_NEED_LABELS: Record<string, string> = {
+  appt: "schedule or confirm an appointment",
+  records_req: "request records",
+  records_ok: "confirm records were received",
+  auth: "ask about authorization or coverage",
+  clarify: "clarify missing information in our chart or request",
+  pending: "ask what is still pending before the next visit",
+  refnum: "get a reference or case number for follow-up",
+}
+
+function buildOutreachCallPhoneScript(input: {
+  forWho: string
+  whoId: string | null
+  needId: string | null
+  avoid: string
+  mapperNote: string | null
+}): PhoneModeScript {
+  const forWho = input.forWho.trim() || "my loved one"
+  const desk = input.whoId ? OUTREACH_CALL_WHO_LABELS[input.whoId] ?? "the right office" : "the right office"
+  const needLine = input.needId
+    ? `I'm trying to ${OUTREACH_CALL_NEED_LABELS[input.needId] ?? "get help with cancer-care logistics"}.`
+    : "We're working through cancer-care logistics and need a clear next step."
+  const briefTail = OUTREACH_STANDARD_FRONT_BRIEF.replace(/^Hi, I.m calling for my mom\.?\s*/i, "").trim()
+  const lines: string[] = [`Hi, I'm calling for ${forWho}. ${briefTail}`, `I'm trying to reach the ${desk}. ${needLine}`]
+  const questions: string[] = [
+    "What is the next step on your side, and what do you need from us to move this forward?",
+    "Where should records or forms go, and how do we confirm you received them?",
+    "Is a referral or authorization required before the next appointment or service?",
+    "Who should we follow up with, and what is a realistic timeline?",
+  ]
+  if (input.needId === "auth" || input.needId === "records_req") {
+    questions.push("What reference, tracking, or case number should we write down for follow-up?")
+  }
+  lines.push(...questions)
+  if (input.avoid.trim()) {
+    lines.push(`If helpful: please avoid ${input.avoid.trim()}`)
+  }
+  if (input.mapperNote?.trim()) {
+    lines.push(`Context from System Mapper: ${input.mapperNote.trim()}`)
+  }
+  return {
+    id: "anchor-phone-human-outreach-prep",
+    typeLabel: "Human-approved Outreach (call prep)",
+    goal: "Read one line at a time. Your phone places the call — Anchor only keeps the script open.",
+    lines,
+    writeDown: [
+      "Office and person spoken with",
+      "What was confirmed vs still pending",
+      "Records or portal steps they named",
+      "Referral or authorization status",
+      "Reference / case / tracking number",
+      "Next follow-up date or owner",
+    ],
+    safetyNote: `${PHONE_MODE_SAFETY_CORE} ${PHONE_MODE_NOTHING_SENT} Your phone places the call. Anchor does not speak, record, or automate the call.`,
+    phoneFollowUpProfile: "frontDesk",
+  }
+}
+
+function buildOutreachPortalDraftCopy(input: {
+  audience: string | null
+  need: string | null
+  lovedOneLabel: string
+}): { subject: string; body: string; attach: string; avoid: string } {
+  const audMap: Record<string, string> = {
+    care: "care team (portal message)",
+    records: "medical records office",
+    insurance: "insurance member services",
+    scheduler: "scheduler",
+    family: "family (you paste elsewhere — Anchor does not send)",
+  }
+  const needMap: Record<string, string> = {
+    records: "records transfer or missing documents",
+    referral: "referral or authorization status",
+    timing: "appointment timing and logistics",
+    pending: "pending test or imaging results",
+    clarify: "clarifying instructions we received",
+  }
+  const aud = input.audience ? audMap[input.audience] ?? "the recipient" : "the recipient"
+  const need = input.need ? needMap[input.need] ?? "logistics" : "logistics"
+  const subject = `Update request: ${need} (${input.lovedOneLabel})`
+  const body = [
+    `Hello — I'm writing regarding ${input.lovedOneLabel}.`,
+    `Audience: ${aud}.`,
+    `We need help with: ${need}.`,
+    "Could you confirm what is already on file, what is still pending, and the best next step?",
+    "We are not asking for medical advice in this message — only process clarity.",
+    "Thank you for your time.",
+  ].join("\n\n")
+  const attach =
+    "Attach or mention only what you truly have: pathology summary, imaging reports, visit notes, medication list, referral letters, or insurer reference numbers — do not invent details."
+  const avoid =
+    "Do not assume staging, treatment decisions, or test results that your care team has not confirmed in writing."
+  return { subject, body: `${subject}\n\n${body}`, attach, avoid }
+}
+
+function buildOutreachFamilyTextUpdate(input: { lovedOneLabel: string; concernSnippet: string }): string {
+  const snippet = input.concernSnippet.trim().slice(0, 220)
+  return [
+    `Quick family update about ${input.lovedOneLabel}:`,
+    "What we know: we're still confirming details with the care team — Anchor is only helping us organize questions, not diagnosing.",
+    snippet ? `What we heard (needs confirmation): ${snippet}` : "What we heard still needs confirmation with the doctors.",
+    "What is pending: test results, scheduling, or paperwork may still be in motion — we'll update when the team explains next steps.",
+    "One concrete way to help: take one admin task (portal login, ride, meal, or babysitting) so the primary caregiver can focus on the next call or visit.",
+    "Please don't guess a treatment plan from messages — we'll share what the care team confirms.",
+  ].join("\n\n")
+}
+
+function buildMapperRecordsQuestionsBlock(): string {
+  const lines = MAPPER_RECORDS_CHECKLIST.map((item, i) => `${i + 1}. Do we have a complete copy of: ${item}?`)
+  return ["Questions to ask about records (copy and edit):", ...lines, "", "Where should each item be sent, and how do we confirm receipt?"].join("\n")
+}
+
+function sentinelPrimaryRouteLabel(route: SentinelLocalClassification["primaryRoute"]): string {
+  switch (route) {
+    case "insurance":
+      return "Open Insurance guide"
+    case "document":
+      return "Open Document guide"
+    case "outreach":
+      return "Open Outreach guide"
+    case "mapper":
+      return "Open System Mapper"
+    case "visit":
+      return "Open Visit prep"
+    case "clearHead":
+      return "Open Clear my head"
+    case "plan":
+      return "Open 72-hour plan"
+    default:
+      return "Open recommended tool"
+  }
+}
+
+function sentinelSecondaryRouteLabel(route: SentinelLocalClassification["secondaryRoutes"][number]): string {
+  switch (route) {
+    case "document":
+      return "Open Document guide"
+    case "outreach":
+      return "Open Outreach guide"
+    case "visit":
+      return "Open Visit prep"
+    case "plan":
+      return "Open 72-hour plan"
+    case "mapper":
+      return "Open System Mapper"
+    case "insurance":
+      return "Open Insurance guide"
+    default:
+      return "Related tool"
+  }
+}
+
 function TaskActionGuideSheet({
   done,
   lovedOneLabel,
@@ -4744,6 +5065,500 @@ const PITCH_GUIDE_STEPS: readonly {
   },
 ]
 
+const FUTURE_PREVIEW_SIDEKICK_SUMMARY = [
+  "1. Sentinel — Notices when something inside Anchor may change the next action. It only uses this demo; it is not emergency monitoring and does not read other apps.",
+  "2. System Mapper — Maps who to ask, what may be blocking progress, second-opinion questions, and records checklists. It does not rank doctors or choose care.",
+  "3. Human-approved Outreach — Prepares calls, portal drafts, and family text updates. The Front-Desk Brief lives here as a copyable opener. Anchor does not call, text, email, or schedule in this demo.",
+].join("\n\n")
+
+interface SidekickChip {
+  label: string
+  intent?: CockpitIntent
+  hintStartOver?: boolean
+}
+
+interface SidekickBotTurn {
+  text: string
+  actions: SidekickChip[]
+}
+
+function routeSidekickReply(raw: string): SidekickBotTurn {
+  const q = raw.trim().toLowerCase()
+  if (!q) {
+    return {
+      text: "Ask where to go in this demo, or paste short de-identified text. Sidekick routes locally — no messages are sent.",
+      actions: [],
+    }
+  }
+
+  if (/\b(explain the 4 future|four future previews|4 future previews|future previews|explain prototype agents|prototype agents)\b/.test(q)) {
+    return {
+      text: FUTURE_PREVIEW_SIDEKICK_SUMMARY,
+      actions: [
+        { label: "Open Sentinel", intent: { kind: "tool", panel: "sentinel" } },
+        { label: "Open System Mapper", intent: { kind: "tool", panel: "mapper" } },
+        { label: "Open Outreach guide", intent: { kind: "tool", panel: "outreach" } },
+      ],
+    }
+  }
+
+  if (/\bsentinel\b/.test(q)) {
+    return {
+      text: "Sentinel compares what you type against simple local patterns to suggest the next prep step — not emergency monitoring.",
+      actions: [{ label: "Open Sentinel", intent: { kind: "tool", panel: "sentinel" } }],
+    }
+  }
+
+  if (/\b(broken|not working|bug|stuck)\b/.test(q)) {
+    return {
+      text: "Try returning to Today, opening Saved case, or using a tool directly. This demo runs locally in your browser — Anchor did not send anything.",
+      actions: [
+        { label: "Go to Today", intent: { kind: "workspace", tab: "today" } },
+        { label: "Open Saved case", intent: { kind: "workspace", tab: "saved" } },
+        { label: "Open How Anchor works", intent: { kind: "tool", panel: "trust" } },
+        { label: "Where Start over is", hintStartOver: true },
+      ],
+    }
+  }
+
+  if (/\b(clear my head|overwhelmed|lost|panic)\b/.test(q)) {
+    return {
+      text: "When the mind is loud, Clear my head separates what feels true from what still needs the care team. It is not crisis care — use emergency services for emergencies.",
+      actions: [{ label: "Open Clear My Head", intent: undefined }],
+    }
+  }
+
+  if (/\b(trust|how anchor|source|privacy|\bhipaa\b|accurate|where from|safe)\b/.test(q)) {
+    return {
+      text: "How Anchor works explains what this demo stores, what it does not do, and what your clinicians still confirm.",
+      actions: [{ label: "Open How Anchor works", intent: { kind: "tool", panel: "trust" } }],
+    }
+  }
+
+  const insClass = classifyInsuranceDenialPaste(raw)
+  const docKind = classifyDocumentPasteText(raw)
+  const pasted = raw.trim().length >= 40
+  const insPaste =
+    pasted &&
+    (insClass !== "generic" ||
+      /\b(denied|denial|prior\s*auth|precert|eob|appeal|not\s+covered|authorization|benefit determination)\b/i.test(raw))
+  const docPaste =
+    pasted &&
+    (docKind === "pathology" || docKind === "imaging" || docKind === "biomarker" || docKind === "front_desk")
+
+  if (insPaste) {
+    return {
+      text: "This looks like an insurance or records issue. The Insurance Agent can turn it into questions, a phone script, and a draft — without claiming what your insurer will decide.",
+      actions: [{ label: "Open Insurance Agent", intent: { kind: "hero", flow: "insurance" } }],
+    }
+  }
+
+  if (docPaste) {
+    return {
+      text: "This looks like report or document text. The Document Agent can turn it into care-team questions and missing pieces — Anchor is not analyzing your medical record.",
+      actions: [{ label: "Open Document Agent", intent: { kind: "hero", flow: "document" } }],
+    }
+  }
+
+  if (/\b(who do i call|what office|second opinion|records transfer|who should i contact)\b/.test(q)) {
+    return {
+      text: "System Mapper is a prototype guide for who to contact, common blockers, second-opinion questions, and a records checklist. It does not rank hospitals or choose treatment.",
+      actions: [{ label: "Open System Mapper", intent: { kind: "tool", panel: "mapper" } }],
+    }
+  }
+
+  if (/\b(email|message|front desk|portal draft|draft (a|an)?\s*(email|message))\b/.test(q)) {
+    return {
+      text: "Human-approved Outreach prepares drafts and call scripts for you to review. Anchor does not send email or texts in this demo.",
+      actions: [{ label: "Open Outreach guide", intent: { kind: "tool", panel: "outreach" } }],
+    }
+  }
+
+  if (/\b(visit|appointment|doctor|oncologist|questions)\b/.test(q)) {
+    return {
+      text: "Visit Prep helps you walk in with a short question list, what to bring, and what to write down — your team confirms answers.",
+      actions: [{ label: "Open Visit Prep", intent: { kind: "hero", flow: "visit" } }],
+    }
+  }
+
+  if (/\b(document|pathology|imaging|report|biomarker|\bmmr\b|\bmsi\b|scan|biopsy)\b/.test(q)) {
+    return {
+      text: "The Document Agent is for report language, missing pieces, and questions to ask — not for staging or treatment decisions.",
+      actions: [{ label: "Open Document Agent", intent: { kind: "hero", flow: "document" } }],
+    }
+  }
+
+  if (/\b(insurance|denied|authorization|prior auth|records|referral|scheduler)\b/.test(q)) {
+    return {
+      text: "The Insurance Agent helps with denials, prior auth, records requests, and phone scripts — nothing is sent from Anchor in this demo.",
+      actions: [{ label: "Open Insurance Agent", intent: { kind: "hero", flow: "insurance" } }],
+    }
+  }
+
+  if (/\b(script|call|what do i say|phone)\b/.test(q)) {
+    return {
+      text: "Phone Mode gives one line at a time so you can read aloud during a call. Anchor does not place calls for you.",
+      actions: [{ label: "Open Phone Mode", intent: { kind: "phone", script: PHONE_SCRIPT_VISIT_PREP } }],
+    }
+  }
+
+  if (/\b(plan|tonight|tomorrow|\b72\b|72-hour|next step)\b/.test(q)) {
+    return {
+      text: "The 72-hour plan keeps tonight, tomorrow, and the next two days organized — tasks stay local in this demo.",
+      actions: [{ label: "Open 72-hour Plan", intent: { kind: "tool", panel: "plan" } }],
+    }
+  }
+
+  if (/\b(saved|memory|timeline|what happened)\b/.test(q)) {
+    return {
+      text: "Saved case holds timeline notes, scripts you saved, and updates you chose to keep in this browser.",
+      actions: [{ label: "Open Saved case", intent: { kind: "workspace", tab: "saved" } }],
+    }
+  }
+
+  return {
+    text: "I can help route this. If it is about a visit, use Visit Prep. If it is about a report, use Document Agent. If it is about records or insurance, use Insurance Agent.",
+    actions: [
+      { label: "Open Visit Prep", intent: { kind: "hero", flow: "visit" } },
+      { label: "Open Document Agent", intent: { kind: "hero", flow: "document" } },
+      { label: "Open Insurance Agent", intent: { kind: "hero", flow: "insurance" } },
+    ],
+  }
+}
+
+function AnchorSidekick({
+  caseSummaryLine,
+  mirrorResult,
+  onDismissHint,
+  onOpenClearMyHead,
+  onShowStartOverHint,
+  runCockpitIntent,
+  sidekickHint,
+  visible,
+}: {
+  caseSummaryLine: string
+  mirrorResult: MirrorResult | null
+  onDismissHint: () => void
+  onOpenClearMyHead: () => void
+  onShowStartOverHint: () => void
+  runCockpitIntent: (intent: CockpitIntent) => void
+  sidekickHint: string | null
+  visible: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [lines, setLines] = useState<{ role: "user" | "assistant"; text: string; actions?: SidekickChip[] }[]>([])
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const pushAssistant = useCallback((turn: SidekickBotTurn) => {
+    setLines((prev) => [...prev, { role: "assistant", text: turn.text, actions: turn.actions }])
+  }, [])
+
+  const handleChip = useCallback(
+    (chip: SidekickChip) => {
+      if (chip.hintStartOver) {
+        onShowStartOverHint()
+        return
+      }
+      if (chip.label === "Open Clear My Head") {
+        setOpen(false)
+        onOpenClearMyHead()
+        return
+      }
+      if (chip.intent) {
+        setOpen(false)
+        runCockpitIntent(chip.intent)
+      }
+    },
+    [onOpenClearMyHead, onShowStartOverHint, runCockpitIntent],
+  )
+
+  const handleSubmit = useCallback(() => {
+    const t = draft.trim()
+    if (!t) return
+    setDraft("")
+    setLines((prev) => [...prev, { role: "user", text: t }])
+    pushAssistant(routeSidekickReply(t))
+  }, [draft, pushAssistant])
+
+  const handleQuick = useCallback(
+    (label: string) => {
+      setLines((prev) => [...prev, { role: "user", text: label }])
+      if (label === "What should I click next?") {
+        pushAssistant({
+          text: mirrorResult
+            ? "You are past intake — start on Today, then pick Visit Prep, Document Agent, or Insurance Agent depending on what is most confusing right now."
+            : "On the home screen, tap the mic and share one short concern — that creates your demo case. Then Today becomes your cockpit.",
+          actions: mirrorResult
+            ? [
+                { label: "Go to Today", intent: { kind: "workspace", tab: "today" } },
+                { label: "Open Visit Prep", intent: { kind: "hero", flow: "visit" } },
+              ]
+            : [],
+        })
+        return
+      }
+      if (label === "Open Visit Prep") {
+        setLines((prev) => [...prev, { role: "user", text: label }, { role: "assistant", text: "Opening Visit Prep now.", actions: [] }])
+        runCockpitIntent({ kind: "hero", flow: "visit" })
+        setOpen(false)
+        return
+      }
+      if (label === "Open Document Agent") {
+        setLines((prev) => [
+          ...prev,
+          { role: "user", text: label },
+          { role: "assistant", text: "Opening Document Agent for report questions and missing pieces.", actions: [] },
+        ])
+        runCockpitIntent({ kind: "hero", flow: "document" })
+        setOpen(false)
+        return
+      }
+      if (label === "Open Insurance Agent") {
+        setLines((prev) => [
+          ...prev,
+          { role: "user", text: label },
+          { role: "assistant", text: "Opening Insurance Agent for denials, auth, and records friction.", actions: [] },
+        ])
+        runCockpitIntent({ kind: "hero", flow: "insurance" })
+        setOpen(false)
+        return
+      }
+      if (label === "Open Sentinel") {
+        setLines((prev) => [...prev, { role: "user", text: label }, { role: "assistant", text: "Opening Sentinel.", actions: [] }])
+        runCockpitIntent({ kind: "tool", panel: "sentinel" })
+        setOpen(false)
+        return
+      }
+      if (label === "Open System Mapper") {
+        setLines((prev) => [...prev, { role: "user", text: label }, { role: "assistant", text: "Opening System Mapper.", actions: [] }])
+        runCockpitIntent({ kind: "tool", panel: "mapper" })
+        setOpen(false)
+        return
+      }
+      if (label === "Open Outreach guide") {
+        setLines((prev) => [...prev, { role: "user", text: label }, { role: "assistant", text: "Opening Human-approved Outreach.", actions: [] }])
+        runCockpitIntent({ kind: "tool", panel: "outreach" })
+        setOpen(false)
+        return
+      }
+      if (label === "Open Phone Mode") {
+        setLines((prev) => [
+          ...prev,
+          { role: "user", text: label },
+          { role: "assistant", text: "Opening Phone Mode with a visit-style script reader.", actions: [] },
+        ])
+        runCockpitIntent({ kind: "phone", script: PHONE_SCRIPT_VISIT_PREP })
+        setOpen(false)
+        return
+      }
+      if (label === "Open Saved case") {
+        setLines((prev) => [...prev, { role: "user", text: label }, { role: "assistant", text: "Opening Saved case.", actions: [] }])
+        runCockpitIntent({ kind: "workspace", tab: "saved" })
+        setOpen(false)
+        return
+      }
+      if (label === "Open How Anchor works") {
+        setLines((prev) => [
+          ...prev,
+          { role: "user", text: label },
+          { role: "assistant", text: "Opening How Anchor works (trust panel).", actions: [] },
+        ])
+        runCockpitIntent({ kind: "tool", panel: "trust" })
+        setOpen(false)
+        return
+      }
+      if (label === "Something is broken") {
+        pushAssistant(routeSidekickReply("broken"))
+        return
+      }
+      if (label === "Explain prototype agents") {
+        pushAssistant(routeSidekickReply("explain prototype agents"))
+        return
+      }
+    },
+    [mirrorResult, pushAssistant, runCockpitIntent],
+  )
+
+  const handlePickTxt = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
+
+  const handleFile = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = ""
+      if (!file || !file.name.toLowerCase().endsWith(".txt")) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        const text = typeof reader.result === "string" ? reader.result : ""
+        const slice = text.slice(0, 8000)
+        setDraft(slice)
+        setLines((prev) => [...prev, { role: "user", text: `Loaded local file: ${file.name} (not uploaded)` }])
+        pushAssistant(routeSidekickReply(slice))
+      }
+      reader.readAsText(file)
+    },
+    [pushAssistant],
+  )
+
+  if (!visible) return null
+
+  const quick = [
+    "What should I click next?",
+    "Open Visit Prep",
+    "Open Document Agent",
+    "Open Insurance Agent",
+    "Open Sentinel",
+    "Open System Mapper",
+    "Open Outreach guide",
+    "Open Phone Mode",
+    "Open Saved case",
+    "Open How Anchor works",
+    "Something is broken",
+    "Explain prototype agents",
+  ] as const
+
+  return (
+    <div className="pointer-events-none fixed bottom-0 right-0 z-[55] flex max-w-[100vw] flex-col items-end gap-2 p-3 sm:p-4">
+      {sidekickHint && (
+        <div className="pointer-events-auto max-w-[min(22rem,calc(100vw-1.5rem))] rounded-2xl border border-[#e8dfd4] bg-[#fffdf9] px-3 py-2 text-xs leading-relaxed text-[#5f5a55] shadow-[0_8px_24px_rgba(116,100,91,0.12)]">
+          <div className="flex items-start justify-between gap-2">
+            <p className="m-0 pr-1">{sidekickHint}</p>
+            <button
+              type="button"
+              onClick={onDismissHint}
+              className="shrink-0 rounded-full p-1 text-[#8a827a] hover:bg-[#f3ebe3]"
+              aria-label="Dismiss hint"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <input ref={fileInputRef} type="file" accept=".txt,text/plain" className="hidden" onChange={handleFile} />
+
+      {open && (
+        <div
+          id="anchor-sidekick-panel"
+          className="pointer-events-auto mb-1 flex max-h-[min(70vh,32rem)] w-[min(22rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-[22px] border border-white/80 bg-[#fffdf9]/95 shadow-[0_18px_48px_rgba(116,100,91,0.18)] backdrop-blur-[14px]"
+          role="dialog"
+          aria-label="Anchor Sidekick"
+        >
+          <div className="flex items-start justify-between gap-2 border-b border-[#efe6dc] px-3 py-2.5 sm:px-4">
+            <div className="min-w-0">
+              <p className="m-0 font-mono text-[10px] tracking-[0.16em] text-[#8f7e9b]">ANCHOR</p>
+              <p className="m-0 text-sm font-medium text-[#242230]">Anchor Sidekick</p>
+              <p className="m-0 mt-0.5 text-[11px] leading-snug text-[#756f68]">Ask where to go next or paste something confusing.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="shrink-0 rounded-full border border-[#e8dfd4] bg-white/70 p-1.5 text-[#5f5a55] hover:bg-white"
+              aria-label="Close Sidekick"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="m-0 border-b border-[#efe6dc] px-3 py-2 text-[10px] leading-snug text-[#8a827a] sm:px-4">
+            Sidekick helps navigate this demo. It does not diagnose, send, call, or schedule.
+          </p>
+          <p className="m-0 px-3 py-1.5 text-[10px] text-[#a09a93] sm:px-4">
+            {caseSummaryLine}
+          </p>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 sm:px-4">
+            {lines.length === 0 && (
+              <p className="m-0 py-2 text-xs leading-relaxed text-[#756f68]">
+                Paste de-identified text for this demo. Real secure file handling would require production privacy review.
+              </p>
+            )}
+            {lines.map((row, i) => (
+              <div key={`${row.role}-${i}`} className={`mb-3 ${row.role === "user" ? "text-right" : "text-left"}`}>
+                <div
+                  className={`inline-block max-w-[95%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+                    row.role === "user" ? "bg-[#e8dff0] text-[#3f3a36]" : "bg-[#f7efe7] text-[#3f3a36]"
+                  }`}
+                >
+                  <p className="m-0 whitespace-pre-wrap break-words">{row.text}</p>
+                </div>
+                {row.actions && row.actions.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap justify-end gap-1.5 sm:justify-start">
+                    {row.actions.map((chip) => (
+                      <button
+                        key={chip.label}
+                        type="button"
+                        onClick={() => handleChip(chip)}
+                        className="rounded-full border border-[#d9c9e4] bg-white/80 px-2.5 py-1 text-[11px] text-[#5f4f63] hover:bg-white"
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-[#efe6dc] px-2 py-2 sm:px-3">
+            <p className="m-0 mb-1.5 px-1 text-[10px] text-[#a09a93]">Quick actions</p>
+            <div className="mb-2 flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+              {quick.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => handleQuick(q)}
+                  className="rounded-full border border-[#e8dfd4] bg-white/70 px-2 py-1 text-[10px] text-[#5f5a55] hover:bg-white"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSubmit()
+                  }
+                }}
+                rows={2}
+                placeholder="Ask about the app or paste a note, record excerpt, denial, or question."
+                className="min-h-[2.75rem] min-w-0 flex-1 resize-none rounded-xl border border-[#e8dfd4] bg-white/80 px-2.5 py-1.5 text-xs text-[#242230] outline-none placeholder:text-[#b5aea5]"
+              />
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="shrink-0 self-end rounded-xl border border-white/80 bg-[#b7a6c9] px-3 py-2 text-xs text-white shadow-sm hover:opacity-95"
+              >
+                Send
+              </button>
+            </div>
+            <button type="button" onClick={handlePickTxt} className="mt-1.5 w-full text-left text-[10px] text-[#8f7e9b] underline underline-offset-2">
+              Paste text instead of uploading files in this prototype — optional: pick a .txt file to read locally only
+            </button>
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="pointer-events-auto mb-[max(0.5rem,env(safe-area-inset-bottom))] flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border border-white/80 bg-[#fffdf9]/92 px-3 py-2 text-xs text-[#5f4f63] shadow-[0_10px_28px_rgba(116,100,91,0.14)] backdrop-blur-[12px] hover:bg-white"
+        aria-expanded={open}
+        aria-controls="anchor-sidekick-panel"
+      >
+        <HelpCircle className="h-4 w-4 shrink-0 text-[#9b829c]" />
+        <span className="max-w-[10rem] truncate sm:max-w-none">
+          <span className="font-medium text-[#242230]">Anchor</span>
+          <span className="text-[#756f68]"> · Need help?</span>
+        </span>
+      </button>
+    </div>
+  )
+}
+
 function ResultsView({
   actionGuideDemoTimeline,
   adaptivePlanTasks,
@@ -4752,6 +5567,7 @@ function ResultsView({
   appendDemoCaseUpdate,
   cancerType,
   caseInformationUpdates,
+  cockpitNavBridgeRef,
   completedPlanTaskIds,
   copied,
   displayName,
@@ -4774,10 +5590,12 @@ function ResultsView({
   onHeroFlowUsed,
   onOpenToolPanel,
   onOpenUpdatesIntake,
+  onOpenClearMyHead,
   onPlan,
   onSarahBackupDemo,
   onStartOver,
   onWorkspaceTabChange,
+  pendingCockpitIntentRef,
   planResult,
   resultsTranscriptEcho,
   setFamilyCoordBoard,
@@ -4791,6 +5609,7 @@ function ResultsView({
   appendDemoCaseUpdate: (update: DemoCaseUpdate) => void
   cancerType: CancerType
   caseInformationUpdates: DemoCaseUpdate[]
+  cockpitNavBridgeRef: React.MutableRefObject<CockpitNavBridge | null>
   completedPlanTaskIds: string[]
   copied: ResultCopyKind | null
   displayName: string
@@ -4813,10 +5632,12 @@ function ResultsView({
   onHeroFlowUsed: (flow: LastHeroFlowUsed) => void
   onOpenToolPanel: (panel: ToolPanelId | null) => void
   onOpenUpdatesIntake: () => void
+  onOpenClearMyHead: () => void
   onPlan: () => void
   onSarahBackupDemo: () => void
   onStartOver: () => void
   onWorkspaceTabChange: (tab: WorkspaceTab) => void
+  pendingCockpitIntentRef: React.MutableRefObject<CockpitIntent | null>
   planResult: PlanResult | null
   resultsTranscriptEcho: string
   setFamilyCoordBoard: React.Dispatch<React.SetStateAction<FamilyCoordBoardRow[]>>
@@ -4839,7 +5660,22 @@ function ResultsView({
   const [memoryTimelineExpanded, setMemoryTimelineExpanded] = useState(false)
   const [todayHeroModal, setTodayHeroModal] = useState<LastHeroFlowUsed | null>(null)
   const [wordsSayModal, setWordsSayModal] = useState<WordsToSayScriptDef | null>(null)
-  const [futurePreviewModal, setFuturePreviewModal] = useState<"sentinel" | "mapper" | "brief" | "outreach" | null>(null)
+  const [sentinelInput, setSentinelInput] = useState("")
+  const [sentinelResult, setSentinelResult] = useState<SentinelLocalClassification | null>(null)
+  const [mapperMode, setMapperMode] = useState<1 | 2 | 3 | 4>(1)
+  const [mapperWhoId, setMapperWhoId] = useState<string | null>(null)
+  const [mapperBlockerId, setMapperBlockerId] = useState<string | null>(null)
+  const [outreachMode, setOutreachMode] = useState<"call" | "draft" | "text" | "outcome">("call")
+  const [outreachCallWho, setOutreachCallWho] = useState<string | null>(null)
+  const [outreachCallNeed, setOutreachCallNeed] = useState<string | null>(null)
+  const [outreachCallFor, setOutreachCallFor] = useState("my mom")
+  const [outreachCallAvoid, setOutreachCallAvoid] = useState("")
+  const [outreachDraftAudience, setOutreachDraftAudience] = useState<string | null>(null)
+  const [outreachDraftNeed, setOutreachDraftNeed] = useState<string | null>(null)
+  const [outreachOutcomeText, setOutreachOutcomeText] = useState("")
+  const [outreachOutcomeChip, setOutreachOutcomeChip] = useState<string | null>(null)
+  const [outreachDialNumber, setOutreachDialNumber] = useState("")
+  const [outreachMapperNote, setOutreachMapperNote] = useState<string | null>(null)
   const [phoneModeOpen, setPhoneModeOpen] = useState(false)
   const [phoneModeScript, setPhoneModeScript] = useState<PhoneModeScript | null>(null)
   const [trustScrollToReceipt, setTrustScrollToReceipt] = useState(false)
@@ -4910,6 +5746,10 @@ function ResultsView({
   useEffect(() => {
     if (intakeUpdatesSignal > 0) setInfoPanelOpen(true)
   }, [intakeUpdatesSignal])
+
+  useEffect(() => {
+    if (toolPanel !== "outreach") setOutreachMapperNote(null)
+  }, [toolPanel])
 
   function scrollToRecordsSection(ref: React.RefObject<HTMLDivElement | null>) {
     window.requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
@@ -5068,16 +5908,16 @@ function ResultsView({
     window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
   }
 
-  function appendFuturePreviewTimeline(taskTitle: string) {
+  function appendPrototypeAgentTimeline(taskTitle: string, badge: string) {
     const id =
       typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
         ? globalThis.crypto.randomUUID()
         : `tl-${Date.now()}`
     appendActionGuideDemoTimeline({
       id,
-      taskId: "future-preview",
+      taskId: "prototype-agent",
       taskTitle,
-      badge: "Future preview",
+      badge,
       savedAt: new Date().toISOString(),
     })
   }
@@ -5103,18 +5943,34 @@ function ResultsView({
   const openPhoneMode = useCallback((s: PhoneModeScript) => {
     if (pitchModeOpenRef.current) setPitchMinimized(true)
     setTodayHeroModal(null)
-    setFuturePreviewModal(null)
     setWordsSayModal(null)
     setPhoneReviewPhaseNudge(0)
     setPhoneModeScript(s)
     setPhoneModeOpen(true)
   }, [])
 
+  useLayoutEffect(() => {
+    const bridge: CockpitNavBridge = {
+      openHeroModal,
+      openPhoneMode,
+      onOpenToolPanel,
+      onWorkspaceTabChange,
+    }
+    cockpitNavBridgeRef.current = bridge
+    const pending = pendingCockpitIntentRef.current
+    if (pending) {
+      pendingCockpitIntentRef.current = null
+      applyCockpitIntent(bridge, pending)
+    }
+    return () => {
+      cockpitNavBridgeRef.current = null
+    }
+  }, [openHeroModal, openPhoneMode, onOpenToolPanel, onWorkspaceTabChange])
+
   const runPitchPrimaryAction = useCallback(
     (stepIdx: number) => {
       const closeAuxModals = () => {
         setTodayHeroModal(null)
-        setFuturePreviewModal(null)
         setWordsSayModal(null)
         setGuideOpenId(null)
         setPhoneModeOpen(false)
@@ -5196,7 +6052,6 @@ function ResultsView({
   )
 
   function handleSentinelOpenInsuranceFlow() {
-    setFuturePreviewModal(null)
     onWorkspaceTabChange("today")
     openHeroModal("insurance")
   }
@@ -5226,8 +6081,190 @@ function ResultsView({
   }
 
   function handleOutreachSavePreviewTimeline() {
-    appendFuturePreviewTimeline("Saved Human-approved outreach preview checklist")
+    appendPrototypeAgentTimeline("Saved Human-approved outreach checklist", "Outreach")
     setVisitPrepInlineNote("Saved preview note to Saved timeline (local demo).")
+    window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
+  }
+
+  function openOutreachWithMapperNote(note: string) {
+    setOutreachMapperNote(note)
+    setOutreachMode("call")
+    onOpenToolPanel("outreach")
+  }
+
+  function handleMapperOpenRelatedTool(tool: MapperContactGuide["relatedTool"], note: string) {
+    if (tool === "outreach") {
+      openOutreachWithMapperNote(note)
+      return
+    }
+    onWorkspaceTabChange("today")
+    if (tool === "visit") {
+      openHeroModal("visit")
+      return
+    }
+    if (tool === "document") {
+      openHeroModal("document")
+      return
+    }
+    openHeroModal("insurance")
+  }
+
+  function handleMapperAddRecordsPlanTask() {
+    appendDedupedPlanTasks(
+      [
+        {
+          id: "local:mapper-records-gather",
+          title: "Gather and confirm records before the next touchpoint",
+          detail: "Added by System Mapper — pair with Document guide or Outreach call prep.",
+          initialStatus: "active",
+          fromUpdate: false,
+        },
+      ],
+      "Added a record-gathering task from System Mapper.",
+      "That System Mapper records task is already on your plan.",
+    )
+  }
+
+  function handleMapperSaveRecordsToCase() {
+    const id =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `map-${Date.now()}`
+    appendDemoCaseUpdate({
+      id,
+      sourceLabel: "System Mapper",
+      ...getDemoCaseDeltaFromCustomNote("[System Mapper] Reviewed records checklist and copyable questions."),
+    })
+    appendPrototypeAgentTimeline("System Mapper: saved records checklist notes", "System Mapper")
+    setVisitPrepInlineNote("Saved locally to this demo case.")
+    window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
+  }
+
+  function applySentinelRoute(route: SentinelLocalClassification["primaryRoute"]) {
+    setTodayHeroModal(null)
+    if (route === "insurance") {
+      onWorkspaceTabChange("today")
+      openHeroModal("insurance")
+      return
+    }
+    if (route === "document") {
+      onWorkspaceTabChange("today")
+      openHeroModal("document")
+      return
+    }
+    if (route === "visit") {
+      onWorkspaceTabChange("today")
+      openHeroModal("visit")
+      return
+    }
+    if (route === "outreach") {
+      onOpenToolPanel("outreach")
+      return
+    }
+    if (route === "mapper") {
+      onOpenToolPanel("mapper")
+      return
+    }
+    if (route === "plan") {
+      onOpenToolPanel("plan")
+      return
+    }
+    if (route === "clearHead") {
+      onOpenToolPanel(null)
+      onOpenClearMyHead()
+      return
+    }
+  }
+
+  function handleSentinelSecondaryRoute(route: SentinelLocalClassification["secondaryRoutes"][number]) {
+    if (route === "document") {
+      onWorkspaceTabChange("today")
+      openHeroModal("document")
+      return
+    }
+    if (route === "outreach") {
+      onOpenToolPanel("outreach")
+      return
+    }
+    if (route === "visit") {
+      onWorkspaceTabChange("today")
+      openHeroModal("visit")
+      return
+    }
+    if (route === "plan") {
+      onOpenToolPanel("plan")
+      return
+    }
+    if (route === "mapper") {
+      onOpenToolPanel("mapper")
+      return
+    }
+    if (route === "insurance") {
+      onWorkspaceTabChange("today")
+      openHeroModal("insurance")
+    }
+  }
+
+  function handleSentinelAddPlanTask() {
+    if (!sentinelResult) {
+      setVisitPrepInlineNote("Run Sentinel check first.")
+      window.setTimeout(() => setVisitPrepInlineNote(null), 2400)
+      return
+    }
+    appendDedupedPlanTasks(
+      [buildSentinelPrototypePlanTask(sentinelResult)],
+      "Added a Sentinel task to your 72-hour plan.",
+      "That Sentinel task is already on your plan.",
+    )
+  }
+
+  function handleSentinelSaveToCase() {
+    if (!sentinelResult) return
+    const stamp =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `sent-${Date.now()}`
+    appendDemoCaseUpdate({
+      id: stamp,
+      sourceLabel: "Sentinel",
+      ...getDemoCaseDeltaFromCustomNote(`[Sentinel] ${sentinelResult.category}: ${sentinelInput.slice(0, 280)}`),
+    })
+    appendPrototypeAgentTimeline(`Sentinel noticed: ${sentinelResult.category}`, "Sentinel")
+    setVisitPrepInlineNote("Saved locally to this demo case.")
+    window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
+  }
+
+  function handleOutreachSaveOutcome() {
+    const summary = [outreachOutcomeChip, outreachOutcomeText.trim()].filter(Boolean).join(" — ")
+    if (!summary) {
+      setVisitPrepInlineNote("Add what happened or pick a chip.")
+      window.setTimeout(() => setVisitPrepInlineNote(null), 2600)
+      return
+    }
+    appendPrototypeAgentTimeline(`Outreach outcome: ${summary.slice(0, 120)}`, "Outreach")
+    const stamp =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `out-${Date.now()}`
+    appendDemoCaseUpdate({
+      id: stamp,
+      sourceLabel: "Human-approved Outreach",
+      ...getDemoCaseDeltaFromCustomNote(`[Outreach outcome] ${summary.slice(0, 400)}`),
+    })
+    appendDedupedPlanTasks(
+      [
+        {
+          id: "local:outreach-outcome-followup",
+          title: "Follow up after outreach call or message",
+          detail: "From Human-approved Outreach — capture the next deadline or owner your team named.",
+          initialStatus: "waiting",
+          fromUpdate: false,
+        },
+      ],
+      "Added a follow-up reminder after saving an outreach outcome.",
+      "That outreach follow-up is already on your plan.",
+    )
+    setVisitPrepInlineNote("Saved outcome to timeline and plan (local demo).")
     window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
   }
 
@@ -5317,6 +6354,30 @@ function ResultsView({
     }
     return titles
   }, [adaptivePlanTasks, completedPlanTaskIds, planResult])
+
+  const outreachPortalDraft = useMemo(
+    () => buildOutreachPortalDraftCopy({ audience: outreachDraftAudience, need: outreachDraftNeed, lovedOneLabel }),
+    [lovedOneLabel, outreachDraftAudience, outreachDraftNeed],
+  )
+
+  const outreachFamilyTextBody = useMemo(
+    () => buildOutreachFamilyTextUpdate({ lovedOneLabel, concernSnippet: mirrorResult.fearQuote }),
+    [lovedOneLabel, mirrorResult.fearQuote],
+  )
+
+  const outreachCallPhoneScript = useMemo(
+    () =>
+      buildOutreachCallPhoneScript({
+        forWho: outreachCallFor,
+        whoId: outreachCallWho,
+        needId: outreachCallNeed,
+        avoid: outreachCallAvoid,
+        mapperNote: outreachMapperNote,
+      }),
+    [outreachCallAvoid, outreachCallFor, outreachCallNeed, outreachCallWho, outreachMapperNote],
+  )
+
+  const mapperRecordsQuestionsCopy = useMemo(() => buildMapperRecordsQuestionsBlock(), [])
 
   const isSarahVoiceCase = useMemo(
     () =>
@@ -6041,71 +7102,56 @@ function ResultsView({
                     </div>
                   </div>
                 </div>
-                <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 sm:gap-3">
+                <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-3 sm:gap-3">
                   <div className={`${GLASS_PANEL} min-w-0 rounded-[14px] border border-[#e8dfd8]/90 p-3 sm:rounded-[16px]`}>
-                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Sentinel</p>
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{SENTINEL_PREVIEW_TITLE}</p>
                     <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                      Notices when a detail may change the next action, like &quot;denied,&quot; &quot;delayed,&quot; &quot;worse,&quot; or
-                      &quot;overwhelmed.&quot;
+                      {SENTINEL_TOOL_SUBTITLE}
                     </p>
                     <button
                       type="button"
                       onClick={() => {
                         setTodayHeroModal(null)
-                        setFuturePreviewModal("sentinel")
+                        onOpenToolPanel("sentinel")
                       }}
                       className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
                     >
-                      Preview Sentinel
+                      Open Sentinel
                     </button>
                   </div>
                   <div className={`${GLASS_PANEL} min-w-0 rounded-[14px] border border-[#e8dfd8]/90 p-3 sm:rounded-[16px]`}>
-                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">System Mapper</p>
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{SYSTEM_MAPPER_TOOL_TITLE}</p>
                     <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                      Helps map what kind of clinic, specialist, records, or second-opinion pathway to ask about — without ranking
-                      doctors.
+                      {SYSTEM_MAPPER_TOOL_SUBTITLE}
                     </p>
                     <button
                       type="button"
                       onClick={() => {
                         setTodayHeroModal(null)
-                        setFuturePreviewModal("mapper")
+                        onOpenToolPanel("mapper")
                       }}
                       className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
                     >
-                      Preview Mapper
+                      Open System Mapper
                     </button>
                   </div>
                   <div className={`${GLASS_PANEL} min-w-0 rounded-[14px] border border-[#e8dfd8]/90 p-3 sm:rounded-[16px]`}>
-                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Front-Desk Brief</p>
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{HUMAN_OUTREACH_TOOL_TITLE}</p>
                     <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                      Turns your case into a short script for a scheduler, records office, or insurance desk.
+                      {HUMAN_OUTREACH_TOOL_SUBTITLE}
+                    </p>
+                    <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#8a827a] sm:text-[11px]">
+                      Front-Desk Brief lives inside this guide as a copyable opener — not a separate preview.
                     </p>
                     <button
                       type="button"
                       onClick={() => {
                         setTodayHeroModal(null)
-                        setFuturePreviewModal("brief")
+                        onOpenToolPanel("outreach")
                       }}
                       className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
                     >
-                      Preview Brief
-                    </button>
-                  </div>
-                  <div className={`${GLASS_PANEL} min-w-0 rounded-[14px] border border-[#e8dfd8]/90 p-3 sm:rounded-[16px]`}>
-                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Human-approved outreach</p>
-                    <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                      Anchor prepares the call or message. The caregiver reviews and approves. No autonomous action.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTodayHeroModal(null)
-                        setFuturePreviewModal("outreach")
-                      }}
-                      className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
-                    >
-                      Preview approval flow
+                      Open Outreach guide
                     </button>
                   </div>
                 </div>
@@ -6721,8 +7767,8 @@ function ResultsView({
                               },
                               {
                                 id: "frontdesk" as const,
-                                title: "4 · Front-Desk Brief",
-                                body: "Opening script for scheduler, records desk, or insurer — same brief as the live agent path.",
+                                title: "4 · Human-approved Outreach (Front-Desk Brief)",
+                                body: "Opening scripts and call prep moved to Tools → Human-approved Outreach — same brief, safer boundaries.",
                               },
                             ] as const
                           ).map((m) => (
@@ -7042,55 +8088,20 @@ function ResultsView({
 
                       {insAgentHome === "frontdesk" && (
                         <div className="mt-4 min-w-0 space-y-3">
-                          <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Front-Desk Brief</p>
-                          <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">{INSURANCE_AGENT_FRONT_DESK_PURPOSE}</p>
-                          <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-[#2a2420] px-3 py-3 sm:px-4 sm:py-4">
-                            <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-[#e8dfd8] sm:text-xs">Brief</p>
-                            <p className="mt-2 m-0 text-[12px] font-medium leading-snug text-[#fdf6f0] sm:text-sm">{FRONT_DESK_BRIEF_SCRIPT}</p>
-                          </div>
-                          <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
-                            Task Anchor can add: follow-up on call details after you speak with the office (local plan only).
+                          <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Front-Desk Brief moved</p>
+                          <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">
+                            The Front-Desk Brief now lives under Tools → Human-approved Outreach so call prep, drafts, and outcomes
+                            stay in one place. Nothing is sent from Anchor in this demo.
                           </p>
                           <button
                             type="button"
-                            onClick={() => openPhoneMode(PHONE_SCRIPT_INSURANCE_FRONT_BRIEF)}
-                            className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold leading-snug text-[#fdf6f0] sm:py-3"
+                            onClick={() => {
+                              setTodayHeroModal(null)
+                              onOpenToolPanel("outreach")
+                            }}
+                            className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold text-[#fdf6f0] sm:rounded-[16px]"
                           >
-                            Open Phone Mode
-                          </button>
-                          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void onCopy(
-                                  "insuranceFrontDeskAgentCopy",
-                                  buildInsuranceAgentFrontDeskClipboardBlock(),
-                                  "Copied Front-Desk Brief",
-                                  {
-                                    taskTitle: "Copied Front-Desk Brief",
-                                    badge: "Insurance agent",
-                                    taskId: "hero-insurance",
-                                  },
-                                )
-                              }
-                              className={`${GLASS_BUTTON} flex w-full min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
-                            >
-                              <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
-                              Copy brief
-                            </button>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              appendDedupedPlanTasks(
-                                [buildFrontDeskBriefFollowupTask()],
-                                "Added front-desk follow-up from Insurance agent.",
-                                "That front-desk follow-up is already on your plan.",
-                              )
-                            }
-                            className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px] sm:text-sm"
-                          >
-                            Add follow-up task
+                            Open Human-approved Outreach
                           </button>
                         </div>
                       )}
@@ -7213,259 +8224,6 @@ function ResultsView({
                   <p className="mt-2 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
                     Preparation only — not sent from Anchor. Your care team confirms medical details.
                   </p>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <AnimatePresence>
-            {futurePreviewModal && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setFuturePreviewModal(null)}
-                className="fixed inset-0 z-[74] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
-                role="presentation"
-              >
-                <motion.div
-                  initial={{ y: 48, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: 32, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                  onClick={(e) => e.stopPropagation()}
-                  className={`${GLASS_PANEL} max-h-[min(92vh,640px)] w-full max-w-lg overflow-y-auto rounded-[20px] p-4 shadow-[0_24px_80px_rgba(36,34,48,0.18)] sm:rounded-[24px] sm:p-5`}
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label="Future agent preview"
-                >
-                  <div className="flex min-w-0 items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="m-0 text-[15px] font-semibold text-[#3f3a35] sm:text-base">
-                        {futurePreviewModal === "sentinel"
-                          ? SENTINEL_PREVIEW_TITLE
-                          : futurePreviewModal === "mapper"
-                            ? SYSTEM_MAPPER_PREVIEW_TITLE
-                            : futurePreviewModal === "brief"
-                              ? FRONT_DESK_BRIEF_PREVIEW_TITLE
-                              : HUMAN_OUTREACH_PREVIEW_TITLE}
-                      </p>
-                      <p className="mt-1 m-0 text-[10px] font-medium uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
-                        {FUTURE_PREVIEW_BOUNDARY}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setFuturePreviewModal(null)}
-                      className="shrink-0 rounded-full border border-[#e5ddd4] bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
-                    >
-                      Close
-                    </button>
-                  </div>
-
-                  {futurePreviewModal === "sentinel" && (
-                    <div className="mt-3 grid gap-3">
-                      <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{SENTINEL_PREVIEW_INTRO}</p>
-                      <div>
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
-                          Example signals (inside Anchor only)
-                        </p>
-                        <ul className="mt-1.5 m-0 list-none space-y-2 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
-                          {SENTINEL_SIGNAL_ROWS.map((row) => (
-                            <li key={row.signal} className="rounded-[12px] border border-[#ece4dc] bg-white/70 p-2 sm:p-2.5">
-                              <span className="font-semibold text-[#5f5a55]">{row.signal}</span>
-                              <span className="text-[#756f68]"> — {row.response}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      <p className="m-0 text-[12px] font-medium text-[#3f3a35] sm:text-sm">{SENTINEL_DEMO_OUTPUT_LINE}</p>
-                      <div className="rounded-[12px] border border-[#e8c9c9]/80 bg-[#fff8f8]/95 p-2.5 sm:p-3">
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#9b6b6b] sm:text-[11px]">
-                          If someone says symptoms feel worse
-                        </p>
-                        <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">
-                          {PLAN_CHANGE_URGENT_SAFETY}
-                        </p>
-                      </div>
-                      <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{SENTINEL_NOT_EMERGENCY_LINE}</p>
-                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-                        <button
-                          type="button"
-                          onClick={handleSentinelOpenInsuranceFlow}
-                          className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
-                        >
-                          Open insurance/records issue
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSentinelAddDelayedTask}
-                          className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1"
-                        >
-                          Add follow-up task
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSentinelOneNextAction}
-                          className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
-                        >
-                          Show one next action
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {futurePreviewModal === "mapper" && (
-                    <div className="mt-3 grid gap-3">
-                      <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{SYSTEM_MAPPER_PREVIEW_INTRO}</p>
-                      <p className="m-0 text-[11px] font-medium text-[#5f5a55] sm:text-xs">{SYSTEM_MAPPER_NOT_RANKING_LINE}</p>
-                      <div>
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Factors</p>
-                        <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
-                          {SYSTEM_MAPPER_FACTORS.map((f) => (
-                            <li key={f} className="relative pl-3 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                              {f}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
-                          Questions to ask before comparing options
-                        </p>
-                        <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
-                          {SYSTEM_MAPPER_COMPARISON_QUESTIONS.map((q) => (
-                            <li key={q} className="relative pl-3 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                              {q}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void onCopy(
-                            "futureMapperQuestions",
-                            buildSystemMapperComparisonQuestionsBlock(),
-                            "Copied comparison questions",
-                            { taskTitle: "Copied System Mapper preview questions", badge: "Future preview", taskId: "fp-mapper" },
-                          )
-                        }
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2.5 text-[12px] font-semibold text-white sm:rounded-[16px]"
-                      >
-                        <Copy className="h-4 w-4 shrink-0" />
-                        Copy comparison questions
-                      </button>
-                    </div>
-                  )}
-
-                  {futurePreviewModal === "brief" && (
-                    <div className="mt-3 grid gap-3">
-                      <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{FRONT_DESK_BRIEF_PREVIEW_INTRO}</p>
-                      <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
-                        The same opening brief also lives under Today → Handle insurance / records issue → Front-Desk Brief (Insurance
-                        agent).
-                      </p>
-                      <div className="rounded-[12px] border border-[#ece4dc] bg-white/75 p-2.5 sm:p-3">
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Structured brief</p>
-                        <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{FRONT_DESK_BRIEF_SCRIPT}</p>
-                      </div>
-                      <div>
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Fields to collect</p>
-                        <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
-                          {FRONT_DESK_BRIEF_FIELD_LIST.map((f) => (
-                            <li key={f} className="relative pl-3 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                              {f}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => openPhoneMode(PHONE_SCRIPT_FRONT_DESK)}
-                        className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] py-3 text-[13px] font-semibold text-[#fdf6f0]"
-                      >
-                        Phone Mode — read line by line
-                      </button>
-                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void onCopy(
-                              "futureFrontDeskBrief",
-                              buildFrontDeskBriefClipboardBlock(),
-                              "Copied front-desk brief",
-                              { taskTitle: "Copied Front-Desk Brief preview", badge: "Future preview", taskId: "fp-brief" },
-                            )
-                          }
-                          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
-                        >
-                          <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
-                          Copy front-desk brief
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleFrontDeskPreviewAddPlanTask}
-                          className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1"
-                        >
-                          Add follow-up task to Plan
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {futurePreviewModal === "outreach" && (
-                    <div className="mt-3 grid gap-3">
-                      <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{HUMAN_OUTREACH_PREVIEW_INTRO}</p>
-                      <p className="m-0 text-[11px] font-medium text-[#5f5a55] sm:text-xs">{HUMAN_OUTREACH_NO_AUTONOMOUS_LINE}</p>
-                      <div>
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Intended steps</p>
-                        <ol className="mt-1.5 m-0 list-decimal space-y-1 pl-4 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
-                          {HUMAN_OUTREACH_STEPS.map((s) => (
-                            <li key={s}>{s}</li>
-                          ))}
-                        </ol>
-                      </div>
-                      <p className="m-0 text-[12px] font-medium text-[#3f3a35] sm:text-sm">{HUMAN_OUTREACH_PROTOTYPE_NOTE}</p>
-                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void onCopy(
-                              "futureOutreachChecklist",
-                              buildHumanOutreachApprovalChecklistBlock(),
-                              "Copied approval checklist",
-                              { taskTitle: "Copied Human-approved outreach preview", badge: "Future preview", taskId: "fp-outreach" },
-                            )
-                          }
-                          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
-                        >
-                          <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
-                          Copy approval checklist
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleOutreachSavePreviewTimeline}
-                          className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1"
-                        >
-                          Save preview to case
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {(copied === "futureMapperQuestions" ||
-                    copied === "futureFrontDeskBrief" ||
-                    copied === "futureOutreachChecklist") && (
-                    <p className="mt-3 m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
-                      Copied. Anchor did not send anything.
-                    </p>
-                  )}
-                  {visitPrepInlineNote && futurePreviewModal && (
-                    <p className="mt-2 m-0 text-center text-[11px] text-[#8b6914] sm:text-xs" role="status">
-                      {visitPrepInlineNote}
-                    </p>
-                  )}
                 </motion.div>
               </motion.div>
             )}
@@ -8534,6 +9292,847 @@ function ResultsView({
             </motion.div>
           )}
 
+          {workspaceTab === "tools" && toolPanel === "sentinel" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
+              <div className="min-w-0">
+                <p className="m-0 text-[15px] font-semibold text-[#3f3a35] sm:text-base">{SENTINEL_PREVIEW_TITLE}</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{SENTINEL_TOOL_SUBTITLE}</p>
+                <p className="mt-2 m-0 rounded-[12px] border border-[#ece4dc] bg-[#faf7f4]/90 px-2.5 py-2 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">
+                  {SENTINEL_TOOL_BOUNDARY}
+                </p>
+              </div>
+              <details className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  What Sentinel can look at (this demo only)
+                </summary>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                  <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                    Original concern: {mirrorResult.fearQuote.trim().slice(0, 160) || "Not captured yet"}
+                  </li>
+                  <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                    Case updates added: {caseInformationUpdates.length}
+                  </li>
+                  <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                    Saved note text: {noteText.trim() ? `${noteText.trim().slice(0, 120)}…` : "Empty"}
+                  </li>
+                  <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                    Plan tasks (adaptive): {adaptivePlanTasks.length}
+                  </li>
+                  <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                    Tasks marked done: {completedPlanTaskIds.length}
+                  </li>
+                  <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                    Last hero flow used: {lastHeroFlowUsed ?? "None yet"}
+                  </li>
+                </ul>
+              </details>
+              <label className="grid min-w-0 gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Paste or type what changed</span>
+                <textarea
+                  value={sentinelInput}
+                  onChange={(e) => setSentinelInput(e.target.value)}
+                  rows={4}
+                  placeholder='Example: insurance denied the scan, MMR/MSI is pending, records still were not received, appointment got delayed…'
+                  className="w-full min-w-0 max-w-full resize-y rounded-[14px] border border-[#d8cec5] bg-white/90 p-2.5 text-[12px] leading-snug text-[#2a2420] placeholder:text-[#9a928a] sm:rounded-[16px] sm:text-sm"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setSentinelResult(classifySentinelChangeText(sentinelInput))}
+                className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2.5 text-[12px] font-semibold text-white shadow-sm sm:rounded-[16px] sm:text-sm"
+              >
+                Check what this changes
+              </button>
+              {sentinelResult && (
+                <div className="grid min-w-0 gap-2.5 rounded-[14px] border border-[#e8dfd8] bg-white/85 p-3 sm:rounded-[16px] sm:p-4">
+                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What Sentinel noticed</p>
+                  <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{sentinelResult.noticed}</p>
+                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Why it may matter</p>
+                  <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">{sentinelResult.whyMatters}</p>
+                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Recommended next move</p>
+                  <p className="m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">{sentinelResult.recommendedMove}</p>
+                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">One task to add</p>
+                  <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{sentinelResult.suggestedPlanTitle}</p>
+                  <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{sentinelResult.suggestedPlanDetail}</p>
+                  {sentinelResult.showUrgentEscalationCopy && (
+                    <p className="m-0 rounded-[12px] border border-[#e8cec8] bg-[#fff8f4] px-2.5 py-2 text-[11px] leading-snug text-[#6f4a45] sm:text-xs">
+                      This may be worth escalating to the care team depending on severity. Anchor does not triage or diagnose. If
+                      it feels severe or rapidly worsening, use the urgent line or emergency services.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => applySentinelRoute(sentinelResult.primaryRoute)}
+                    className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold text-[#fdf6f0] sm:rounded-[16px]"
+                  >
+                    {sentinelPrimaryRouteLabel(sentinelResult.primaryRoute)}
+                  </button>
+                  {sentinelResult.secondaryRoutes.length > 0 && (
+                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                      {sentinelResult.secondaryRoutes.map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => handleSentinelSecondaryRoute(r)}
+                          className={`${GLASS_BUTTON} rounded-full px-2.5 py-1 text-[10px] font-medium sm:text-[11px]`}
+                        >
+                          {sentinelSecondaryRouteLabel(r)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleSentinelAddPlanTask}
+                      className={`${GLASS_BUTTON} w-full rounded-[12px] px-3 py-2 text-[11px] font-semibold sm:flex-1 sm:text-xs`}
+                    >
+                      Add task to Plan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSentinelSaveToCase}
+                      className={`${GLASS_BUTTON} w-full rounded-[12px] px-3 py-2 text-[11px] font-semibold sm:flex-1 sm:text-xs`}
+                    >
+                      Save to case
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSentinelOneNextAction}
+                      className={`${GLASS_BUTTON} w-full rounded-[12px] px-3 py-2 text-[11px] font-semibold sm:flex-1 sm:text-xs`}
+                    >
+                      Show one next action
+                    </button>
+                  </div>
+                </div>
+              )}
+              <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{SENTINEL_NOT_EMERGENCY_LINE}</p>
+              {visitPrepInlineNote && (
+                <p className="m-0 text-center text-[11px] text-[#8b6914] sm:text-xs" role="status">
+                  {visitPrepInlineNote}
+                </p>
+              )}
+            </motion.div>
+          )}
+
+          {workspaceTab === "tools" && toolPanel === "mapper" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
+              <div className="min-w-0">
+                <p className="m-0 text-[15px] font-semibold text-[#3f3a35] sm:text-base">{SYSTEM_MAPPER_TOOL_TITLE}</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{SYSTEM_MAPPER_TOOL_SUBTITLE}</p>
+                <p className="mt-2 m-0 rounded-[12px] border border-[#ece4dc] bg-[#faf7f4]/90 px-2.5 py-2 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">
+                  {SYSTEM_MAPPER_TOOL_BOUNDARY}
+                </p>
+              </div>
+              <div className="flex min-w-0 flex-wrap gap-1.5">
+                {(
+                  [
+                    { id: 1 as const, label: "Who should I contact?" },
+                    { id: 2 as const, label: "What is blocking this?" },
+                    { id: 3 as const, label: "Second opinion questions" },
+                    { id: 4 as const, label: "What records are needed?" },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMapperMode(m.id)}
+                    className={`max-w-full rounded-full border px-2.5 py-1 text-left text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                      mapperMode === m.id
+                        ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35] shadow-sm"
+                        : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70 hover:bg-[#faf7f4]"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              {mapperMode === 1 && (
+                <div className="grid min-w-0 gap-2.5">
+                  <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">What are you trying to do?</p>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {MAPPER_CONTACT_GOAL_CHIPS.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setMapperWhoId(c.id)}
+                        className={`max-w-full break-words rounded-full border px-2.5 py-1 text-left text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                          mapperWhoId === c.id
+                            ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35] shadow-sm"
+                            : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70 hover:bg-[#faf7f4]"
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  {mapperWhoId && MAPPER_CONTACT_GUIDES[mapperWhoId] && (
+                    <div className="rounded-[14px] border border-[#e8dfd8] bg-white/85 p-3 sm:rounded-[16px]">
+                      {(() => {
+                        const g = MAPPER_CONTACT_GUIDES[mapperWhoId]!
+                        return (
+                          <>
+                            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Likely office or person</p>
+                            <p className="mt-1 m-0 text-[12px] font-medium text-[#3f3a35] sm:text-sm">{g.office}</p>
+                            <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What to say</p>
+                            <p className="mt-1 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">{g.say}</p>
+                            <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What to write down</p>
+                            <ul className="mt-1 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                              {g.writeDown.map((line) => (
+                                <li key={line} className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                            <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Related Anchor tool</p>
+                            <p className="mt-1 m-0 text-[11px] text-[#5f5a55] sm:text-xs">
+                              {g.relatedTool === "outreach" && "Human-approved Outreach prepares the call script."}
+                              {g.relatedTool === "visit" && "Visit Prep holds questions for the care team."}
+                              {g.relatedTool === "document" && "Document guide helps with report language."}
+                              {g.relatedTool === "insurance" && "Insurance guide helps with denial or authorization wording."}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleMapperOpenRelatedTool(
+                                  g.relatedTool,
+                                  `Goal: ${MAPPER_CONTACT_GOAL_CHIPS.find((x) => x.id === mapperWhoId)?.label ?? mapperWhoId}`,
+                                )
+                              }
+                              className="mt-3 w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold text-[#fdf6f0] sm:rounded-[16px]"
+                            >
+                              {g.relatedTool === "outreach" ? "Open Outreach guide" : "Open related flow"}
+                            </button>
+                          </>
+                        )
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+              {mapperMode === 2 && (
+                <div className="grid min-w-0 gap-2.5">
+                  <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Pick the closest blocker</p>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {MAPPER_BLOCKER_CHIPS.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setMapperBlockerId(c.id)}
+                        className={`max-w-full break-words rounded-full border px-2.5 py-1 text-left text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                          mapperBlockerId === c.id
+                            ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35] shadow-sm"
+                            : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70 hover:bg-[#faf7f4]"
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  {mapperBlockerId && MAPPER_BLOCKER_GUIDES[mapperBlockerId] && (
+                    <div className="rounded-[14px] border border-[#e8dfd8] bg-white/85 p-3 sm:rounded-[16px]">
+                      {(() => {
+                        const b = MAPPER_BLOCKER_GUIDES[mapperBlockerId]!
+                        return (
+                          <>
+                            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Possible blocker</p>
+                            <p className="mt-1 m-0 text-[12px] font-medium text-[#3f3a35] sm:text-sm">{b.blocker}</p>
+                            <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Owner</p>
+                            <p className="mt-1 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{b.owner}</p>
+                            <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Next question</p>
+                            <p className="mt-1 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{b.nextQuestion}</p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openOutreachWithMapperNote(
+                                  `Blocker: ${MAPPER_BLOCKER_CHIPS.find((x) => x.id === mapperBlockerId)?.label ?? mapperBlockerId}`,
+                                )
+                              }
+                              className="mt-3 w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold text-[#fdf6f0] sm:rounded-[16px]"
+                            >
+                              Open Outreach guide
+                            </button>
+                          </>
+                        )
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+              {mapperMode === 3 && (
+                <div className="grid min-w-0 gap-2">
+                  <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Questions to ask</p>
+                  <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{SYSTEM_MAPPER_NOT_RANKING_LINE}</p>
+                  <ul className="m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                    {MAPPER_SECOND_OPINION_QUESTIONS.map((q) => (
+                      <li key={q} className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        {q}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => openOutreachWithMapperNote("Second opinion / care options questions from System Mapper")}
+                    className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold text-[#fdf6f0] sm:rounded-[16px]"
+                  >
+                    Open Outreach guide
+                  </button>
+                </div>
+              )}
+              {mapperMode === 4 && (
+                <div className="grid min-w-0 gap-2.5">
+                  <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Records checklist</p>
+                  <ul className="m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                    {MAPPER_RECORDS_CHECKLIST.map((item) => (
+                      <li key={item} className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void (async () => {
+                          await onCopy("mapperRecordsQuestions", mapperRecordsQuestionsCopy, "Copied records questions", {
+                            taskTitle: "Copied records questions from System Mapper",
+                            badge: "System Mapper",
+                            taskId: "prototype-agent",
+                          })
+                          setVisitPrepInlineNote("Copied. Anchor did not send anything.")
+                          window.setTimeout(() => setVisitPrepInlineNote(null), 2400)
+                        })()
+                      }
+                      className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                    >
+                      <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                      Copy questions
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openOutreachWithMapperNote("Records checklist from System Mapper")}
+                      className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:rounded-[16px] sm:text-sm"
+                    >
+                      Open Outreach guide
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleMapperAddRecordsPlanTask}
+                      className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1 sm:rounded-[16px] sm:text-sm`}
+                    >
+                      Add record-gathering task
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleMapperSaveRecordsToCase}
+                      className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1 sm:rounded-[16px] sm:text-sm`}
+                    >
+                      Save to case
+                    </button>
+                  </div>
+                </div>
+              )}
+              {visitPrepInlineNote && (
+                <p className="m-0 text-center text-[11px] text-[#8b6914] sm:text-xs" role="status">
+                  {visitPrepInlineNote}
+                </p>
+              )}
+            </motion.div>
+          )}
+
+          {workspaceTab === "tools" && toolPanel === "outreach" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
+              <div className="min-w-0">
+                <p className="m-0 text-[15px] font-semibold text-[#3f3a35] sm:text-base">{HUMAN_OUTREACH_TOOL_TITLE}</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{HUMAN_OUTREACH_TOOL_SUBTITLE}</p>
+                <p className="mt-2 m-0 rounded-[12px] border border-[#ece4dc] bg-[#faf7f4]/90 px-2.5 py-2 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">
+                  {HUMAN_OUTREACH_TOOL_BOUNDARY}
+                </p>
+              </div>
+              <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">
+                Anchor does not call, send, email, schedule, or contact anyone in this demo. The caregiver reviews and acts. Care
+                team confirms medical decisions. Not emergency monitoring — not HIPAA-grade deployment.
+              </p>
+              {outreachMapperNote && (
+                <div className="flex min-w-0 items-start justify-between gap-2 rounded-[12px] border border-[#b98da0]/45 bg-[#f5eef8]/90 p-2.5 sm:p-3">
+                  <p className="m-0 min-w-0 flex-1 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                    <span className="font-semibold">From System Mapper: </span>
+                    {outreachMapperNote}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOutreachMapperNote(null)}
+                    className="shrink-0 rounded-full border border-[#e8dfd4] bg-white/80 px-2 py-0.5 text-[10px] font-medium text-[#5f5a55]"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+              <div className="flex min-w-0 flex-wrap gap-1.5">
+                {(
+                  [
+                    { id: "call" as const, label: "Call an office" },
+                    { id: "draft" as const, label: "Draft portal/email" },
+                    { id: "text" as const, label: "Text update (family)" },
+                    { id: "outcome" as const, label: "Capture outcome" },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setOutreachMode(m.id)}
+                    className={`max-w-full rounded-full border px-2.5 py-1 text-left text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                      outreachMode === m.id
+                        ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35] shadow-sm"
+                        : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70 hover:bg-[#faf7f4]"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <details className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  Front-Desk Brief
+                </summary>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">{OUTREACH_STANDARD_FRONT_BRIEF}</p>
+                <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void (async () => {
+                        await onCopy("outreachFrontBrief", OUTREACH_STANDARD_FRONT_BRIEF, "Copied Front-Desk Brief", {
+                          taskTitle: "Copied Front-Desk Brief",
+                          badge: "Outreach",
+                          taskId: "prototype-agent",
+                        })
+                        setVisitPrepInlineNote("Copied. Anchor did not send anything.")
+                        window.setTimeout(() => setVisitPrepInlineNote(null), 2400)
+                      })()
+                    }
+                    className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                  >
+                    <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                    Copy brief
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openPhoneMode(PHONE_SCRIPT_INSURANCE_FRONT_BRIEF)}
+                    className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold text-[#fdf6f0] sm:flex-1 sm:rounded-[16px]"
+                  >
+                    Open Phone Mode
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id =
+                        typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+                          ? globalThis.crypto.randomUUID()
+                          : `ob-${Date.now()}`
+                      appendDemoCaseUpdate({
+                        id,
+                        sourceLabel: "Human-approved Outreach",
+                        ...getDemoCaseDeltaFromCustomNote(`[Front-Desk Brief] ${OUTREACH_STANDARD_FRONT_BRIEF}`),
+                      })
+                      appendPrototypeAgentTimeline("Saved Front-Desk Brief to demo case", "Outreach")
+                      setVisitPrepInlineNote("Saved locally to this demo case.")
+                      window.setTimeout(() => setVisitPrepInlineNote(null), 2800)
+                    }}
+                    className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1 sm:rounded-[16px] sm:text-sm`}
+                  >
+                    Save to case
+                  </button>
+                </div>
+              </details>
+              {outreachMode === "call" && (
+                <div className="grid min-w-0 gap-2.5">
+                  <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Pre-call intake</p>
+                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Who are you trying to contact?</p>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {(
+                      [
+                        { id: "clinic", label: "Oncology clinic" },
+                        { id: "scheduler", label: "Scheduler" },
+                        { id: "records", label: "Medical records" },
+                        { id: "pathology", label: "Pathology" },
+                        { id: "imaging", label: "Radiology / imaging" },
+                        { id: "insurance", label: "Insurance" },
+                        { id: "referral", label: "Referral office" },
+                        { id: "other", label: "Other" },
+                      ] as const
+                    ).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setOutreachCallWho(c.id)}
+                        className={`max-w-full break-words rounded-full border px-2.5 py-1 text-left text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                          outreachCallWho === c.id
+                            ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35] shadow-sm"
+                            : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70 hover:bg-[#faf7f4]"
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What do you need?</p>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {(
+                      [
+                        { id: "appt", label: "Schedule / confirm appointment" },
+                        { id: "records_req", label: "Request records" },
+                        { id: "records_ok", label: "Confirm records received" },
+                        { id: "auth", label: "Ask about authorization" },
+                        { id: "clarify", label: "Clarify missing information" },
+                        { id: "pending", label: "Ask what is pending" },
+                        { id: "refnum", label: "Get reference / case number" },
+                      ] as const
+                    ).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setOutreachCallNeed(c.id)}
+                        className={`max-w-full break-words rounded-full border px-2.5 py-1 text-left text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                          outreachCallNeed === c.id
+                            ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35] shadow-sm"
+                            : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70 hover:bg-[#faf7f4]"
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="grid min-w-0 gap-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Who are you calling for?</span>
+                    <input
+                      type="text"
+                      value={outreachCallFor}
+                      onChange={(e) => setOutreachCallFor(e.target.value)}
+                      className="w-full min-w-0 rounded-[12px] border border-[#d8cec5] bg-white/90 px-2.5 py-2 text-[12px] text-[#2a2420] sm:text-sm"
+                    />
+                  </label>
+                  <label className="grid min-w-0 gap-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                      What should Anchor avoid saying? (optional)
+                    </span>
+                    <input
+                      type="text"
+                      value={outreachCallAvoid}
+                      onChange={(e) => setOutreachCallAvoid(e.target.value)}
+                      placeholder="Do not mention treatment assumptions."
+                      className="w-full min-w-0 rounded-[12px] border border-[#d8cec5] bg-white/90 px-2.5 py-2 text-[12px] text-[#2a2420] placeholder:text-[#9a928a] sm:text-sm"
+                    />
+                  </label>
+                  <div className="rounded-[14px] border border-[#e8dfd8] bg-white/85 p-3 sm:rounded-[16px]">
+                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Front-Desk Brief (copy block)</p>
+                    <p className="mt-2 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">{OUTREACH_STANDARD_FRONT_BRIEF}</p>
+                    <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Exact call opener</p>
+                    <p className="mt-1 m-0 text-[12px] font-medium leading-snug text-[#3f3a35] sm:text-sm">
+                      Hi, I&apos;m calling for {outreachCallFor.trim() || "my loved one"}. We are preparing for a cancer-care appointment or records review.
+                    </p>
+                    <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Questions (pick what fits)</p>
+                    <ul className="mt-1 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                      <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        What records are needed, where should they go, and how do we confirm receipt?
+                      </li>
+                      <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        Is a referral or authorization required before the next step?
+                      </li>
+                      <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        What is still pending on your side, and who should we follow up with?
+                      </li>
+                      <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        What reference or case number should we write down?
+                      </li>
+                      <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        What is a realistic timeline for the next update?
+                      </li>
+                    </ul>
+                    <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What to write down</p>
+                    <ul className="mt-1 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                      {outreachCallPhoneScript.writeDown.map((line) => (
+                        <li key={line} className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Missing context checklist</p>
+                    <ul className="mt-1 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                      <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        Patient identifiers your team allows on the phone
+                      </li>
+                      <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        Whether you are asking about records, scheduling, or authorization
+                      </li>
+                      <li className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                        Any portal / fax / mailing instructions they give you
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openPhoneMode(outreachCallPhoneScript)}
+                      className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold text-[#fdf6f0] sm:flex-1 sm:rounded-[16px]"
+                    >
+                      Open Phone Mode
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOutreachMode("outcome")}
+                      className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1 sm:rounded-[16px] sm:text-sm`}
+                    >
+                      Capture outcome
+                    </button>
+                  </div>
+                  <label className="grid min-w-0 gap-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                      Optional: type a phone number you already have (digits only for dialer)
+                    </span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={outreachDialNumber}
+                      onChange={(e) => setOutreachDialNumber(e.target.value)}
+                      placeholder="e.g. clinic callback number you were given"
+                      className="w-full min-w-0 rounded-[12px] border border-[#d8cec5] bg-white/90 px-2.5 py-2 text-[12px] text-[#2a2420] placeholder:text-[#9a928a] sm:text-sm"
+                    />
+                  </label>
+                  {extractDialablePhoneDigits(outreachDialNumber) ? (
+                    <a
+                      href={`tel:${extractDialablePhoneDigits(outreachDialNumber)}`}
+                      className="block w-full rounded-[14px] border border-[#cbc4be] bg-[#faf7f4]/95 px-3 py-2.5 text-center text-[12px] font-semibold text-[#3f3a35] sm:rounded-[16px]"
+                    >
+                      Call now from your phone
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full cursor-not-allowed rounded-[14px] border border-[#e5ddd4] bg-[#f3f0ec]/90 px-3 py-2.5 text-[12px] font-medium text-[#9a928a] sm:rounded-[16px]"
+                    >
+                      Call now from your phone (enter a number first)
+                    </button>
+                  )}
+                  <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
+                    Your phone places the call. Anchor only keeps the script open. Anchor does not speak, record, or automate the
+                    call.
+                  </p>
+                </div>
+              )}
+              {outreachMode === "draft" && (
+                <div className="grid min-w-0 gap-2.5">
+                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Who is this for?</p>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {(
+                      [
+                        { id: "care", label: "Care team" },
+                        { id: "records", label: "Records office" },
+                        { id: "insurance", label: "Insurance" },
+                        { id: "scheduler", label: "Scheduler" },
+                        { id: "family", label: "Family" },
+                      ] as const
+                    ).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setOutreachDraftAudience(c.id)}
+                        className={`max-w-full rounded-full border px-2.5 py-1 text-[10px] font-medium transition sm:text-[11px] ${
+                          outreachDraftAudience === c.id
+                            ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35]"
+                            : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70"
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What do you need?</p>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {(
+                      [
+                        { id: "records", label: "Records" },
+                        { id: "referral", label: "Referral / auth" },
+                        { id: "timing", label: "Appointment timing" },
+                        { id: "pending", label: "Pending results" },
+                        { id: "clarify", label: "Clarification" },
+                      ] as const
+                    ).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setOutreachDraftNeed(c.id)}
+                        className={`max-w-full rounded-full border px-2.5 py-1 text-[10px] font-medium transition sm:text-[11px] ${
+                          outreachDraftNeed === c.id
+                            ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35]"
+                            : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70"
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="rounded-[14px] border border-[#e8dfd8] bg-white/85 p-3 sm:rounded-[16px]">
+                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Subject line</p>
+                    <p className="mt-1 m-0 text-[12px] font-medium text-[#3f3a35] sm:text-sm">{outreachPortalDraft.subject}</p>
+                    <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Message body</p>
+                    <p className="mt-1 m-0 whitespace-pre-wrap break-words text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{outreachPortalDraft.body}</p>
+                    <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What to attach or mention</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">{outreachPortalDraft.attach}</p>
+                    <p className="mt-2 m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What not to assume</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f4a45] sm:text-xs">{outreachPortalDraft.avoid}</p>
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void (async () => {
+                          await onCopy("outreachPortalDraft", outreachPortalDraft.body, "Copied portal/email draft", {
+                            taskTitle: "Copied portal/email draft",
+                            badge: "Outreach",
+                            taskId: "prototype-agent",
+                          })
+                          setVisitPrepInlineNote("Copied. Anchor did not send anything.")
+                          window.setTimeout(() => setVisitPrepInlineNote(null), 2400)
+                        })()
+                      }
+                      className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                    >
+                      <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                      Copy draft
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const id =
+                          typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+                            ? globalThis.crypto.randomUUID()
+                            : `od-${Date.now()}`
+                        appendDemoCaseUpdate({
+                          id,
+                          sourceLabel: "Human-approved Outreach",
+                          ...getDemoCaseDeltaFromCustomNote(`[Portal draft] ${outreachPortalDraft.body.slice(0, 400)}`),
+                        })
+                        appendPrototypeAgentTimeline("Saved Outreach portal/email draft locally", "Outreach")
+                        setVisitPrepInlineNote("Saved locally to this demo case.")
+                        window.setTimeout(() => setVisitPrepInlineNote(null), 2800)
+                      }}
+                      className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1 sm:rounded-[16px] sm:text-sm`}
+                    >
+                      Save to case
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        appendDedupedPlanTasks(
+                          [
+                            {
+                              id: "local:outreach-draft-followup",
+                              title: "Follow up after sending portal or email message",
+                              detail: "From Human-approved Outreach — confirm receipt or next step your team named.",
+                              initialStatus: "waiting",
+                              fromUpdate: false,
+                            },
+                          ],
+                          "Added a follow-up task after Outreach draft prep.",
+                          "That follow-up task is already on your plan.",
+                        )
+                        setVisitPrepInlineNote("Added follow-up task to Plan.")
+                        window.setTimeout(() => setVisitPrepInlineNote(null), 2400)
+                      }}
+                      className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:rounded-[16px] sm:text-sm"
+                    >
+                      Add follow-up task
+                    </button>
+                  </div>
+                </div>
+              )}
+              {outreachMode === "text" && (
+                <div className="grid min-w-0 gap-2.5">
+                  <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Calm text update for family</p>
+                  <p className="m-0 whitespace-pre-wrap break-words text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{outreachFamilyTextBody}</p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void (async () => {
+                        await onCopy("outreachFamilyText", outreachFamilyTextBody, "Copied family text update", {
+                          taskTitle: "Copied family text update",
+                          badge: "Outreach",
+                          taskId: "prototype-agent",
+                        })
+                        setVisitPrepInlineNote("Copied. Anchor did not send anything.")
+                        window.setTimeout(() => setVisitPrepInlineNote(null), 2400)
+                      })()
+                    }
+                    className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium`}
+                  >
+                    <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                    Copy text update
+                  </button>
+                </div>
+              )}
+              {outreachMode === "outcome" && (
+                <div className="grid min-w-0 gap-2.5">
+                  <label className="grid min-w-0 gap-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What happened?</span>
+                    <textarea
+                      value={outreachOutcomeText}
+                      onChange={(e) => setOutreachOutcomeText(e.target.value)}
+                      rows={3}
+                      className="w-full min-w-0 max-w-full resize-y rounded-[14px] border border-[#d8cec5] bg-white/90 p-2.5 text-[12px] leading-snug text-[#2a2420] sm:rounded-[16px] sm:text-sm"
+                    />
+                  </label>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {(
+                      [
+                        "Got appointment info",
+                        "Records needed",
+                        "Waiting on callback",
+                        "Referral / auth required",
+                        "They did not know",
+                        "Sent / requested records",
+                        "Need care team follow-up",
+                      ] as const
+                    ).map((label) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setOutreachOutcomeChip(label)}
+                        className={`max-w-full break-words rounded-full border px-2.5 py-1 text-left text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                          outreachOutcomeChip === label
+                            ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35] shadow-sm"
+                            : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70 hover:bg-[#faf7f4]"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOutreachSaveOutcome}
+                    className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold text-[#fdf6f0] sm:rounded-[16px]"
+                  >
+                    Save outcome to case &amp; plan
+                  </button>
+                </div>
+              )}
+              {visitPrepInlineNote && (
+                <p className="m-0 text-center text-[11px] text-[#8b6914] sm:text-xs" role="status">
+                  {visitPrepInlineNote}
+                </p>
+              )}
+              {(copied === "mapperRecordsQuestions" || copied === "outreachPortalDraft" || copied === "outreachFamilyText" || copied === "outreachFrontBrief") && (
+                <p className="m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
+                  Copied. Anchor did not send anything.
+                </p>
+              )}
+            </motion.div>
+          )}
+
           {workspaceTab === "tools" && toolPanel === "trust" && (
             <motion.div
               variants={itemVariants}
@@ -8555,6 +10154,17 @@ function ResultsView({
               </div>
               <div className="rounded-[14px] border border-[#e8dfd8] bg-[#faf7f4]/95 px-3 py-2 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">
                 {TRUST_NOT_MEDICAL_LINE}
+              </div>
+
+              <div className="rounded-[14px] border border-[#ece4dc] bg-white/85 px-3 py-2.5 sm:rounded-[16px]">
+                <p className="m-0 text-[11px] font-semibold text-[#3f3a35] sm:text-xs">Prototype tools in this demo</p>
+                <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px] sm:leading-relaxed">
+                  {TRUST_PROTOTYPE_AGENTS_BULLETS.map((line) => (
+                    <li key={line} className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
@@ -8838,18 +10448,34 @@ function ResultsView({
 
               <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
-                  Sentinel & other previews
+                  Open prototype tools from here
                 </summary>
-                <p className="mt-2 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">{SENTINEL_PREVIEW_INTRO}</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFuturePreviewModal("sentinel")
-                  }}
-                  className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
-                >
-                  Open {SENTINEL_PREVIEW_TITLE}
-                </button>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">
+                  Boundaries are summarized above — these buttons jump straight into each guide.
+                </p>
+                <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => onOpenToolPanel("sentinel")}
+                    className="w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:text-xs"
+                  >
+                    Open {SENTINEL_PREVIEW_TITLE}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenToolPanel("mapper")}
+                    className="w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:text-xs"
+                  >
+                    Open {SYSTEM_MAPPER_TOOL_TITLE}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenToolPanel("outreach")}
+                    className="w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:text-xs"
+                  >
+                    Open {HUMAN_OUTREACH_TOOL_TITLE}
+                  </button>
+                </div>
               </details>
 
               <div className="rounded-[14px] border border-[#ece4dc] bg-[#faf7f4]/90 px-3 py-2.5 sm:rounded-[16px] sm:px-3.5 sm:py-3">
@@ -9753,7 +11379,7 @@ function FearTimeline({ memories }: { memories: FearMemory[] }) {
 function CompanionNav({ onOpen }: { onOpen: (screen: CompanionScreen) => void }) {
   const items = [
     { id: "breathe" as const, label: "Calm Down", subtitle: "Stop the spiral right now", icon: Wind },
-    { id: "control" as const, label: "Clear My Head", subtitle: "Separate what's mine to carry", icon: Brain },
+    { id: "control" as const, label: "Clear My Head", subtitle: "Separate what is true, unknown, and next", icon: Brain },
     { id: "say" as const, label: "Get It Out", subtitle: "Write what you can't say out loud", icon: PenLine },
     { id: "oneThing" as const, label: "Just Do This", subtitle: "One small move, right now", icon: Sparkles },
   ]
@@ -9803,26 +11429,38 @@ function CompanionNav({ onOpen }: { onOpen: (screen: CompanionScreen) => void })
 
 function CompanionOverlay({
   activeScreen,
+  appendActionGuideDemoTimeline,
+  appendDemoCaseUpdate,
   breathCycles,
   breathStep,
   cancerType,
   currentOneThing,
+  isBackupDemoMirror,
   journalEntries,
+  lovedOneLabel,
+  mirrorResult,
   onClose,
   onCompleteOneThing,
   onSaveJournal,
   oneThingCount,
+  runCockpitIntent,
 }: {
   activeScreen: Exclude<CompanionScreen, null>
+  appendActionGuideDemoTimeline: (entry: ActionGuideDemoTimelineEntry) => void
+  appendDemoCaseUpdate: (update: DemoCaseUpdate) => void
   breathCycles: number
   breathStep: number
   cancerType: CancerType
   currentOneThing: number
+  isBackupDemoMirror: boolean
   journalEntries: JournalEntry[]
+  lovedOneLabel: string
+  mirrorResult: MirrorResult | null
   onClose: () => void
   onCompleteOneThing: () => void
   onSaveJournal: (text: string) => void
   oneThingCount: number
+  runCockpitIntent: (intent: CockpitIntent) => void
 }) {
   return (
     <motion.div
@@ -9831,7 +11469,7 @@ function CompanionOverlay({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: "100%", opacity: 0.88 }}
       transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed inset-0 z-50 overflow-y-auto bg-[#fbf7f0]/94 px-4 py-5 text-[#242230] backdrop-blur-[18px] sm:px-8 sm:py-6"
+      className="fixed inset-0 z-[60] overflow-y-auto bg-[#fbf7f0]/94 px-4 py-5 text-[#242230] backdrop-blur-[18px] sm:px-8 sm:py-6"
     >
       <AmbientOrbs />
       <div className="relative z-10 mx-auto max-w-5xl pb-6 sm:pb-8">
@@ -9845,7 +11483,18 @@ function CompanionOverlay({
         </button>
 
         {activeScreen === "breathe" && <BreatheScreen breathCycles={breathCycles} breathStep={breathStep} />}
-        {activeScreen === "control" && <ClearMyHeadScreen cancerType={cancerType} />}
+        {activeScreen === "control" && (
+          <ClearMyHeadScreen
+            appendActionGuideDemoTimeline={appendActionGuideDemoTimeline}
+            appendDemoCaseUpdate={appendDemoCaseUpdate}
+            cancerType={cancerType}
+            isBackupDemoMirror={isBackupDemoMirror}
+            lovedOneLabel={lovedOneLabel}
+            mirrorResult={mirrorResult}
+            onClose={onClose}
+            runCockpitIntent={runCockpitIntent}
+          />
+        )}
         {activeScreen === "say" && <SayItScreen entries={journalEntries} onSave={onSaveJournal} />}
         {activeScreen === "oneThing" && (
           <OneThingScreen
@@ -9897,108 +11546,161 @@ function BreatheScreen({ breathCycles, breathStep }: { breathCycles: number; bre
   )
 }
 
-function ClearMyHeadScreen({ cancerType }: { cancerType: CancerType }) {
-  const [thought, setThought] = useState("")
-  const [submittedThought, setSubmittedThought] = useState("")
-  const [result, setResult] = useState<MirrorResult | null>(null)
-  const [isThinking, setIsThinking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [insightIndex] = useState(() => {
-    const stored = Number(window.localStorage.getItem("anchor_clear_head_insight_index") || "-1")
-    const next = (Number.isFinite(stored) ? stored + 1 : 0) % PHILOSOPHICAL_INSIGHTS.length
-    window.localStorage.setItem("anchor_clear_head_insight_index", String(next))
-    return next
-  })
+function ClearMyHeadScreen({
+  appendActionGuideDemoTimeline,
+  appendDemoCaseUpdate,
+  cancerType,
+  isBackupDemoMirror,
+  lovedOneLabel,
+  mirrorResult,
+  onClose,
+  runCockpitIntent,
+}: {
+  appendActionGuideDemoTimeline: (entry: ActionGuideDemoTimelineEntry) => void
+  appendDemoCaseUpdate: (update: DemoCaseUpdate) => void
+  cancerType: CancerType
+  isBackupDemoMirror: boolean
+  lovedOneLabel: string
+  mirrorResult: MirrorResult | null
+  onClose: () => void
+  runCockpitIntent: (intent: CockpitIntent) => void
+}) {
+  const [loudThought, setLoudThought] = useState("")
+  const [saveNoteMessage, setSaveNoteMessage] = useState<string | null>(null)
+  const knownBullets = useMemo(
+    () =>
+      buildClearMyHeadKnownBullets({
+        hasCase: Boolean(mirrorResult),
+        isBackupDemoMirror,
+        lovedOneLabel,
+        cancerType,
+      }),
+    [cancerType, isBackupDemoMirror, lovedOneLabel, mirrorResult],
+  )
 
-  async function submitThought() {
-    const trimmed = thought.trim()
-    if (!trimmed) return
+  const unknownLines = useMemo(
+    () => ["Stage (only your care team can confirm)", "Final pathology wording", "Imaging completeness and timing", "Biomarkers / MMR / MSI if relevant", "Treatment decisions and timing"],
+    [],
+  )
 
-    setIsThinking(true)
-    setError(null)
-    setSubmittedThought(trimmed)
-
-    try {
-      const response = await fetch("/api/mirror", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transcript: trimmed,
-          cancerType,
-          pathologyText: "",
-        }),
-      })
-
-      if (!response.ok) throw new Error("Mirror API failed")
-      setResult((await response.json()) as MirrorResult)
-    } catch (err) {
-      console.error(err)
-      setError("Anchor had trouble with that thought. You can try again in a moment.")
-    } finally {
-      setIsThinking(false)
+  const handleSaveNote = useCallback(() => {
+    const trimmed = loudThought.trim()
+    if (!trimmed) {
+      setSaveNoteMessage("Add a few words in the box first.")
+      window.setTimeout(() => setSaveNoteMessage(null), 2400)
+      return
     }
-  }
+    if (!mirrorResult) {
+      setSaveNoteMessage("Save becomes available after you have a demo case.")
+      window.setTimeout(() => setSaveNoteMessage(null), 3200)
+      return
+    }
+    const id =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `ch-${Date.now()}`
+    appendDemoCaseUpdate({
+      id,
+      sourceLabel: "Clear my head",
+      ...getDemoCaseDeltaFromCustomNote(`[Clear my head] ${trimmed.slice(0, 420)}`),
+    })
+    appendActionGuideDemoTimeline({
+      id: `${id}-tl`,
+      taskId: "clear-head",
+      taskTitle: "Clear my head: saved a reflection to demo case",
+      badge: "Companion",
+      savedAt: new Date().toISOString(),
+    })
+    setSaveNoteMessage("Saved locally to your demo case.")
+    window.setTimeout(() => setSaveNoteMessage(null), 3200)
+  }, [appendActionGuideDemoTimeline, appendDemoCaseUpdate, loudThought, mirrorResult])
+
+  const goVisit = useCallback(() => {
+    onClose()
+    runCockpitIntent({ kind: "hero", flow: "visit" })
+  }, [onClose, runCockpitIntent])
+
+  const goPhone = useCallback(() => {
+    onClose()
+    runCockpitIntent({ kind: "phone", script: PHONE_SCRIPT_VISIT_PREP })
+  }, [onClose, runCockpitIntent])
+
+  const goPlan = useCallback(() => {
+    onClose()
+    runCockpitIntent({ kind: "tool", panel: "plan" })
+  }, [onClose, runCockpitIntent])
 
   return (
-    <section>
-      <p className="mb-3 font-mono text-xs tracking-[0.18em] text-[#8f7e9b] sm:mb-4">CLEAR MY HEAD</p>
-      <h2 className={`text-3xl font-normal leading-tight sm:text-5xl lg:text-7xl ${SOFT_GRADIENT_TEXT}`}>What thought keeps coming back?</h2>
+    <section className="max-w-3xl">
+      <p className="mb-2 font-mono text-xs tracking-[0.18em] text-[#8f7e9b]">CLEAR MY HEAD</p>
+      <h2 className={`text-2xl font-normal leading-tight sm:text-4xl ${SOFT_GRADIENT_TEXT}`}>Clear my head</h2>
+      <p className="mt-2 text-sm leading-relaxed text-[#5f5a55] sm:text-base">
+        Separate what is true, what is unknown, and what you can do next.
+      </p>
 
-      <div className="mt-6 flex flex-col gap-3 sm:mt-10 sm:flex-row">
-        <input
-          value={thought}
-          onChange={(event) => setThought(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") submitThought()
-          }}
-          placeholder="Type it exactly as it sounds in your head."
-          className={`${GLASS_PANEL} min-h-14 flex-1 rounded-[22px] px-4 text-base text-[#242230] outline-none placeholder:text-[#a09a93] sm:min-h-16 sm:rounded-[26px] sm:px-5 sm:text-xl`}
+      <div className={`${GLASS_PANEL} mt-6 rounded-[24px] p-4 sm:p-5`}>
+        <p className="m-0 text-sm font-medium text-[#242230]">1. What feels loud right now?</p>
+        <textarea
+          value={loudThought}
+          onChange={(e) => setLoudThought(e.target.value)}
+          placeholder={'Example: I keep thinking we missed something important.'}
+          rows={3}
+          className="mt-3 min-h-[5.5rem] w-full max-w-full resize-y rounded-[18px] border border-white/70 bg-white/55 p-3 text-sm leading-relaxed text-[#3f3a36] outline-none placeholder:text-[#a09a93]"
         />
-        <button
-          type="button"
-          onClick={submitThought}
-          disabled={isThinking || !thought.trim()}
-          className="rounded-[26px] border border-white/80 bg-[#b7a6c9] px-7 py-4 text-white shadow-[0_18px_52px_rgba(151,128,163,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          {isThinking ? "Listening underneath..." : "Untangle it"}
+      </div>
+
+      <div className={`${GLASS_PANEL} mt-4 rounded-[24px] p-4 sm:p-5`}>
+        <p className="m-0 text-sm font-medium text-[#242230]">2. What is actually known?</p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-relaxed text-[#5f5a55]">
+          {knownBullets.map((line) => (
+            <li key={line} className="break-words">
+              {line}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className={`${GLASS_PANEL} mt-4 rounded-[24px] p-4 sm:p-5`}>
+        <p className="m-0 text-sm font-medium text-[#242230]">3. What is still unknown?</p>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-[#5f5a55]">
+          {unknownLines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div className={`${GLASS_PANEL} mt-4 rounded-[24px] p-4 sm:p-5`}>
+        <p className="m-0 text-sm font-medium text-[#242230]">4. One next action</p>
+        <p className="mt-2 text-sm text-[#756f68]">Pick a lane — Anchor stays in organizing mode; your care team confirms facts.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" onClick={goVisit} className="rounded-full border border-white/80 bg-[#b7a6c9] px-4 py-2 text-sm text-white shadow-sm">
+            Open Visit Prep
+          </button>
+          <button type="button" onClick={goPhone} className={`${GLASS_BUTTON} rounded-full px-4 py-2 text-sm text-[#3f3a36]`}>
+            Open Phone Mode
+          </button>
+          <button type="button" onClick={goPlan} className={`${GLASS_BUTTON} rounded-full px-4 py-2 text-sm text-[#3f3a36]`}>
+            Open 72-hour Plan
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button type="button" onClick={handleSaveNote} className={`${GLASS_BUTTON} rounded-full px-4 py-2 text-sm text-[#3f3a36]`}>
+          Save note to case
+        </button>
+        <button type="button" onClick={onClose} className="rounded-full border border-[#e8dfd4] bg-white/70 px-4 py-2 text-sm text-[#5f5a55]">
+          Close
         </button>
       </div>
 
-      {error && <ErrorText message={error} />}
+      {saveNoteMessage && <p className="mt-3 text-sm text-[#6f6280]">{saveNoteMessage}</p>}
 
-      <AnimatePresence>
-        {result && (
-          <motion.div
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.55 }}
-            className="mt-10 space-y-4"
-          >
-            <div className={`${GLASS_PANEL} rounded-[32px] p-6`}>
-              <p className="mb-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">THE THOUGHT</p>
-              <p className="text-3xl leading-tight text-[#242230]">&quot;{submittedThought}&quot;</p>
-            </div>
-            <ResultBand label="What's underneath this" icon={<HeartHandshake className="h-5 w-5" />}>
-              {result.mirror}
-            </ResultBand>
-            <ResultBand label="NCCN-aware questions to confirm with your care team" icon={<ShieldCheck className="h-5 w-5" />}>
-              {result.ground}
-            </ResultBand>
-            <div className={`${GLASS_PANEL} rounded-[30px] p-5`}>
-              <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">THREE WAYS TO LOOSEN ITS GRIP</p>
-              <div className="space-y-3">
-                {result.actions.slice(0, 3).map((action, index) => (
-                  <ExpandableActionItem action={action} index={index} key={`${action}-${index}`} variant="compact" />
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <p className={`${GLASS_PANEL} mt-8 rounded-[28px] p-5 text-sm italic leading-7 text-[#5f5a55]`}>
-        {PHILOSOPHICAL_INSIGHTS[insightIndex]}
+      <p className="mt-6 text-xs leading-relaxed text-[#8a827a]">
+        Anchor can help organize the thought. Your care team confirms medical facts and decisions.
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-[#a09a93]">
+        This is emotional and cognitive support, not crisis therapy or medical triage. For emergencies, use local emergency services.
       </p>
     </section>
   )

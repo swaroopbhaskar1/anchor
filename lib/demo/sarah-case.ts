@@ -55,7 +55,7 @@ export const CARE_TEAM_ALIGNED_INTRO =
 
 /** Bullets for NCCN-aware care preparation (Sarah demo / backup mirror). */
 export const SARAH_CARE_TEAM_CONTEXT_BULLETS = [
-  "Confirm what diagnosis and stage are actually documented.",
+  "Ask the care team what diagnosis and stage are actually documented.",
   "Ask which reports are final and which are still pending.",
   "Bring pathology, imaging summaries, medication list, and portal messages.",
   "Ask what decisions, if any, are expected at the next appointment.",
@@ -1812,16 +1812,16 @@ export const WORDS_TO_SAY_SCRIPT_DEFS: WordsToSayScriptDef[] = [
   },
 ]
 
-/** Prototype “future agents” — copy and plan helpers only; no live automation. */
+/** Prototype agents — copy and plan helpers only; no live automation. */
 export const FUTURE_PREVIEW_BOUNDARY =
-  "Prototype preview only. Nothing is sent, scheduled, called, or shared."
+  "Early versions of Anchor’s safety and logistics layers. Nothing is sent, called, scheduled, or shared."
 
-export const FUTURE_PREVIEW_TOOLS_TITLE = "Future agent previews"
+export const FUTURE_PREVIEW_TOOLS_TITLE = "Prototype agents"
 
 export const FUTURE_PREVIEW_TOOLS_SUBTITLE =
-  "Prototype-only previews for where Anchor goes next. Nothing is sent, called, scheduled, or shared."
+  "Early versions of Anchor’s safety and logistics layers. Nothing is sent, called, scheduled, or shared."
 
-export const SENTINEL_PREVIEW_TITLE = "Sentinel preview"
+export const SENTINEL_PREVIEW_TITLE = "Sentinel"
 
 export const SENTINEL_PREVIEW_INTRO =
   "Sentinel only watches what happens inside Anchor in this prototype. It does not read other apps, record your screen, or monitor your phone."
@@ -1851,7 +1851,362 @@ export const SENTINEL_DEMO_OUTPUT_LINE =
 export const SENTINEL_NOT_EMERGENCY_LINE =
   "Sentinel is a prototype support layer, not emergency monitoring."
 
-export const SYSTEM_MAPPER_PREVIEW_TITLE = "System Mapper preview"
+export const SENTINEL_TOOL_SUBTITLE =
+  "Notices when something inside Anchor may change the next action."
+
+export const SENTINEL_TOOL_BOUNDARY =
+  "Sentinel only uses details inside this Anchor demo. It does not read other apps, monitor your phone, or provide emergency monitoring."
+
+export const SYSTEM_MAPPER_TOOL_TITLE = "System Mapper"
+
+export const SYSTEM_MAPPER_TOOL_SUBTITLE =
+  "Map who to ask, what may be blocking progress, and what information to gather."
+
+export const SYSTEM_MAPPER_TOOL_BOUNDARY =
+  "System Mapper does not rank doctors, judge medical quality, choose care, or recommend treatment."
+
+export const HUMAN_OUTREACH_TOOL_TITLE = "Human-approved Outreach"
+
+export const HUMAN_OUTREACH_TOOL_SUBTITLE =
+  "Prepare the call or message, gather missing context, guide the caregiver live, and save the outcome."
+
+export const HUMAN_OUTREACH_TOOL_BOUNDARY =
+  "Anchor does not call, text, email, or schedule in this demo. The caregiver reviews and acts."
+
+export const OUTREACH_STANDARD_FRONT_BRIEF =
+  "Hi, I’m calling for my mom. We are preparing for a cancer-care appointment or records review. Can you help confirm what records are needed, where they should be sent, whether a referral or authorization is required, and who we should follow up with?"
+
+export const TRUST_PROTOTYPE_AGENTS_BULLETS: string[] = [
+  "Sentinel uses only what you enter inside this Anchor demo — it is not emergency monitoring and does not read other apps.",
+  "System Mapper helps you think about who to contact and what to ask — it does not rank doctors or choose care.",
+  "Human-approved Outreach prepares words and checklists — it does not autonomously call, text, email, or schedule.",
+  "Any production outbound messaging or calling would require consent, audit logs, security and legal review, and approved integrations — this browser demo is not HIPAA-grade deployment.",
+]
+
+export type SentinelPlanDedupeKey =
+  | "insurance"
+  | "records"
+  | "pendingTest"
+  | "delay"
+  | "urgent"
+  | "cognitive"
+  | "generic"
+
+export interface SentinelLocalClassification {
+  category: string
+  noticed: string
+  whyMatters: string
+  recommendedMove: string
+  suggestedPlanTitle: string
+  suggestedPlanDetail: string
+  planDedupeKey: SentinelPlanDedupeKey
+  /** Primary CTA routing */
+  primaryRoute: "insurance" | "document" | "outreach" | "mapper" | "visit" | "clearHead" | "plan"
+  secondaryRoutes: Array<"document" | "outreach" | "visit" | "plan" | "mapper" | "insurance">
+  showUrgentEscalationCopy: boolean
+}
+
+const SENTINEL_PLAN_IDS: Record<SentinelPlanDedupeKey, string> = {
+  insurance: "local:sentinel-plan-insurance",
+  records: "local:sentinel-plan-records",
+  pendingTest: "local:sentinel-plan-pending-test",
+  delay: "local:sentinel-plan-delay",
+  urgent: "local:sentinel-plan-urgent",
+  cognitive: "local:sentinel-plan-cognitive",
+  generic: "local:sentinel-plan-generic",
+}
+
+export function buildSentinelPrototypePlanTask(classification: SentinelLocalClassification): StoredAdaptivePlanTask {
+  return {
+    id: SENTINEL_PLAN_IDS[classification.planDedupeKey],
+    title: classification.suggestedPlanTitle,
+    detail: `Added by Sentinel — ${classification.suggestedPlanDetail}`,
+    initialStatus: classification.planDedupeKey === "urgent" ? "urgent" : "active",
+    fromUpdate: false,
+  }
+}
+
+export function classifySentinelChangeText(raw: string): SentinelLocalClassification {
+  const t = raw.trim().toLowerCase()
+  const empty: SentinelLocalClassification = {
+    category: "No change text yet",
+    noticed: "Paste or type what changed, then run Check again.",
+    whyMatters: "Sentinel needs a short description to compare against your local demo case.",
+    recommendedMove: "Add a sentence about what shifted — insurance, records, timing, or how you feel.",
+    suggestedPlanTitle: "Write one sentence about what changed",
+    suggestedPlanDetail: "Then re-run Sentinel check.",
+    planDedupeKey: "generic",
+    primaryRoute: "plan",
+    secondaryRoutes: [],
+    showUrgentEscalationCopy: false,
+  }
+  if (!t) return empty
+
+  const hasUrgentWords =
+    /\b(worse|severe|urgent|fever|trouble breathing|chest pain|rapidly worsening)\b/i.test(t) ||
+    /\b(unable to breathe|can't breathe|cannot breathe)\b/i.test(t)
+  if (hasUrgentWords) {
+    return {
+      category: "Possible urgent concern",
+      noticed: "The wording you entered may describe symptoms or a situation that sometimes needs faster medical attention.",
+      whyMatters:
+        "Anchor cannot judge severity. This may be worth escalating to the care team depending on severity — or emergency services if it feels severe or rapidly worsening.",
+      recommendedMove: "Use your care team’s urgent line or local emergency services when appropriate. Anchor is not monitoring you.",
+      suggestedPlanTitle: "Confirm urgent-line instructions with your care team",
+      suggestedPlanDetail: "Ask what to do after hours and write it where you will see it.",
+      planDedupeKey: "urgent",
+      primaryRoute: "plan",
+      secondaryRoutes: ["visit"],
+      showUrgentEscalationCopy: true,
+    }
+  }
+
+  if (/\b(denied|denial|authorization|prior auth|prior\s*auth|precert|pre-?cert|insurance|not covered|benefit)\b/i.test(t)) {
+    return {
+      category: "Insurance blocker",
+      noticed: "Language points to insurance, authorization, or coverage friction.",
+      whyMatters: "Admin delays often change what you can schedule or afford next — your team and insurer confirm facts.",
+      recommendedMove: "Open Insurance guide to turn this into questions, a script, and a checklist.",
+      suggestedPlanTitle: "Follow up on denial or authorization status",
+      suggestedPlanDetail: "Write down reference numbers, deadlines, and what the insurer says is missing.",
+      planDedupeKey: "insurance",
+      primaryRoute: "insurance",
+      secondaryRoutes: ["outreach", "document"],
+      showUrgentEscalationCopy: false,
+    }
+  }
+
+  if (/\b(records|pathology|imaging|report|missing|not received|not\s+received|didn't arrive|did not arrive)\b/i.test(t)) {
+    return {
+      category: "Records / document blocker",
+      noticed: "Language points to records, imaging, pathology, or documents not lining up.",
+      whyMatters: "Missing pieces can stall visits, authorizations, or second opinions — your care team confirms what is on file.",
+      recommendedMove: "Open Document guide or Outreach to list what is missing and who should receive it.",
+      suggestedPlanTitle: "Confirm which records are missing and where to send them",
+      suggestedPlanDetail: "Ask for channel (portal vs fax), required names, and confirmation of receipt.",
+      planDedupeKey: "records",
+      primaryRoute: "document",
+      secondaryRoutes: ["outreach", "visit"],
+      showUrgentEscalationCopy: false,
+    }
+  }
+
+  if (/\b(mmr|msi|biomarker|cea|kras|braf)\b/i.test(t)) {
+    return {
+      category: "Pending test / result",
+      noticed: "Language points to biomarker or lab wording that may still be pending or needs clarification.",
+      whyMatters: "Plans sometimes wait on final results — only your clinicians can say what is final.",
+      recommendedMove: "Open Document guide or Visit prep to add plain-language questions for the team.",
+      suggestedPlanTitle: "Ask what is final vs pending on tests you named",
+      suggestedPlanDetail: "Bring the exact test names and dates you have; ask where final results will appear.",
+      planDedupeKey: "pendingTest",
+      primaryRoute: "document",
+      secondaryRoutes: ["visit", "outreach"],
+      showUrgentEscalationCopy: false,
+    }
+  }
+
+  if (/\b(delayed|postponed|rescheduled|waiting|callback|call back|on hold)\b/i.test(t)) {
+    return {
+      category: "Delay / waiting",
+      noticed: "Language points to timing slips, callbacks, or waiting states.",
+      whyMatters: "Small delays can change who you should nudge next — Anchor helps you script, not place the call.",
+      recommendedMove: "Open Outreach to prepare who to call and what to write down.",
+      suggestedPlanTitle: "Call the right office and capture owner + deadline",
+      suggestedPlanDetail: "Write who you spoke with, reference numbers, and the next follow-up date.",
+      planDedupeKey: "delay",
+      primaryRoute: "outreach",
+      secondaryRoutes: ["visit", "document"],
+      showUrgentEscalationCopy: false,
+    }
+  }
+
+  if (/\b(overwhelmed|lost|panic|confused)\b/i.test(t)) {
+    return {
+      category: "Cognitive overload",
+      noticed: "Language points to feeling overloaded rather than a single admin blocker.",
+      whyMatters: "When the mind is loud, narrowing to one next action keeps the case thread workable.",
+      recommendedMove: "Open Clear my head or pick one next action in the plan.",
+      suggestedPlanTitle: "Pick one next action for the next few hours",
+      suggestedPlanDetail: "Small, verifiable steps reduce thrash — your care team still confirms medical facts.",
+      planDedupeKey: "cognitive",
+      primaryRoute: "clearHead",
+      secondaryRoutes: ["plan", "visit"],
+      showUrgentEscalationCopy: false,
+    }
+  }
+
+  return {
+    category: "General change",
+    noticed: "Sentinel saw an update that may matter, but it did not match a specific admin lane.",
+    whyMatters: "Even small notes can shift what you should ask next — keep the care team as the source of truth.",
+    recommendedMove: "Use Visit prep, Document guide, or Insurance guide depending on what is most confusing.",
+    suggestedPlanTitle: "Add one follow-up note after your next touchpoint",
+    suggestedPlanDetail: "Capture what you heard and what is still unclear.",
+    planDedupeKey: "generic",
+    primaryRoute: "visit",
+    secondaryRoutes: ["document", "outreach"],
+    showUrgentEscalationCopy: false,
+  }
+}
+
+export const MAPPER_CONTACT_GOAL_CHIPS: { id: string; label: string }[] = [
+  { id: "schedule", label: "schedule visit" },
+  { id: "pathology", label: "get pathology report" },
+  { id: "imaging", label: "get imaging files" },
+  { id: "stage", label: "clarify stage" },
+  { id: "mmr", label: "ask about MMR/MSI" },
+  { id: "referral", label: "ask about referral" },
+  { id: "denial", label: "solve insurance denial" },
+  { id: "second", label: "get second opinion" },
+  { id: "family", label: "update family" },
+]
+
+export const MAPPER_BLOCKER_CHIPS: { id: string; label: string }[] = [
+  { id: "ref_missing", label: "missing referral" },
+  { id: "auth_missing", label: "missing authorization" },
+  { id: "rec_not", label: "records not received" },
+  { id: "img_pend", label: "imaging pending" },
+  { id: "path_pend", label: "pathology pending" },
+  { id: "wrong_dept", label: "wrong department" },
+  { id: "callback", label: "waiting for callback" },
+  { id: "appt_unclear", label: "unclear appointment type" },
+]
+
+export interface MapperContactGuide {
+  office: string
+  say: string
+  writeDown: string[]
+  relatedTool: "outreach" | "visit" | "document" | "insurance"
+}
+
+export const MAPPER_CONTACT_GUIDES: Record<string, MapperContactGuide> = {
+  schedule: {
+    office: "Oncology clinic scheduler or front desk",
+    say: "We are trying to schedule or confirm a cancer-related visit. What is the soonest option, what records are needed before check-in, and where should we send them?",
+    writeDown: ["Date/time", "Location/portal", "Records requested", "Referral/auth status", "Who to call back"],
+    relatedTool: "outreach",
+  },
+  pathology: {
+    office: "Pathology department or hospital medical records",
+    say: "We need the final pathology report (including addenda if any). What is the correct request channel and typical turnaround?",
+    writeDown: ["Patient identifiers allowed", "Request method", "Tracking number", "Who signs off as final"],
+    relatedTool: "outreach",
+  },
+  imaging: {
+    office: "Radiology records or imaging center records desk",
+    say: "We need imaging summaries or discs/links the oncology team requested. What is the process and any fees?",
+    writeDown: ["Studies requested", "CD vs portal", "Pickup vs mail", "Contact for delays"],
+    relatedTool: "outreach",
+  },
+  stage: {
+    office: "Oncology team (nurse line or clinician office)",
+    say: "We want plain-language clarity on what is confirmed versus still pending about staging — we are not asking you to decide here, only what is documented today.",
+    writeDown: ["What is confirmed", "What is pending", "Next decision point", "Who reviews results"],
+    relatedTool: "visit",
+  },
+  mmr: {
+    office: "Oncology team and/or pathology (for report questions)",
+    say: "We want to understand whether MMR/MSI or related biomarker testing is pending, final, or not ordered — and who reviews results with us.",
+    writeDown: ["Test status", "Final vs preliminary", "Portal location", "Next visit tie-in"],
+    relatedTool: "document",
+  },
+  referral: {
+    office: "Referral office or specialist intake",
+    say: "We are checking whether a referral is on file, whether it is active, and what the next scheduling step is.",
+    writeDown: ["Referring provider", "Specialty", "Auth status", "Scheduler contact"],
+    relatedTool: "outreach",
+  },
+  denial: {
+    office: "Insurer member services and care-team authorization office",
+    say: "We are trying to understand whether this is a denial, a pending authorization, or a documentation request — what is missing and what is the deadline?",
+    writeDown: ["Reference number", "Requested documents", "Deadline", "Fax/portal destination"],
+    relatedTool: "insurance",
+  },
+  second: {
+    office: "Receiving cancer center intake or records office (not ranked — your choice with your team)",
+    say: "We are exploring a second opinion and want to know required records, timing, and whether care can run in parallel.",
+    writeDown: ["Records list", "Auth needs", "Whether visits can overlap", "Coordinator name"],
+    relatedTool: "outreach",
+  },
+  family: {
+    office: "Trusted family point person (your choice)",
+    say: "Short factual update: what is known, what is pending, one concrete way to help — no treatment guessing.",
+    writeDown: ["What to share", "What not to assume", "Next family touchpoint"],
+    relatedTool: "outreach",
+  },
+}
+
+export interface MapperBlockerGuide {
+  blocker: string
+  owner: string
+  nextQuestion: string
+}
+
+export const MAPPER_BLOCKER_GUIDES: Record<string, MapperBlockerGuide> = {
+  ref_missing: {
+    blocker: "Referral may not be on file or not released to scheduling.",
+    owner: "Referring clinic + receiving scheduler",
+    nextQuestion: "Is the referral received, active, and released for scheduling?",
+  },
+  auth_missing: {
+    blocker: "Care may be blocked until authorization completes.",
+    owner: "Authorization office + insurer",
+    nextQuestion: "What exactly is pending and what document closes the loop?",
+  },
+  rec_not: {
+    blocker: "Records may not have arrived or were sent to the wrong channel.",
+    owner: "Medical records + your sending side",
+    nextQuestion: "Where should records go, and how do we confirm receipt?",
+  },
+  img_pend: {
+    blocker: "Imaging may be scheduled or read but not available to the oncologist yet.",
+    owner: "Radiology + oncology nurse line",
+    nextQuestion: "Which studies are final and where do results appear?",
+  },
+  path_pend: {
+    blocker: "Pathology may still be processing or addenda pending.",
+    owner: "Pathology + oncology team",
+    nextQuestion: "Is the report considered final, including addenda?",
+  },
+  wrong_dept: {
+    blocker: "You may be talking to the wrong desk for the request.",
+    owner: "Switchboard or nurse navigator",
+    nextQuestion: "Which department owns this request and what is the direct line?",
+  },
+  callback: {
+    blocker: "Work may be waiting on a return call.",
+    owner: "Whoever promised the callback",
+    nextQuestion: "What reference number ties this request together?",
+  },
+  appt_unclear: {
+    blocker: "Appointment type or purpose may be ambiguous.",
+    owner: "Scheduler + clinic nurse line",
+    nextQuestion: "What appointment type is booked and what should we bring?",
+  },
+}
+
+export const MAPPER_SECOND_OPINION_QUESTIONS: string[] = [
+  "Can this be reviewed as a second opinion?",
+  "What records are required before scheduling?",
+  "Should pending pathology or imaging results come back first?",
+  "Is a referral or authorization required?",
+  "Will this delay care or can it run in parallel?",
+  "Who coordinates records transfer between centers?",
+]
+
+export const MAPPER_RECORDS_CHECKLIST: string[] = [
+  "pathology report",
+  "pathology addenda",
+  "imaging summaries",
+  "image files",
+  "visit notes",
+  "medication list",
+  "referral/auth info",
+  "insurance letter/reference number",
+]
+
+export const SYSTEM_MAPPER_PREVIEW_TITLE = "System Mapper"
 
 export const SYSTEM_MAPPER_PREVIEW_INTRO =
   "Anchor does not rank doctors or choose care. It helps you understand what type of place or specialist to ask about."
@@ -2243,25 +2598,26 @@ export function splitScriptTextToPhoneLines(text: string): string[] {
 /** Prompt 11 — Trust / “How Anchor works” copy (UI + clipboard receipt). */
 export const TRUST_PANEL_TITLE = "How Anchor works"
 
-export const TRUST_PANEL_SUBTITLE = "Transparent source, privacy, and safety view for this demo."
+export const TRUST_PANEL_SUBTITLE = "A quick receipt for this browser session — not a legal document."
 
-export const TRUST_PANEL_BADGE = "Prototype trust layer · not HIPAA-grade deployment"
+export const TRUST_PANEL_BADGE = "Prototype · not HIPAA-grade deployment"
 
 export const TRUST_NOT_MEDICAL_LINE =
-  "Prototype only. Not medical advice. Not diagnosis. Not treatment recommendation. Not stage confirmation. Not emergency assessment. Nothing sent automatically. Your care team confirms medical decisions. Start over clears this local demo case."
+  "Prototype prep only — not medical advice. Your care team confirms what is true. Anchor does not call, send, schedule, or access portals. Use Start over to clear this local demo case."
 
 export const TRUST_HOW_ANSWERED_STEPS: string[] = [
-  "You share a concern, document, denial, or update.",
-  "Anchor separates what seems known from what is still pending.",
-  "Anchor turns it into questions, scripts, and 72-hour tasks.",
-  "You use Phone Mode or copy drafts if helpful.",
-  "You add what changed.",
-  "Anchor updates the plan and saves the thread locally for this demo.",
+  "You share a concern, document snippet, denial letter, or update.",
+  "Anchor separates what seems known from what may still be pending.",
+  "Anchor turns it into questions, scripts, and 72-hour tasks you can take to your care team.",
   "Your care team confirms medical decisions.",
 ]
 
 export const TRUST_NOT_CHATBOT_SUMMARY =
   "Anchor is not a doctor and not a general chatbot. It is a constrained caregiver workflow: listen, organize, prepare words, update the plan, and save what happened."
+
+/** Short “receipt” line for the first viewport — lane details expand below. */
+export const TRUST_FIRST_SCREEN_USED_SUMMARY =
+  "Your local case details, NCCN-aware preparation patterns, caregiver navigation wisdom, any sample or pasted text you used, and model wording — bounded so your care team still confirms clinical decisions."
 
 export const TRUST_SOURCE_CARD_CASE_TITLE = "Current case details"
 
@@ -2271,7 +2627,7 @@ export const TRUST_SOURCE_CARD_CASE_BODY =
 export const TRUST_SOURCE_CARD_CASE_NOTE =
   "These are the details you gave Anchor inside this local demo case."
 
-export const TRUST_SOURCE_CARD_CLINICAL_TITLE = "NCCN-aware clinical grounding"
+export const TRUST_SOURCE_CARD_CLINICAL_TITLE = "NCCN-aware clinical workflow grounding"
 
 export const TRUST_SOURCE_CARD_CLINICAL_BODY =
   "Anchor uses oncology guideline workflow patterns to shape questions and boundaries: what to confirm, what may be pending, what records matter, and what the care team should explain."
@@ -2374,7 +2730,7 @@ export const TRUST_PRODUCTION_DIRECTION_LABEL = "Production direction"
 
 export const TRUST_PRODUCTION_READINESS_BULLETS: string[] = [
   "Security review",
-  "HIPAA and legal review",
+  "Privacy and legal review (including HIPAA-class readiness where required)",
   "Encryption and access controls",
   "Audit logs",
   "User deletion and export controls",
@@ -2409,8 +2765,8 @@ export const TRUST_ACCURACY_CARDS: { title: string; body: string }[] = [
     body: "Anchor does not tell the family which treatment to choose.",
   },
   {
-    title: "Hero-agent flows",
-    body: "Visit, document, and insurance flows constrain output to scripts, questions, checklists, and tasks.",
+    title: "Guided flows",
+    body: "Visit prep, document, and insurance flows constrain output to scripts, questions, checklists, and tasks.",
   },
   {
     title: "Source-aware design",
@@ -2419,7 +2775,7 @@ export const TRUST_ACCURACY_CARDS: { title: string; body: string }[] = [
 ]
 
 export const TRUST_ACCURACY_SECTION_INTRO =
-  "Anchor is bounded and designed to make uncertainty visible. It reduces risk; it is not hallucination-proof, completely safe, or guaranteed accurate."
+  "Anchor is bounded and designed to make uncertainty visible. It reduces some risk by design; it is not error-free or a substitute for clinical judgment."
 
 export const TRUST_CARE_TEAM_CONFIRM_BULLETS: string[] = [
   "Diagnosis wording",
@@ -2443,14 +2799,14 @@ export const TRUST_CANNOT_DO_BULLETS: string[] = [
   "Replace emergency care",
   "Rank doctors",
   "Judge medical quality",
-  "File insurance appeals",
+  "File appeals or paperwork for you",
   "Contact clinics",
   "Make calls",
   "Send messages",
   "Schedule appointments",
   "Guarantee approval",
   "Guarantee accuracy",
-  "Claim HIPAA compliance in this prototype",
+  "Represent itself as HIPAA-compliant production software",
 ]
 
 export const TRUST_JUDGE_QA: { q: string; a: string }[] = [
@@ -2460,7 +2816,7 @@ export const TRUST_JUDGE_QA: { q: string; a: string }[] = [
   },
   {
     q: "Is this HIPAA compliant?",
-    a: "Not yet. This is a prototype demo. Production would require HIPAA/legal review, security controls, consent, audit logs, deletion/export, and approved integrations.",
+    a: "Not as deployed today. This is a prototype demo. A production build would need HIPAA/legal review, security controls, consent, audit logs, deletion/export, and approved integrations.",
   },
   {
     q: "How is this different from ChatGPT?",
