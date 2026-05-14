@@ -23,6 +23,8 @@ import {
 import useWebRTCAudioSession from "@/hooks/use-webrtc"
 import { tools } from "@/lib/tools"
 import {
+  buildAdaptiveTasksFromChip,
+  buildAdaptiveTasksFromCustomPlanNote,
   CARE_TEAM_ALIGNED_INTRO,
   DEMO_INFO_UPDATE_CHIPS,
   GENERIC_CARE_TEAM_CONTEXT_BULLETS,
@@ -43,6 +45,7 @@ import {
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
   type NightNoteContent,
+  type StoredAdaptivePlanTask,
 } from "@/lib/demo/sarah-case"
 import { getAccount, getDatabases, ID, Query, DB_ID, COLLECTIONS } from "@/lib/appwrite"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
@@ -108,6 +111,8 @@ interface AnchorDemoCaseV1 {
   showExampleOutput: boolean
   lastTranscriptSnippet?: string
   caseUpdates: DemoCaseUpdate[]
+  completedPlanTaskIds: string[]
+  adaptivePlanTasks: StoredAdaptivePlanTask[]
 }
 
 function isValidPlanResult(value: unknown): value is PlanResult {
@@ -137,6 +142,16 @@ function isDemoCaseUpdate(value: unknown): value is DemoCaseUpdate {
     typeof o.askNext === "string" &&
     typeof o.revisedStep === "string"
   )
+}
+
+function isStoredAdaptivePlanTask(value: unknown): value is StoredAdaptivePlanTask {
+  if (!value || typeof value !== "object") return false
+  const o = value as Record<string, unknown>
+  if (typeof o.id !== "string" || typeof o.title !== "string" || typeof o.fromUpdate !== "boolean") return false
+  if (o.initialStatus !== "active" && o.initialStatus !== "waiting" && o.initialStatus !== "urgent") return false
+  if (o.detail != null && typeof o.detail !== "string") return false
+  if (o.regretQuote != null && typeof o.regretQuote !== "string") return false
+  return true
 }
 
 interface FearMemory {
@@ -415,6 +430,8 @@ export default function App() {
   const breathStepRef = useRef(0)
 
   const [caseInformationUpdates, setCaseInformationUpdates] = useState<DemoCaseUpdate[]>([])
+  const [completedPlanTaskIds, setCompletedPlanTaskIds] = useState<string[]>([])
+  const [adaptivePlanTasks, setAdaptivePlanTasks] = useState<StoredAdaptivePlanTask[]>([])
 
   const {
     isSessionActive,
@@ -619,6 +636,12 @@ export default function App() {
       setIsBackupDemoMirror(Boolean(o.isBackupDemoMirror))
       setShowExampleOutput(Boolean(o.showExampleOutput))
       setCaseInformationUpdates(caseUpdates)
+      const doneRaw = o.completedPlanTaskIds
+      const doneIds = Array.isArray(doneRaw) ? doneRaw.filter((x): x is string => typeof x === "string") : []
+      setCompletedPlanTaskIds(doneIds)
+      const adaptRaw = o.adaptivePlanTasks
+      const adaptTasks = Array.isArray(adaptRaw) ? adaptRaw.filter(isStoredAdaptivePlanTask) : []
+      setAdaptivePlanTasks(adaptTasks)
       setOnboarded(true)
       setPhase("results")
       setError(null)
@@ -643,15 +666,19 @@ export default function App() {
         showExampleOutput,
         lastTranscriptSnippet: latestUserLine?.slice(0, 500),
         caseUpdates: caseInformationUpdates,
+        completedPlanTaskIds,
+        adaptivePlanTasks,
       }
       window.localStorage.setItem(ANCHOR_DEMO_CASE_KEY, JSON.stringify(payload))
     } catch {
       /* ignore quota / serialization issues */
     }
   }, [
+    adaptivePlanTasks,
     cancerType,
     caregiverName,
     caseInformationUpdates,
+    completedPlanTaskIds,
     hydrated,
     isBackupDemoMirror,
     latestUserLine,
@@ -709,6 +736,15 @@ export default function App() {
     setCaseInformationUpdates((prev) => [...prev, update])
   }, [])
 
+  const appendAdaptivePlanTasks = useCallback((tasks: StoredAdaptivePlanTask[]) => {
+    if (!tasks.length) return
+    setAdaptivePlanTasks((prev) => [...prev, ...tasks])
+  }, [])
+
+  const markPlanTaskDone = useCallback((taskId: string) => {
+    setCompletedPlanTaskIds((prev) => (prev.includes(taskId) ? prev : [...prev, taskId]))
+  }, [])
+
   const beginVoiceFollowUp = useCallback(() => {
     voiceFollowUpRef.current = true
     setCopied(null)
@@ -725,6 +761,8 @@ export default function App() {
     setPlanResult(null)
     setIsBackupDemoMirror(false)
     setCaseInformationUpdates([])
+    setCompletedPlanTaskIds([])
+    setAdaptivePlanTasks([])
 
     const useSarahFallbackMirror = () => {
       setMirrorResult(SARAH_MIRROR_RESULT)
@@ -792,6 +830,8 @@ export default function App() {
     setPlanResult(null)
     setError(null)
     setCaseInformationUpdates([])
+    setCompletedPlanTaskIds([])
+    setAdaptivePlanTasks([])
     setPhase("results")
   }, [])
 
@@ -814,6 +854,7 @@ export default function App() {
             sourceLabel: "Voice note",
             ...delta,
           })
+          appendAdaptivePlanTasks(buildAdaptiveTasksFromCustomPlanNote(trimmed))
         }
         setPhase("results")
         return
@@ -828,7 +869,7 @@ export default function App() {
 
     wasActiveRef.current = isSessionActive
     if (isSessionActive) setPhase("recording")
-  }, [appendDemoCaseUpdate, isSessionActive, processRant, transcriptRef])
+  }, [appendAdaptivePlanTasks, appendDemoCaseUpdate, isSessionActive, processRant, transcriptRef])
 
   async function requestPlan() {
     if (!mirrorResult) return
@@ -966,6 +1007,8 @@ export default function App() {
     setShowExampleOutput(false)
     setIsBackupDemoMirror(false)
     setCaseInformationUpdates([])
+    setCompletedPlanTaskIds([])
+    setAdaptivePlanTasks([])
     setFearTimeline([])
     setJournalEntries([])
     setOneThingCount(0)
@@ -995,6 +1038,8 @@ export default function App() {
     setShowExampleOutput(false)
     setIsBackupDemoMirror(false)
     setCaseInformationUpdates([])
+    setCompletedPlanTaskIds([])
+    setAdaptivePlanTasks([])
     setPhase("idle")
   }
 
@@ -1119,6 +1164,8 @@ export default function App() {
     setShowExampleOutput(true)
     setIsBackupDemoMirror(false)
     setCaseInformationUpdates([])
+    setCompletedPlanTaskIds([])
+    setAdaptivePlanTasks([])
     window.localStorage.removeItem(ANCHOR_DEMO_CASE_KEY)
   }
 
@@ -1291,9 +1338,12 @@ export default function App() {
 
                   {phase === "results" && mirrorResult && (
                     <ResultsView
+                      adaptivePlanTasks={adaptivePlanTasks}
+                      appendAdaptivePlanTasks={appendAdaptivePlanTasks}
                       appendDemoCaseUpdate={appendDemoCaseUpdate}
                       cancerType={cancerType}
                       caseInformationUpdates={caseInformationUpdates}
+                      completedPlanTaskIds={completedPlanTaskIds}
                       copied={copied}
                       displayName={displayName}
                       error={error}
@@ -1302,6 +1352,7 @@ export default function App() {
                       isBackupDemoMirror={isBackupDemoMirror}
                       isPlanning={isPlanning}
                       lovedOne={lovedOne}
+                      markPlanTaskDone={markPlanTaskDone}
                       mirrorResult={mirrorResult}
                       noteText={noteText}
                       onAddByVoice={beginVoiceFollowUp}
@@ -1943,10 +1994,278 @@ function buildCaregiverResultPacket(mirrorResult: MirrorResult, isBackupDemoMirr
   }
 }
 
+interface PlanBoardDisplayRow {
+  id: string
+  title: string
+  detail?: string
+  regretQuote?: string
+  source: "baseline" | "adaptive"
+  fromUpdate?: boolean
+}
+
+function baselineRowsFromPlan(planResult: PlanResult): PlanBoardDisplayRow[] {
+  const segments: { key: keyof PlanResult; slug: string }[] = [
+    { key: "tonight", slug: "tonight" },
+    { key: "tomorrow", slug: "tomorrow" },
+    { key: "next48", slug: "next48" },
+  ]
+  const out: PlanBoardDisplayRow[] = []
+  for (const { key, slug } of segments) {
+    planResult[key].forEach((action, index) => {
+      out.push({
+        id: `base:${slug}:${index}`,
+        title: action.text,
+        regretQuote: action.regretQuote,
+        source: "baseline",
+      })
+    })
+  }
+  return out
+}
+
+function adaptiveToDisplayRow(task: StoredAdaptivePlanTask): PlanBoardDisplayRow {
+  return {
+    id: task.id,
+    title: task.title,
+    detail: task.detail,
+    regretQuote: task.regretQuote,
+    source: "adaptive",
+    fromUpdate: task.fromUpdate,
+  }
+}
+
+function partitionAdaptiveRows(
+  tasks: StoredAdaptivePlanTask[],
+  isDone: (id: string) => boolean,
+): {
+  urgent: PlanBoardDisplayRow[]
+  waiting: PlanBoardDisplayRow[]
+  changed: PlanBoardDisplayRow[]
+  otherActive: PlanBoardDisplayRow[]
+  doneAdaptive: PlanBoardDisplayRow[]
+} {
+  const urgent: PlanBoardDisplayRow[] = []
+  const waiting: PlanBoardDisplayRow[] = []
+  const changed: PlanBoardDisplayRow[] = []
+  const otherActive: PlanBoardDisplayRow[] = []
+  const doneAdaptive: PlanBoardDisplayRow[] = []
+  for (const t of tasks) {
+    if (isDone(t.id)) {
+      doneAdaptive.push(adaptiveToDisplayRow(t))
+      continue
+    }
+    const row = adaptiveToDisplayRow(t)
+    if (t.initialStatus === "urgent") urgent.push(row)
+    else if (t.initialStatus === "waiting") waiting.push(row)
+    else if (t.fromUpdate && t.initialStatus === "active") changed.push(row)
+    else otherActive.push(row)
+  }
+  return { urgent, waiting, changed, otherActive, doneAdaptive }
+}
+
+function PlanBoardTaskRow({
+  detail,
+  done,
+  fromUpdate,
+  id,
+  onHoverRegret,
+  onMarkDone,
+  regretQuote,
+  title,
+}: {
+  detail?: string
+  done: boolean
+  fromUpdate?: boolean
+  id: string
+  onHoverRegret: (value: string | null) => void
+  onMarkDone?: (taskId: string) => void
+  regretQuote?: string
+  title: string
+}) {
+  const borderClass = done ? "border-[#d8e8d8]/90 bg-white/50" : "border-[#e5ddd4] bg-white/70"
+  return (
+    <div
+      className={`rounded-[14px] border px-2.5 py-2 sm:rounded-[16px] sm:px-3 sm:py-2.5 ${borderClass}`}
+      onBlur={() => regretQuote && onHoverRegret(null)}
+      onFocus={() => regretQuote && onHoverRegret(regretQuote)}
+      onMouseEnter={() => regretQuote && onHoverRegret(regretQuote)}
+      onMouseLeave={() => regretQuote && onHoverRegret(null)}
+    >
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="m-0 min-w-0 flex-1 text-[12px] font-medium leading-snug text-[#3f3a36] sm:text-sm">{title}</p>
+        {!done && onMarkDone && (
+          <button
+            type="button"
+            onClick={() => onMarkDone(id)}
+            className="shrink-0 rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-2 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+          >
+            Mark done
+          </button>
+        )}
+      </div>
+      {detail && <p className="mt-1.5 text-[11px] leading-snug text-[#756f68] sm:text-xs">{detail}</p>}
+      {fromUpdate && !done && (
+        <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wide text-[#9b829c] sm:text-[11px]">
+          Added from new information
+        </p>
+      )}
+    </div>
+  )
+}
+
+function PlanBoardSubsection({
+  emptyHint,
+  onHoverRegret,
+  onMarkDone,
+  rows,
+  title,
+}: {
+  emptyHint?: string
+  onHoverRegret: (value: string | null) => void
+  onMarkDone: (taskId: string) => void
+  rows: PlanBoardDisplayRow[]
+  title: string
+}) {
+  if (!rows.length) return null
+  return (
+    <div className="mt-3 sm:mt-3.5">
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">{title}</p>
+      <div className="grid gap-1.5 sm:gap-2">
+        {rows.map((row) => (
+          <PlanBoardTaskRow
+            key={row.id}
+            detail={row.detail}
+            done={false}
+            fromUpdate={row.fromUpdate}
+            id={row.id}
+            onHoverRegret={onHoverRegret}
+            onMarkDone={onMarkDone}
+            regretQuote={row.regretQuote}
+            title={row.title}
+          />
+        ))}
+      </div>
+      {emptyHint && <p className="mt-1.5 text-[10px] leading-snug text-[#756f68] sm:text-[11px]">{emptyHint}</p>}
+    </div>
+  )
+}
+
+function PlanBoardDoneSubsection({
+  onHoverRegret,
+  rows,
+}: {
+  onHoverRegret: (value: string | null) => void
+  rows: PlanBoardDisplayRow[]
+}) {
+  if (!rows.length) return null
+  return (
+    <div className="mt-3 sm:mt-3.5">
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Done</p>
+      <div className="grid gap-1.5 sm:gap-2">
+        {rows.map((row) => (
+          <PlanBoardTaskRow
+            key={row.id}
+            detail={row.detail}
+            done
+            fromUpdate={row.fromUpdate}
+            id={row.id}
+            onHoverRegret={onHoverRegret}
+            regretQuote={row.regretQuote}
+            title={row.title}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AdaptivePlanBoard({
+  adaptivePlanTasks,
+  completedPlanTaskIds,
+  isBackupDemoMirror,
+  onHoverRegret,
+  onMarkDone,
+  planResult,
+}: {
+  adaptivePlanTasks: StoredAdaptivePlanTask[]
+  completedPlanTaskIds: string[]
+  isBackupDemoMirror: boolean
+  onHoverRegret: (value: string | null) => void
+  onMarkDone: (taskId: string) => void
+  planResult: PlanResult | null
+}) {
+  const doneSet = useMemo(() => new Set(completedPlanTaskIds), [completedPlanTaskIds])
+
+  const baselineRows = useMemo(
+    () => (planResult ? baselineRowsFromPlan(planResult) : []),
+    [planResult],
+  )
+
+  const { activeBaseline, urgent, waiting, changed, otherActive, doneBaseline, doneAdaptive } = useMemo(() => {
+    const activeBaseline: PlanBoardDisplayRow[] = []
+    const doneBaseline: PlanBoardDisplayRow[] = []
+    for (const row of baselineRows) {
+      if (doneSet.has(row.id)) doneBaseline.push(row)
+      else activeBaseline.push(row)
+    }
+    const part = partitionAdaptiveRows(adaptivePlanTasks, (id) => doneSet.has(id))
+    return {
+      activeBaseline,
+      urgent: part.urgent,
+      waiting: part.waiting,
+      changed: part.changed,
+      otherActive: part.otherActive,
+      doneBaseline,
+      doneAdaptive: part.doneAdaptive,
+    }
+  }, [adaptivePlanTasks, baselineRows, doneSet])
+
+  const activeCombined = useMemo(() => [...otherActive, ...activeBaseline], [activeBaseline, otherActive])
+  const doneCombined = useMemo(() => [...doneBaseline, ...doneAdaptive], [doneAdaptive, doneBaseline])
+
+  const showBoard = Boolean(planResult) || adaptivePlanTasks.length > 0
+  if (!showBoard) return null
+
+  return (
+    <div className="mt-1">
+      {!planResult && adaptivePlanTasks.length > 0 && (
+        <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:text-xs">
+          Your generated 72-hour checklist will appear here after you tap &quot;Get your 72-hour plan&quot;. Tasks you add
+          from new information stay on this board until you start over.
+        </p>
+      )}
+      <PlanBoardSubsection onHoverRegret={onHoverRegret} onMarkDone={onMarkDone} rows={urgent} title="Urgent" />
+      <PlanBoardSubsection
+        emptyHint="Baseline steps from your plan; mark done as you go."
+        onHoverRegret={onHoverRegret}
+        onMarkDone={onMarkDone}
+        rows={activeCombined}
+        title="Active next steps"
+      />
+      <PlanBoardSubsection onHoverRegret={onHoverRegret} onMarkDone={onMarkDone} rows={waiting} title="Waiting on care team" />
+      <PlanBoardSubsection
+        onHoverRegret={onHoverRegret}
+        onMarkDone={onMarkDone}
+        rows={changed}
+        title="Changed because of new information"
+      />
+      <PlanBoardDoneSubsection onHoverRegret={onHoverRegret} rows={doneCombined} />
+      <p className="mt-3 text-[12px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">
+        {isBackupDemoMirror
+          ? "Sample NCCN-aware checklist based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm timing and details with your care team."
+          : "NCCN-aware question prep structured around common oncology guideline workflows, based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm with your doctor or care team."}
+      </p>
+    </div>
+  )
+}
+
 function ResultsView({
+  adaptivePlanTasks,
+  appendAdaptivePlanTasks,
   appendDemoCaseUpdate,
   cancerType,
   caseInformationUpdates,
+  completedPlanTaskIds,
   copied,
   displayName,
   error,
@@ -1955,6 +2274,7 @@ function ResultsView({
   isBackupDemoMirror,
   isPlanning,
   lovedOne,
+  markPlanTaskDone,
   mirrorResult,
   noteText,
   onAddByVoice,
@@ -1964,9 +2284,12 @@ function ResultsView({
   onSarahBackupDemo,
   planResult,
 }: {
+  adaptivePlanTasks: StoredAdaptivePlanTask[]
+  appendAdaptivePlanTasks: (tasks: StoredAdaptivePlanTask[]) => void
   appendDemoCaseUpdate: (update: DemoCaseUpdate) => void
   cancerType: CancerType
   caseInformationUpdates: DemoCaseUpdate[]
+  completedPlanTaskIds: string[]
   copied: "note" | "handoff" | null
   displayName: string
   error: string | null
@@ -1975,6 +2298,7 @@ function ResultsView({
   isBackupDemoMirror: boolean
   isPlanning: boolean
   lovedOne: string
+  markPlanTaskDone: (taskId: string) => void
   mirrorResult: MirrorResult
   noteText: string
   onAddByVoice: () => void
@@ -2018,6 +2342,9 @@ function ResultsView({
       sourceLabel: chip?.label ?? "Your note",
       ...delta,
     })
+    let planTasks = selectedChipId ? buildAdaptiveTasksFromChip(selectedChipId) : []
+    if (!planTasks.length) planTasks = buildAdaptiveTasksFromCustomPlanNote(trimmed || "Detail added")
+    appendAdaptivePlanTasks(planTasks)
     setInfoDraft("")
     setSelectedChipId(null)
     setInfoPanelOpen(false)
@@ -2247,7 +2574,7 @@ function ResultsView({
       )}
 
       <AnimatePresence>
-        {planResult && (
+        {(planResult || adaptivePlanTasks.length > 0) && (
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
@@ -2258,16 +2585,14 @@ function ResultsView({
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:mb-3 sm:text-xs">
               72 HOURS, MADE SMALL ENOUGH TO HOLD
             </p>
-            <div className="grid min-w-0 gap-2 sm:gap-3 xl:grid-cols-3">
-              <PlanColumn actions={planResult.tonight} label="First steps" onHoverRegret={onHoverRegret} />
-              <PlanColumn actions={planResult.tomorrow} label="Tomorrow" onHoverRegret={onHoverRegret} />
-              <PlanColumn actions={planResult.next48} label="Next 48" onHoverRegret={onHoverRegret} />
-            </div>
-            <p className="mt-3 text-[12px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">
-              {isBackupDemoMirror
-                ? "Sample NCCN-aware checklist based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm timing and details with your care team."
-                : "NCCN-aware question prep structured around common oncology guideline workflows, based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm with your doctor or care team."}
-            </p>
+            <AdaptivePlanBoard
+              adaptivePlanTasks={adaptivePlanTasks}
+              completedPlanTaskIds={completedPlanTaskIds}
+              isBackupDemoMirror={isBackupDemoMirror}
+              onHoverRegret={onHoverRegret}
+              onMarkDone={markPlanTaskDone}
+              planResult={planResult}
+            />
             <AnimatePresence>
               {hoveredRegret && (
                 <motion.div
@@ -2503,41 +2828,6 @@ function ExpandableActionItem({
         )}
       </AnimatePresence>
     </div>
-  )
-}
-
-function PlanColumn({
-  actions,
-  label,
-  onHoverRegret,
-}: {
-  actions: PlanAction[]
-  label: string
-  onHoverRegret: (value: string | null) => void
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.65 }}
-      className={`${GLASS_PANEL} rounded-[30px] p-4`}
-    >
-      <p className="mb-4 text-2xl text-[#242230]">{label}</p>
-      <div className="space-y-3">
-        {actions.map((action, index) => (
-          <ExpandableActionItem
-            key={`${label}-${action.text}`}
-            onMouseEnter={() => onHoverRegret(action.regretQuote)}
-            onMouseLeave={() => onHoverRegret(null)}
-            onFocus={() => onHoverRegret(action.regretQuote)}
-            onBlur={() => onHoverRegret(null)}
-            action={action.text}
-            index={index}
-            variant="plan"
-          />
-        ))}
-      </div>
-    </motion.div>
   )
 }
 

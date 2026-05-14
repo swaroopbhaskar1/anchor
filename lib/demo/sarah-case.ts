@@ -296,3 +296,140 @@ export function getDemoCaseDeltaFromCustomNote(note: string): DemoCaseDeltaCopy 
     revisedStep: "Add this language to your question list and verify it with your care team — Anchor does not confirm stage or treatment.",
   }
 }
+
+/** Local-only adaptive plan rows (demo; persisted under anchor-demo-case-v1). */
+export type AdaptivePlanTaskInitialStatus = "active" | "waiting" | "urgent"
+
+export interface StoredAdaptivePlanTask {
+  id: string
+  title: string
+  detail?: string
+  initialStatus: AdaptivePlanTaskInitialStatus
+  fromUpdate: boolean
+  regretQuote?: string
+}
+
+function adaptiveId(chipId: string, stamp: number, slot: string) {
+  return `local:${chipId}:${stamp}:${slot}`
+}
+
+/** Deterministic tasks appended when the user applies a chip update (no API). */
+export function buildAdaptiveTasksFromChip(chipId: string): StoredAdaptivePlanTask[] {
+  const stamp = Date.now()
+  const id = (slot: string) => adaptiveId(chipId, stamp, slot)
+  switch (chipId) {
+    case "appt-moved":
+      return [
+        {
+          id: id("a"),
+          title: "Confirm appointment time, location, portal check-in, and any prep instructions with your care team.",
+          detail: "NCCN-aware prep — not set in stone until your team confirms.",
+          initialStatus: "active",
+          fromUpdate: true,
+        },
+      ]
+    case "mmr-pending":
+      return [
+        {
+          id: id("a"),
+          title:
+            "Ask whether MMR/MSI testing was ordered, when results are expected, and who will review them with you.",
+          detail: "Biomarker status may affect what the care team can explain next — confirm with your team, not Anchor.",
+          initialStatus: "active",
+          fromUpdate: true,
+        },
+      ]
+    case "imaging-incomplete":
+      return [
+        {
+          id: id("w"),
+          title: "Confirm which imaging results are still pending and whether the visit should still happen before they return.",
+          detail: "Waiting on care team — interpretation belongs to your clinicians.",
+          initialStatus: "waiting",
+          fromUpdate: true,
+        },
+        {
+          id: id("a"),
+          title: "Bring the records you already have and ask what is still missing before the next touchpoint.",
+          initialStatus: "active",
+          fromUpdate: true,
+        },
+      ]
+    case "path-final":
+      return [
+        {
+          id: id("a1"),
+          title: "Ask the care team to walk through the final pathology report in plain language.",
+          initialStatus: "active",
+          fromUpdate: true,
+        },
+        {
+          id: id("a2"),
+          title: "Ask what the report confirms today and what it still does not answer — confirm with your doctor.",
+          initialStatus: "active",
+          fromUpdate: true,
+        },
+      ]
+    case "chemo-mentioned":
+      return [
+        {
+          id: id("a"),
+          title: "Ask what information the care team would use to decide whether chemo is needed — not a treatment recommendation from Anchor.",
+          detail: "Chemo may be a discussion topic only; your oncologist decides.",
+          initialStatus: "active",
+          fromUpdate: true,
+        },
+        {
+          id: id("w"),
+          title: "Confirm whether chemo is only being discussed as a possibility or as part of a proposed plan you have not agreed to yet.",
+          initialStatus: "waiting",
+          fromUpdate: true,
+        },
+      ]
+    case "sibling-arrival":
+      return [
+        {
+          id: id("a"),
+          title: "Decide what the sibling should handle next: driving, notes, records, food, or family updates.",
+          initialStatus: "active",
+          fromUpdate: true,
+        },
+      ]
+    case "insurance-records":
+      return [
+        {
+          id: id("a"),
+          title: "Ask which exact records insurance needs, the deadline, and where they should be sent — confirm with your care team if unsure.",
+          initialStatus: "active",
+          fromUpdate: true,
+        },
+      ]
+    case "severe-symptoms":
+      return [
+        {
+          id: id("u"),
+          title:
+            "If symptoms are severe or rapidly worsening, contact the care team’s urgent line or emergency services — Anchor does not triage.",
+          detail: "This is escalation guidance only, not a diagnosis.",
+          initialStatus: "urgent",
+          fromUpdate: true,
+        },
+      ]
+    default:
+      return []
+  }
+}
+
+export function buildAdaptiveTasksFromCustomPlanNote(note: string): StoredAdaptivePlanTask[] {
+  const stamp = Date.now()
+  const safe = note.trim().slice(0, 400)
+  return [
+    {
+      id: adaptiveId("custom", stamp, "0"),
+      title: "Add this detail to tomorrow’s question list and ask the care team what it changes for timing, tests, or follow-up.",
+      detail: safe ? `You noted: ${safe.slice(0, 140)}${safe.length > 140 ? "…" : ""}` : undefined,
+      initialStatus: "active",
+      fromUpdate: true,
+    },
+  ]
+}
