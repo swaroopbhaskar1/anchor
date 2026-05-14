@@ -337,6 +337,10 @@ export interface StoredAdaptivePlanTask {
   fromRecords?: boolean
   /** Stable key for dedupe (checklist id or quick-add id). */
   recordsChecklistId?: string
+  /** True when the row was added from the Family coordination tab. */
+  fromFamily?: boolean
+  /** Stable key for dedupe (e.g. role:appointment-buddy). */
+  familySupportRoleId?: string
 }
 
 /** Records tab (Prompt 7) — prototype disclaimer. */
@@ -693,3 +697,157 @@ export function normalizeFollowUpChipKind(kind: string): FollowUpChipId | "custo
   const mapped = LEGACY_FOLLOW_UP_CHIP_ID_MAP[kind]
   return mapped ?? null
 }
+
+/** Family tab (Prompt 8) — prototype disclaimer. */
+export const FAMILY_PROTO_BADGE = "Prototype coordination · caregiver approves"
+
+export const FAMILY_TAB_SUBTITLE =
+  "Turn support into clear jobs. Anchor prepares drafts and tasks — nothing is sent automatically."
+
+export const FAMILY_SAFETY_FOOTER =
+  "Anchor prepares family drafts and support tasks. It does not send messages, make decisions, or replace the care team. Use what fits your family and confirm medical details with clinicians."
+
+export interface FamilySupportRoleCardDef {
+  id: string
+  roleTitle: string
+  taskSummary: string
+  askDraft: string
+}
+
+export const FAMILY_SUPPORT_ROLE_CARDS: FamilySupportRoleCardDef[] = [
+  {
+    id: "appointment-buddy",
+    roleTitle: "Appointment buddy",
+    taskSummary: "Come to the appointment, take notes, ask follow-up questions.",
+    askDraft:
+      "Can you help tomorrow by being the appointment note-taker? The most helpful thing would be writing down what is confirmed, what is still pending, and what we need to ask next.",
+  },
+  {
+    id: "records-helper",
+    roleTitle: "Records helper",
+    taskSummary: "Gather pathology, imaging summaries, portal messages, medication list.",
+    askDraft:
+      "Could you take one records pass — pathology, imaging summaries, key portal messages, and a medication list — so we have one folder before the visit? Nothing needs to be perfect, just collected.",
+  },
+  {
+    id: "driver-logistics",
+    roleTitle: "Driver / logistics",
+    taskSummary: "Handle transportation, parking, timing, food/water.",
+    askDraft:
+      "Can you own tomorrow’s logistics — drive or rideshare, parking, timing, and making sure we have water/snacks? That frees us to focus on the conversation in the room.",
+  },
+  {
+    id: "insurance-caller",
+    roleTitle: "Insurance caller",
+    taskSummary: "Ask what records are needed, where to send them, and deadlines.",
+    askDraft:
+      "Would you be willing to call insurance once and ask exactly which records they need, where to send them, any deadline, and a reference number? We’ll loop the care team if anything is unclear.",
+  },
+  {
+    id: "family-updater",
+    roleTitle: "Family updater",
+    taskSummary: "Send one calm update to relatives after facts are confirmed.",
+    askDraft:
+      "When we’re ready, could you send one short update to relatives — calm, factual, and only after we’ve heard from the care team? We’ll share a draft you can edit in your own words.",
+  },
+  {
+    id: "patient-comfort",
+    roleTitle: "Patient comfort support",
+    taskSummary: "Check on meals, rest, comfort items, and emotional support.",
+    askDraft:
+      "Can you help with comfort support — meals, rest, small errands, and checking in emotionally? No medical decisions needed; just steady presence.",
+  },
+]
+
+export function buildFamilySupportAdaptiveTask(card: FamilySupportRoleCardDef): StoredAdaptivePlanTask {
+  return {
+    id: `family-role:${card.id}:${Date.now()}`,
+    title: `${card.roleTitle}: ${card.taskSummary}`,
+    detail: "Prototype coordination — your care team confirms medical details. Nothing sent from Anchor.",
+    initialStatus: "active",
+    fromUpdate: false,
+    fromFamily: true,
+    familySupportRoleId: `role:${card.id}`,
+  }
+}
+
+export interface FamilyCoordBoardRow {
+  id: string
+  title: string
+  owner: "none" | "sibling" | "family-member"
+  done: boolean
+}
+
+export const FAMILY_BOARD_ROW_DEFS: { id: string; title: string }[] = [
+  { id: "appt-notes", title: "Appointment notes" },
+  { id: "records-gather", title: "Records gathering" },
+  { id: "driving", title: "Driving / logistics" },
+  { id: "insurance-call", title: "Insurance call" },
+  { id: "family-update", title: "Family update" },
+  { id: "meals-support", title: "Meals / support" },
+  { id: "portal-access", title: "Portal login / records access" },
+]
+
+export function createDefaultFamilyCoordBoard(): FamilyCoordBoardRow[] {
+  return FAMILY_BOARD_ROW_DEFS.map((d) => ({ ...d, owner: "none", done: false }))
+}
+
+export const FAMILY_UPDATE_DRAFT_CALM =
+  "Quick update: we are still confirming details with the care team. Some reports or results may still be pending. The most helpful thing right now is preparing for the appointment, gathering records, and not assuming a treatment plan until the doctors explain it."
+
+export const FAMILY_UPDATE_DRAFT_DETAIL =
+  "We have an appointment coming up and are organizing the key questions. Right now, we are trying to clarify what is confirmed, what is still pending, which records are needed, and what decisions, if any, will be discussed next. We will share more once the care team explains the plan."
+
+export const FAMILY_UPDATE_DRAFT_HELP =
+  "If you want to help, the best thing is to take one concrete task: notes during the appointment, driving, gathering records, food, insurance calls, or updating relatives after we know more."
+
+export interface FamilyExplainCardDef {
+  id: string
+  label: string
+  body: string
+}
+
+export const FAMILY_EXPLAIN_CARDS: FamilyExplainCardDef[] = [
+  {
+    id: "adult-child",
+    label: "Adult child",
+    body: "You may feel like you have to become the operator overnight. Focus on what can be confirmed, what is pending, and who can help with one concrete job.",
+  },
+  {
+    id: "spouse",
+    label: "Spouse / partner",
+    body: "Your role may be emotional support and decision support. Write questions down and make space for the patient’s preferences.",
+  },
+  {
+    id: "sibling",
+    label: "Sibling",
+    body: "The most helpful thing is not asking for constant updates. Take one job: notes, records, driving, food, or insurance.",
+  },
+  {
+    id: "distant",
+    label: "Distant relative",
+    body: "Keep updates simple. Do not pressure the family for details before facts are confirmed.",
+  },
+  {
+    id: "younger",
+    label: "Younger family member",
+    body: "The doctors are helping, and the grown-ups are making a plan. You can help by being kind and patient.",
+  },
+]
+
+export const FAMILY_HELPS_LINES: string[] = [
+  "What is one thing I can take off your plate?",
+  "Do you want me to take notes tomorrow?",
+  "I can gather records or drive.",
+  "I can update relatives after the appointment.",
+  "I’m here, and I’ll wait for confirmed information.",
+]
+
+export const FAMILY_AVOID_PRESSURE_LINES: string[] = [
+  "“I read online that…”",
+  "“You need to go to this hospital immediately.”",
+  "“Are you sure the doctors are right?”",
+  "Asking “What stage is it?” before the family knows",
+  "“Everything happens for a reason.”",
+  "Pressuring for constant updates",
+]

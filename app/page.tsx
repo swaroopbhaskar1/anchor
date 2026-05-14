@@ -12,6 +12,7 @@ import {
   Copy,
   FileText,
   HeartHandshake,
+  Users,
   Mic,
   PenLine,
   ShieldCheck,
@@ -65,12 +66,26 @@ import {
   SAMPLE_PATHOLOGY_RECORD_LINES,
   buildRecordsChecklistAdaptiveTask,
   buildRecordsQuickAdaptiveTask,
+  buildFamilySupportAdaptiveTask,
+  createDefaultFamilyCoordBoard,
+  FAMILY_AVOID_PRESSURE_LINES,
+  FAMILY_EXPLAIN_CARDS,
+  FAMILY_HELPS_LINES,
+  FAMILY_PROTO_BADGE,
+  FAMILY_SAFETY_FOOTER,
+  FAMILY_SUPPORT_ROLE_CARDS,
+  FAMILY_TAB_SUBTITLE,
+  FAMILY_UPDATE_DRAFT_CALM,
+  FAMILY_UPDATE_DRAFT_DETAIL,
+  FAMILY_UPDATE_DRAFT_HELP,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
   normalizeFollowUpChipKind,
   type AdaptivePlanTaskInitialStatus,
   type FollowUpChipId,
   type NightNoteContent,
+  type FamilyCoordBoardRow,
+  type FamilySupportRoleCardDef,
   type RecordsChecklistItemDef,
   type StoredAdaptivePlanTask,
 } from "@/lib/demo/sarah-case"
@@ -79,7 +94,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 
 type CancerType = "colon" | "breast" | "lymphoma"
 type AppPhase = "idle" | "recording" | "processing" | "results"
-type ResultWorkspaceTab = "overview" | "plan" | "ask" | "actions" | "updates" | "records" | "memory"
+type ResultWorkspaceTab = "overview" | "plan" | "ask" | "actions" | "updates" | "records" | "family" | "memory"
 
 type ResultCopyKind =
   | "note"
@@ -90,6 +105,13 @@ type ResultCopyKind =
   | "recordsSecondOpinion"
   | "recordsTransfer"
   | "recordsOnePager"
+  | "familyClip"
+
+interface CopyTimelineMeta {
+  taskTitle: string
+  badge: string
+  taskId: string
+}
 type OnboardingStep = "name" | "relationship"
 type CompanionScreen = "breathe" | "control" | "say" | "oneThing" | null
 type AuthStatus = "checking" | "auth" | "authenticated" | "guest"
@@ -178,6 +200,7 @@ interface AnchorDemoCaseV1 {
   actionGuideDemoTimeline?: ActionGuideDemoTimelineEntry[]
   activeResultTab?: ResultWorkspaceTab
   followUpResponses?: FollowUpResponseItem[]
+  familyCoordBoard?: FamilyCoordBoardRow[]
 }
 
 function isValidPlanResult(value: unknown): value is PlanResult {
@@ -229,6 +252,7 @@ function isResultWorkspaceTab(value: unknown): value is ResultWorkspaceTab {
     value === "actions" ||
     value === "updates" ||
     value === "records" ||
+    value === "family" ||
     value === "memory"
   )
 }
@@ -268,7 +292,29 @@ function isStoredAdaptivePlanTask(value: unknown): value is StoredAdaptivePlanTa
   if (o.regretQuote != null && typeof o.regretQuote !== "string") return false
   if (o.fromRecords !== undefined && typeof o.fromRecords !== "boolean") return false
   if (o.recordsChecklistId != null && typeof o.recordsChecklistId !== "string") return false
+  if (o.fromFamily !== undefined && typeof o.fromFamily !== "boolean") return false
+  if (o.familySupportRoleId != null && typeof o.familySupportRoleId !== "string") return false
   return true
+}
+
+function isFamilyCoordBoardRow(value: unknown): value is FamilyCoordBoardRow {
+  if (!value || typeof value !== "object") return false
+  const o = value as Record<string, unknown>
+  if (typeof o.id !== "string" || typeof o.title !== "string" || typeof o.done !== "boolean") return false
+  if (o.owner !== "none" && o.owner !== "sibling" && o.owner !== "family-member") return false
+  return true
+}
+
+function normalizeFamilyCoordBoard(raw: unknown): FamilyCoordBoardRow[] {
+  const defaults = createDefaultFamilyCoordBoard()
+  if (!Array.isArray(raw)) return defaults
+  const incoming = raw.filter(isFamilyCoordBoardRow)
+  const byId = new Map(incoming.map((r) => [r.id, r]))
+  return defaults.map((row) => {
+    const hit = byId.get(row.id)
+    if (!hit) return row
+    return { ...row, owner: hit.owner, done: hit.done }
+  })
 }
 
 interface FearMemory {
@@ -552,6 +598,7 @@ export default function App() {
   const [actionGuideDemoTimeline, setActionGuideDemoTimeline] = useState<ActionGuideDemoTimelineEntry[]>([])
   const [activeResultTab, setActiveResultTab] = useState<ResultWorkspaceTab>("overview")
   const [followUpResponses, setFollowUpResponses] = useState<FollowUpResponseItem[]>([])
+  const [familyCoordBoard, setFamilyCoordBoard] = useState<FamilyCoordBoardRow[]>(() => createDefaultFamilyCoordBoard())
   const [resultsTranscriptEcho, setResultsTranscriptEcho] = useState("")
 
   const {
@@ -780,6 +827,8 @@ export default function App() {
         })
         .filter((x): x is FollowUpResponseItem => x != null)
       setFollowUpResponses(followUps)
+      const famRaw = o.familyCoordBoard
+      setFamilyCoordBoard(normalizeFamilyCoordBoard(famRaw))
       const snip = o.lastTranscriptSnippet
       setResultsTranscriptEcho(typeof snip === "string" ? snip.slice(0, 500) : "")
       setOnboarded(true)
@@ -820,6 +869,7 @@ export default function App() {
         actionGuideDemoTimeline,
         activeResultTab,
         followUpResponses,
+        familyCoordBoard,
       }
       window.localStorage.setItem(ANCHOR_DEMO_CASE_KEY, JSON.stringify(payload))
     } catch {
@@ -833,6 +883,7 @@ export default function App() {
     caregiverName,
     caseInformationUpdates,
     completedPlanTaskIds,
+    familyCoordBoard,
     followUpResponses,
     hydrated,
     isBackupDemoMirror,
@@ -1163,7 +1214,12 @@ export default function App() {
     }
   }
 
-  async function copyText(kind: ResultCopyKind, value: string, timelineTitle?: string) {
+  async function copyText(
+    kind: ResultCopyKind,
+    value: string,
+    timelineTitle?: string,
+    timelineMeta?: CopyTimelineMeta,
+  ) {
     if (!value) return
 
     try {
@@ -1175,11 +1231,13 @@ export default function App() {
           typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
             ? globalThis.crypto.randomUUID()
             : `tl-${Date.now()}`
+        const badge = timelineMeta?.badge ?? "Records"
+        const taskId = timelineMeta?.taskId ?? "records-activity"
         appendActionGuideDemoTimeline({
           id,
-          taskId: "records-activity",
+          taskId,
           taskTitle: timelineTitle,
-          badge: "Records",
+          badge,
           savedAt: new Date().toISOString(),
         })
       }
@@ -1234,6 +1292,7 @@ export default function App() {
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
+    setFamilyCoordBoard(createDefaultFamilyCoordBoard())
     setActiveResultTab("overview")
     setResultsTranscriptEcho("")
     setFearTimeline([])
@@ -1269,6 +1328,7 @@ export default function App() {
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
+    setFamilyCoordBoard(createDefaultFamilyCoordBoard())
     setActiveResultTab("overview")
     setResultsTranscriptEcho("")
     setPhase("idle")
@@ -1584,6 +1644,7 @@ export default function App() {
                       copied={copied}
                       displayName={displayName}
                       error={error}
+                      familyCoordBoard={familyCoordBoard}
                       followUpResponses={followUpResponses}
                       handoffText={handoffText}
                       hoveredRegret={hoveredRegret}
@@ -1603,6 +1664,7 @@ export default function App() {
                       onStartOver={startOver}
                       planResult={planResult}
                       resultsTranscriptEcho={resultsTranscriptEcho}
+                      setFamilyCoordBoard={setFamilyCoordBoard}
                     />
                   )}
                 </AnimatePresence>
@@ -3217,7 +3279,9 @@ interface PlanBoardDisplayRow {
   source: "baseline" | "adaptive"
   fromUpdate?: boolean
   fromRecords?: boolean
+  fromFamily?: boolean
   recordsChecklistId?: string
+  familySupportRoleId?: string
   initialStatus?: AdaptivePlanTaskInitialStatus
 }
 
@@ -3250,7 +3314,9 @@ function adaptiveToDisplayRow(task: StoredAdaptivePlanTask): PlanBoardDisplayRow
     source: "adaptive",
     fromUpdate: task.fromUpdate,
     fromRecords: task.fromRecords,
+    fromFamily: task.fromFamily,
     recordsChecklistId: task.recordsChecklistId,
+    familySupportRoleId: task.familySupportRoleId,
     initialStatus: task.initialStatus,
   }
 }
@@ -3361,7 +3427,7 @@ function PlanBoardTaskRow({
   onOpenGuide: (taskId: string) => void
   row: PlanBoardDisplayRow
 }) {
-  const { detail, fromRecords, fromUpdate, id, regretQuote, title } = row
+  const { detail, fromFamily, fromRecords, fromUpdate, id, regretQuote, title } = row
   const artifact = inferTaskArtifact(row)
   const guideLabel = planRowGuideTriggerLabel(done, artifact.code)
   const borderClass = done ? "border-[#d8e8d8]/90 bg-white/50" : "border-[#e5ddd4] bg-white/70"
@@ -3400,7 +3466,12 @@ function PlanBoardTaskRow({
           Added from records
         </p>
       )}
-      {fromUpdate && !fromRecords && !done && (
+      {fromFamily && !fromRecords && !done && (
+        <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wide text-[#9b829c] sm:text-[11px]">
+          Added from family support
+        </p>
+      )}
+      {fromUpdate && !fromRecords && !fromFamily && !done && (
         <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wide text-[#9b829c] sm:text-[11px]">
           Added from new information
         </p>
@@ -3688,6 +3759,10 @@ function buildCareTimelineRows(input: {
       push(`Records · ${e.taskTitle}`, "Saved locally in this demo timeline — not sent from Anchor.", tlab)
       continue
     }
+    if (e.taskId === "family-activity") {
+      push(`Family · ${e.taskTitle}`, "Saved locally in this demo timeline — not sent from Anchor.", tlab)
+      continue
+    }
     push(`Guide me · ${e.badge}`, e.taskTitle, tlab)
   }
   if (input.completedPlanTaskIds.length) {
@@ -3836,6 +3911,7 @@ function inferCompletedTaskSourceLabel(id: string, adaptivePlanTasks: StoredAdap
   const t = adaptivePlanTasks.find((x) => x.id === id)
   if (!t) return "Plan board"
   if (t.fromRecords) return "Added from records"
+  if (t.fromFamily) return "Added from family support"
   if (t.fromUpdate) return "Added after case update"
   if (t.initialStatus === "waiting") return "Waiting-on-team track"
   return "Adaptive checklist"
@@ -3859,6 +3935,7 @@ const RESULT_WORKSPACE_TAB_DEFS: { id: ResultWorkspaceTab; label: string }[] = [
   { id: "actions", label: "Actions" },
   { id: "updates", label: "Updates" },
   { id: "records", label: "Records" },
+  { id: "family", label: "Family" },
   { id: "memory", label: "Memory" },
 ]
 
@@ -3875,6 +3952,7 @@ function ResultsView({
   copied,
   displayName,
   error,
+  familyCoordBoard,
   followUpResponses,
   handoffText,
   hoveredRegret,
@@ -3894,6 +3972,7 @@ function ResultsView({
   onStartOver,
   planResult,
   resultsTranscriptEcho,
+  setFamilyCoordBoard,
 }: {
   actionGuideDemoTimeline: ActionGuideDemoTimelineEntry[]
   activeResultTab: ResultWorkspaceTab
@@ -3907,6 +3986,7 @@ function ResultsView({
   copied: ResultCopyKind | null
   displayName: string
   error: string | null
+  familyCoordBoard: FamilyCoordBoardRow[]
   followUpResponses: FollowUpResponseItem[]
   handoffText: string
   hoveredRegret: string | null
@@ -3919,13 +3999,14 @@ function ResultsView({
   onActiveResultTabChange: (tab: ResultWorkspaceTab) => void
   onAddByVoice: () => void
   onAskFollowUpSubmit: (chipId: FollowUpChipId | null, customText: string) => CreateFollowUpResult
-  onCopy: (kind: ResultCopyKind, value: string, timelineTitle?: string) => void
+  onCopy: (kind: ResultCopyKind, value: string, timelineTitle?: string, timelineMeta?: CopyTimelineMeta) => void
   onHoverRegret: (value: string | null) => void
   onPlan: () => void
   onSarahBackupDemo: () => void
   onStartOver: () => void
   planResult: PlanResult | null
   resultsTranscriptEcho: string
+  setFamilyCoordBoard: React.Dispatch<React.SetStateAction<FamilyCoordBoardRow[]>>
 }) {
   const [guideOpenId, setGuideOpenId] = useState<string | null>(null)
   const [infoPanelOpen, setInfoPanelOpen] = useState(false)
@@ -3935,8 +4016,71 @@ function ResultsView({
   const [customFollowUpQuestion, setCustomFollowUpQuestion] = useState("")
   const [askFollowUpError, setAskFollowUpError] = useState<string | null>(null)
   const [recordsInlineNote, setRecordsInlineNote] = useState<string | null>(null)
+  const [familyInlineNote, setFamilyInlineNote] = useState<string | null>(null)
   const [pathologyQuestionsOpen, setPathologyQuestionsOpen] = useState(false)
   const pathologyBlockRef = useRef<HTMLDivElement | null>(null)
+
+  function appendFamilyActivityEntry(taskTitle: string) {
+    const id =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `tl-${Date.now()}`
+    appendActionGuideDemoTimeline({
+      id,
+      taskId: "family-activity",
+      taskTitle,
+      badge: "Family",
+      savedAt: new Date().toISOString(),
+    })
+  }
+
+  function familyRoleTaskAlreadyPresent(roleKey: string): boolean {
+    return adaptivePlanTasks.some((t) => t.familySupportRoleId === roleKey)
+  }
+
+  function handleAddFamilySupportTask(card: FamilySupportRoleCardDef) {
+    const key = `role:${card.id}`
+    if (familyRoleTaskAlreadyPresent(key)) {
+      setFamilyInlineNote("Already added")
+      window.setTimeout(() => setFamilyInlineNote(null), 3200)
+      return
+    }
+    appendAdaptivePlanTasks([buildFamilySupportAdaptiveTask(card)])
+    appendFamilyActivityEntry(`Added family task: ${card.roleTitle}`)
+  }
+
+  function patchFamilyCoordRow(id: string, patch: Partial<Pick<FamilyCoordBoardRow, "owner" | "done">>) {
+    let titleForLog = ""
+    setFamilyCoordBoard((rows) => {
+      const hit = rows.find((r) => r.id === id)
+      if (hit) titleForLog = hit.title
+      return rows.map((r) => (r.id === id ? { ...r, ...patch } : r))
+    })
+    if (!titleForLog) return
+    if ("done" in patch && patch.done) {
+      appendFamilyActivityEntry(`Family board: marked done · ${titleForLog}`)
+    } else if ("owner" in patch && patch.owner && patch.owner !== "none") {
+      appendFamilyActivityEntry(
+        `Family board: ${patch.owner === "sibling" ? "Suggested for sibling" : "Suggested for family"} · ${titleForLog}`,
+      )
+    }
+  }
+
+  const familyTimelineMeta: CopyTimelineMeta = {
+    taskTitle: "Copied from Family tab",
+    badge: "Family",
+    taskId: "family-activity",
+  }
+
+  const familyNeedsOwnerRows = useMemo(
+    () => familyCoordBoard.filter((r) => !r.done && r.owner === "none"),
+    [familyCoordBoard],
+  )
+  const familyAssignedRows = useMemo(
+    () => familyCoordBoard.filter((r) => !r.done && r.owner !== "none"),
+    [familyCoordBoard],
+  )
+  const familyDoneRows = useMemo(() => familyCoordBoard.filter((r) => r.done), [familyCoordBoard])
 
   const lovedOneLabel = useMemo(
     () => RELATIONSHIPS.find((item) => item.value === lovedOne)?.label ?? "Your person",
@@ -4963,6 +5107,248 @@ function ResultsView({
             </motion.div>
           )}
 
+          {activeResultTab === "family" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-base">Family coordination</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{FAMILY_TAB_SUBTITLE}</p>
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="inline-flex max-w-full shrink-0 items-center rounded-full border border-[#c9b8d8]/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-[#6f6280] sm:text-[11px]">
+                    {FAMILY_PROTO_BADGE}
+                  </span>
+                </div>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <div className="mb-2 flex min-w-0 items-start gap-2">
+                  <Users className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Who can help with what?</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      Add a row to your Plan board as a reminder — you choose who to ask in real life.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid min-w-0 gap-2.5">
+                  {FAMILY_SUPPORT_ROLE_CARDS.map((card) => (
+                    <div
+                      key={card.id}
+                      className="flex min-w-0 flex-col gap-2 rounded-[14px] border border-[#e8dfd8] bg-white/70 p-2.5 sm:rounded-[16px] sm:p-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="m-0 text-[12px] font-semibold text-[#3f3a36] sm:text-sm">{card.roleTitle}</p>
+                        <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{card.taskSummary}</p>
+                      </div>
+                      <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => handleAddFamilySupportTask(card)}
+                          className="inline-flex min-w-0 flex-1 items-center justify-center rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:flex-none sm:text-[11px]"
+                        >
+                          Add as task
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void onCopy("familyClip", card.askDraft, "Copied family ask draft", {
+                              taskTitle: "Copied family ask draft",
+                              badge: "Family",
+                              taskId: "family-activity",
+                            })
+                          }
+                          className={`${GLASS_BUTTON} inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-medium sm:flex-none sm:text-[11px]`}
+                        >
+                          <Copy className="h-3 w-3 shrink-0" aria-hidden />
+                          Copy ask
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Family update drafts</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Nothing is sent from Anchor — copy and edit in your own words.
+                </p>
+                <div className="mt-2.5 grid min-w-0 gap-3">
+                  {[
+                    { label: "Calm short update", body: FAMILY_UPDATE_DRAFT_CALM, slug: "Calm short update" },
+                    { label: "More detailed update", body: FAMILY_UPDATE_DRAFT_DETAIL, slug: "More detailed update" },
+                    { label: "Help request", body: FAMILY_UPDATE_DRAFT_HELP, slug: "Help request" },
+                  ].map((d) => (
+                    <div key={d.label} className="rounded-[12px] border border-[#ece4dc] bg-white/65 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#5f5a55] sm:text-xs">{d.label}</p>
+                      <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">{d.body}</p>
+                      <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void onCopy("familyClip", d.body, `Copied family draft: ${d.slug}`, {
+                              taskTitle: `Copied family draft: ${d.slug}`,
+                              badge: "Family",
+                              taskId: "family-activity",
+                            })
+                          }
+                          className={`${GLASS_BUTTON} inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium sm:text-[11px]`}
+                        >
+                          <Copy className="h-3 w-3 shrink-0" aria-hidden />
+                          Copy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => appendFamilyActivityEntry(`Saved family draft: ${d.slug}`)}
+                          className="rounded-full border border-[#8f7e9b]/40 bg-[#faf7f4]/95 px-2.5 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                        >
+                          Save to memory preview
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Explain this to…</p>
+                <div className="grid min-w-0 gap-2">
+                  {FAMILY_EXPLAIN_CARDS.map((c) => (
+                    <div key={c.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{c.label}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{c.body}</p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void onCopy("familyClip", `${c.label}\n\n${c.body}`, `Copied explain: ${c.label}`, {
+                            taskTitle: `Copied explain: ${c.label}`,
+                            badge: "Family",
+                            taskId: "family-activity",
+                          })
+                        }
+                        className={`${GLASS_BUTTON} mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium sm:text-[11px]`}
+                      >
+                        <Copy className="h-3 w-3 shrink-0" aria-hidden />
+                        Copy
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">What helps vs. what adds pressure</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Gentle framing — everyone is scared. The goal is practical support, not judgment.
+                </p>
+                <div className="mt-2 grid min-w-0 gap-3 md:grid-cols-2">
+                  <div className="min-w-0 rounded-[12px] border border-[#d8e8d8]/90 bg-[#f6faf6]/90 p-2.5 sm:p-3">
+                    <p className="m-0 text-[11px] font-semibold text-[#3d5c4f] sm:text-xs">Helpful</p>
+                    <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                      {FAMILY_HELPS_LINES.map((line) => (
+                        <li key={line} className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#7aab7f] before:content-['•']">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="min-w-0 rounded-[12px] border border-[#e8dfd8] bg-white/70 p-2.5 sm:p-3">
+                    <p className="m-0 text-[11px] font-semibold text-[#6f5a55] sm:text-xs">Often adds pressure</p>
+                    <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                      {FAMILY_AVOID_PRESSURE_LINES.map((line) => (
+                        <li key={line} className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#c9a8a8] before:content-['•']">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Family task board</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Demo-only columns — assign suggestions for your own follow-through. Persists with this local case.
+                </p>
+                <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-3">
+                  <div className="min-w-0 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:p-3">
+                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Needs owner</p>
+                    <ul className="mt-2 m-0 list-none space-y-2 p-0">
+                      {familyNeedsOwnerRows.map((r) => (
+                        <li key={r.id} className="rounded-[10px] border border-[#ece4dc] bg-[#faf7f4]/90 p-2">
+                          <p className="m-0 text-[11px] font-medium text-[#3f3a36] sm:text-xs">{r.title}</p>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            <button
+                              type="button"
+                              onClick={() => patchFamilyCoordRow(r.id, { owner: "sibling" })}
+                              className="rounded-full border border-[#8f7e9b]/40 bg-white/90 px-2 py-0.5 text-[9px] font-medium text-[#5c4a62] sm:text-[10px]"
+                            >
+                              Assign to sibling
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => patchFamilyCoordRow(r.id, { owner: "family-member" })}
+                              className="rounded-full border border-[#8f7e9b]/40 bg-white/90 px-2 py-0.5 text-[9px] font-medium text-[#5c4a62] sm:text-[10px]"
+                            >
+                              Assign to family member
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="min-w-0 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:p-3">
+                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Assigned / suggested</p>
+                    <ul className="mt-2 m-0 list-none space-y-2 p-0">
+                      {familyAssignedRows.map((r) => (
+                        <li key={r.id} className="rounded-[10px] border border-[#ece4dc] bg-[#faf7f4]/90 p-2">
+                          <p className="m-0 text-[11px] font-medium text-[#3f3a36] sm:text-xs">{r.title}</p>
+                          <p className="mt-0.5 m-0 text-[10px] text-[#9b829c] sm:text-[11px]">
+                            {r.owner === "sibling" ? "Suggested · sibling" : "Suggested · family member"}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => patchFamilyCoordRow(r.id, { done: true, owner: "none" })}
+                            className="mt-1.5 rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-2 py-0.5 text-[9px] font-medium text-[#5c4a62] sm:text-[10px]"
+                          >
+                            Mark done
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="min-w-0 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:p-3">
+                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Done</p>
+                    <ul className="mt-2 m-0 list-none space-y-1.5 p-0">
+                      {familyDoneRows.map((r) => (
+                        <li key={r.id} className="text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                          <span className="text-[#7aab7f]">✓ </span>
+                          {r.title}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[14px] border border-[#e5ddd4] bg-[#faf7f4]/90 px-3 py-2.5 text-[10px] leading-snug text-[#5f5a55] sm:rounded-[16px] sm:px-3.5 sm:py-3 sm:text-[11px] sm:leading-relaxed">
+                <p className="m-0 font-semibold text-[#3f3a36]">Boundaries</p>
+                <p className="mt-1 m-0">{FAMILY_SAFETY_FOOTER}</p>
+                <p className="mt-1.5 m-0 text-[#756f68]">To erase this demo memory, use Start over in the header above.</p>
+              </div>
+
+              {copied === "familyClip" && (
+                <p className="m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
+                  Copied. Anchor did not send anything.
+                </p>
+              )}
+              {familyInlineNote && (
+                <p className="m-0 text-center text-[11px] text-[#8b6914] sm:text-xs" role="status">
+                  {familyInlineNote}
+                </p>
+              )}
+            </motion.div>
+          )}
+
           {activeResultTab === "memory" && (
             <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
               <div className="min-w-0 max-w-full">
@@ -5100,6 +5486,40 @@ function ResultsView({
                     ))}
                   </ul>
                 )}
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                  Family coordination (demo)
+                </p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Local task board from the Family tab — not sent to anyone. Open the Family tab to assign jobs or copy drafts.
+                </p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Needs owner · </span>
+                    {familyNeedsOwnerRows.length
+                      ? familyNeedsOwnerRows.map((r) => r.title).join(" · ")
+                      : "All rows have an assignee or are done."}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Assigned · </span>
+                    {familyAssignedRows.length
+                      ? familyAssignedRows.map((r) => `${r.title} (${r.owner === "sibling" ? "sibling" : "family"})`).join(" · ")
+                      : "None yet."}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Done · </span>
+                    {familyDoneRows.length ? familyDoneRows.map((r) => r.title).join(" · ") : "None yet."}
+                  </li>
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => onActiveResultTabChange("family")}
+                  className="mt-2 rounded-full border border-[#b98da0]/50 bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                >
+                  Open Family tab
+                </button>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
