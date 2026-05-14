@@ -38,6 +38,14 @@ import {
   SARAH_DEMO_MIRROR_RESULT,
   SARAH_DEMO_ORIENTATION_LINES,
   SARAH_FALLBACK_PLAN_RESULT,
+  MEMORY_ANCHOR_ORGANIZED_LINE,
+  MEMORY_CARE_TIMELINE_INTRO,
+  MEMORY_EMPTY_QUESTIONS_ASKED,
+  MEMORY_EMPTY_CASE_UPDATES,
+  MEMORY_EMPTY_TASKS_DONE,
+  MEMORY_EMPTY_TIMELINE_ARTIFACTS,
+  MEMORY_PROTO_BADGE,
+  MEMORY_SUBTITLE_LINES,
   SARAH_KNOW_NOW_BULLETS,
   SARAH_NEEDS_CONFIRMATION_BULLETS,
   SARAH_NOT_TONIGHT_BULLETS,
@@ -495,7 +503,7 @@ export default function App() {
   const [pathologyText, setPathologyText] = useState("")
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "done" | "error">("idle")
   const [uploadLabel, setUploadLabel] = useState("")
-  const [copied, setCopied] = useState<"note" | "handoff" | "followup" | null>(null)
+  const [copied, setCopied] = useState<"note" | "handoff" | "followup" | "appointment" | null>(null)
   const [showExampleOutput, setShowExampleOutput] = useState(false)
   const [isBackupDemoMirror, setIsBackupDemoMirror] = useState(false)
   const [fearTimeline, setFearTimeline] = useState<FearMemory[]>([])
@@ -1128,7 +1136,7 @@ export default function App() {
     }
   }
 
-  async function copyText(kind: "note" | "handoff" | "followup", value: string) {
+  async function copyText(kind: "note" | "handoff" | "followup" | "appointment", value: string) {
     if (!value) return
 
     try {
@@ -3520,6 +3528,236 @@ function formatDemoTimelineLabel(iso: string): string {
   }
 }
 
+function computeAdaptiveBoardCounts(
+  adaptivePlanTasks: StoredAdaptivePlanTask[],
+  completedPlanTaskIds: string[],
+  planResult: PlanResult | null,
+): { active: number; waiting: number; changed: number; done: number } {
+  const doneSet = new Set(completedPlanTaskIds)
+  const baselineRows = planResult ? baselineRowsFromPlan(planResult) : []
+  let activeBaseline = 0
+  let doneBaseline = 0
+  for (const row of baselineRows) {
+    if (doneSet.has(row.id)) doneBaseline += 1
+    else activeBaseline += 1
+  }
+  const part = partitionAdaptiveRows(adaptivePlanTasks, (id) => doneSet.has(id))
+  return {
+    active: part.urgent.length + part.otherActive.length + activeBaseline,
+    waiting: part.waiting.length,
+    changed: part.changed.length,
+    done: doneBaseline + part.doneAdaptive.length,
+  }
+}
+
+function formatAdaptiveBoardCountsLine(c: { active: number; waiting: number; changed: number; done: number }): string {
+  return `${c.active} active · ${c.waiting} waiting · ${c.done} done · ${c.changed} changed`
+}
+
+function mergeNeedsConfirmationForMemory(base: string[], updates: DemoCaseUpdate[]): string[] {
+  const out = [...base]
+  const seen = new Set(base.map((s) => s.trim().toLowerCase()))
+  for (const u of updates) {
+    const chunk = u.needsConfirmation.trim()
+    if (!chunk) continue
+    const sig = chunk.toLowerCase()
+    if (seen.has(sig)) continue
+    seen.add(sig)
+    out.push(`From “${u.sourceLabel}”: ${chunk}`)
+  }
+  return out
+}
+
+function buildMemoryLastUpdatedLine(
+  followUpResponses: FollowUpResponseItem[],
+  actionGuideDemoTimeline: ActionGuideDemoTimelineEntry[],
+): string {
+  const times: number[] = []
+  for (const f of followUpResponses) {
+    const ms = Date.parse(f.timestamp)
+    if (!Number.isNaN(ms)) times.push(ms)
+  }
+  for (const e of actionGuideDemoTimeline) {
+    const ms = Date.parse(e.savedAt)
+    if (!Number.isNaN(ms)) times.push(ms)
+  }
+  if (!times.length) return "This session"
+  const latest = Math.max(...times)
+  try {
+    return new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(latest))
+  } catch {
+    return "This session"
+  }
+}
+
+interface CareTimelineRow {
+  id: string
+  title: string
+  description: string
+  timeLabel: string
+}
+
+function buildCareTimelineRows(input: {
+  voiceConcernLine: string
+  planResult: PlanResult | null
+  caseInformationUpdates: DemoCaseUpdate[]
+  followUpResponses: FollowUpResponseItem[]
+  actionGuideDemoTimeline: ActionGuideDemoTimelineEntry[]
+  completedPlanTaskIds: string[]
+  completedTitlesSample: string[]
+}): CareTimelineRow[] {
+  const rows: CareTimelineRow[] = []
+  let seq = 0
+  const push = (title: string, description: string, timeLabel: string) => {
+    seq += 1
+    rows.push({ id: `tl-${seq}`, title, description, timeLabel })
+  }
+  const concern = input.voiceConcernLine.trim() || "No voice/text concern captured yet."
+  push("Original concern (voice/text)", concern.length > 180 ? `${concern.slice(0, 180)}…` : concern, "Demo session")
+  if (input.planResult) {
+    push("72-hour plan generated", "Checklist created from this case snapshot.", "Demo session")
+  }
+  for (const u of input.caseInformationUpdates) {
+    const d = u.newInformation.trim()
+    push(`Case update · ${u.sourceLabel}`, d.length > 160 ? `${d.slice(0, 160)}…` : d || "Update recorded.", "Demo session")
+  }
+  const fuAscending = [...input.followUpResponses].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+  for (const f of fuAscending) {
+    const tlab = Number.isNaN(Date.parse(f.timestamp)) ? "Demo session" : formatDemoTimelineLabel(f.timestamp)
+    push(`Ask · ${f.questionLabel}`, f.title, tlab)
+  }
+  const tlAscending = [...input.actionGuideDemoTimeline].sort((a, b) => Date.parse(a.savedAt) - Date.parse(b.savedAt))
+  for (const e of tlAscending) {
+    push(`Guide me · ${e.badge}`, e.taskTitle, formatDemoTimelineLabel(e.savedAt))
+  }
+  if (input.completedPlanTaskIds.length) {
+    const tail = input.completedTitlesSample.slice(0, 3).join("; ")
+    push(
+      `${input.completedPlanTaskIds.length} checklist item(s) marked done`,
+      tail ? `Includes: ${tail}.` : "Completed in this demo session.",
+      "Demo session",
+    )
+  }
+  return rows
+}
+
+function buildAppointmentHandoffBlocks(input: {
+  careTeamConfirmsLine: string
+  concernLine: string
+  knowFacts: string[]
+  stillConfirm: string[]
+  topQuestions: { label: string; title: string }[]
+  activeSteps: string[]
+  recordsLine: string
+  whoGoingLine: string
+}): string {
+  const qs = input.topQuestions.map((q, i) => `${i + 1}. [${q.label}] ${q.title}`).join("\n")
+  const facts = input.knowFacts.map((l, i) => `${i + 1}. ${l}`).join("\n")
+  const conf = input.stillConfirm.map((l, i) => `${i + 1}. ${l}`).join("\n")
+  const steps = input.activeSteps.length ? input.activeSteps.map((l, i) => `${i + 1}. ${l}`).join("\n") : "(none listed yet)"
+  return [
+    "ANCHOR — APPOINTMENT HANDOFF (LOCAL DEMO CLIPBOARD)",
+    "Orientation prep only. Your care team confirms decisions. Not diagnosis or treatment recommendation.",
+    "",
+    input.careTeamConfirmsLine,
+    "",
+    "CONCERN (AS CAPTURED)",
+    input.concernLine,
+    "",
+    "KNOWN FACTS (ANCHOR SUMMARY — VERIFY WITH TEAM)",
+    facts || "(none yet)",
+    "",
+    "STILL NEEDS CONFIRMATION",
+    conf || "(none listed yet)",
+    "",
+    "TOP QUESTIONS YOU ASKED IN ASK",
+    qs || "(none yet)",
+    "",
+    "ACTIVE NEXT STEPS (FROM PLAN BOARD)",
+    steps,
+    "",
+    "RECORDS TO BRING / HAVE READY",
+    input.recordsLine,
+    "",
+    "WHO IS GOING / ON THE CALL",
+    input.whoGoingLine,
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+function resolvedVoiceConcernForMemory(
+  resultsTranscriptEcho: string,
+  isBackupDemoMirror: boolean,
+  mirrorResult: MirrorResult,
+): string {
+  const echo = resultsTranscriptEcho.trim()
+  if (echo) return echo
+  const sarah =
+    isBackupDemoMirror ||
+    mirrorResult.fearQuote.trim() === SARAH_DEMO_CONCERN.trim() ||
+    mirrorResult.mirror === SARAH_DEMO_MIRROR_RESULT.mirror
+  if (sarah) return SARAH_DEMO_CONCERN
+  return ""
+}
+
+function collectActiveNextStepTitles(
+  adaptivePlanTasks: StoredAdaptivePlanTask[],
+  completedPlanTaskIds: string[],
+  planResult: PlanResult | null,
+  limit = 8,
+): string[] {
+  const doneSet = new Set(completedPlanTaskIds)
+  const baselineRows = planResult ? baselineRowsFromPlan(planResult) : []
+  const activeBaseline: PlanBoardDisplayRow[] = []
+  for (const row of baselineRows) {
+    if (!doneSet.has(row.id)) activeBaseline.push(row)
+  }
+  const part = partitionAdaptiveRows(adaptivePlanTasks, (id) => doneSet.has(id))
+  const pool = [...part.urgent, ...part.otherActive, ...activeBaseline]
+  return pool.map((r) => r.title).slice(0, limit)
+}
+
+function titleForCompletedTaskId(
+  id: string,
+  adaptivePlanTasks: StoredAdaptivePlanTask[],
+  planResult: PlanResult | null,
+): string {
+  const fromAdaptive = adaptivePlanTasks.find((t) => t.id === id)
+  if (fromAdaptive) return fromAdaptive.title
+  if (planResult) {
+    const baseline = baselineRowsFromPlan(planResult).find((r) => r.id === id)
+    if (baseline) return baseline.title
+  }
+  return id
+}
+
+function inferCompletedTaskSourceLabel(id: string, adaptivePlanTasks: StoredAdaptivePlanTask[]): string {
+  if (id.startsWith("base:")) return "Baseline plan"
+  const t = adaptivePlanTasks.find((x) => x.id === id)
+  if (!t) return "Plan board"
+  if (t.fromUpdate) return "Added after case update"
+  if (t.initialStatus === "waiting") return "Waiting-on-team track"
+  return "Adaptive checklist"
+}
+
+function pickRecordsLineFromPacket(careTeamBullets: string[]): string {
+  const hit = careTeamBullets.find((b) => /bring|records|portal|medicat/i.test(b))
+  return hit ?? careTeamBullets.slice(0, 3).join(" ")
+}
+
+function pickWhoGoingLine(nightNote: NightNoteContent, lovedOneLabel: string): string {
+  const tiny = nightNote.tinyActions.find((t) => /who|join|going|call/i.test(t))
+  if (tiny) return tiny
+  return `Confirm who will attend with ${lovedOneLabel} and who will take notes.`
+}
+
 const RESULT_WORKSPACE_TAB_DEFS: { id: ResultWorkspaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "plan", label: "Plan" },
@@ -3571,7 +3809,7 @@ function ResultsView({
   cancerType: CancerType
   caseInformationUpdates: DemoCaseUpdate[]
   completedPlanTaskIds: string[]
-  copied: "note" | "handoff" | "followup" | null
+  copied: "note" | "handoff" | "followup" | "appointment" | null
   displayName: string
   error: string | null
   followUpResponses: FollowUpResponseItem[]
@@ -3586,7 +3824,7 @@ function ResultsView({
   onActiveResultTabChange: (tab: ResultWorkspaceTab) => void
   onAddByVoice: () => void
   onAskFollowUpSubmit: (chipId: FollowUpChipId | null, customText: string) => CreateFollowUpResult
-  onCopy: (kind: "note" | "handoff" | "followup", value: string) => void
+  onCopy: (kind: "note" | "handoff" | "followup" | "appointment", value: string) => void
   onHoverRegret: (value: string | null) => void
   onPlan: () => void
   onSarahBackupDemo: () => void
@@ -3635,6 +3873,96 @@ function ResultsView({
     }
     return titles
   }, [adaptivePlanTasks, completedPlanTaskIds, planResult])
+
+  const isSarahVoiceCase = useMemo(
+    () =>
+      isBackupDemoMirror ||
+      mirrorResult.fearQuote.trim() === SARAH_DEMO_CONCERN.trim() ||
+      mirrorResult.mirror === SARAH_DEMO_MIRROR_RESULT.mirror,
+    [isBackupDemoMirror, mirrorResult.fearQuote, mirrorResult.mirror],
+  )
+
+  const caregiverCardName = useMemo(() => {
+    if (displayName !== "there") return displayName
+    if (isSarahVoiceCase) return "Sarah (demo)"
+    return "Not added yet"
+  }, [displayName, isSarahVoiceCase])
+
+  const voiceConcernResolved = useMemo(
+    () => resolvedVoiceConcernForMemory(resultsTranscriptEcho, isBackupDemoMirror, mirrorResult),
+    [isBackupDemoMirror, mirrorResult, resultsTranscriptEcho],
+  )
+
+  const boardCounts = useMemo(
+    () => computeAdaptiveBoardCounts(adaptivePlanTasks, completedPlanTaskIds, planResult),
+    [adaptivePlanTasks, completedPlanTaskIds, planResult],
+  )
+
+  const boardCountsLine = useMemo(() => formatAdaptiveBoardCountsLine(boardCounts), [boardCounts])
+
+  const mergedNeedsConfirmation = useMemo(
+    () => mergeNeedsConfirmationForMemory(packet.needsConfirmation, caseInformationUpdates),
+    [caseInformationUpdates, packet.needsConfirmation],
+  )
+
+  const memoryLastUpdated = useMemo(
+    () => buildMemoryLastUpdatedLine(followUpResponses, actionGuideDemoTimeline),
+    [actionGuideDemoTimeline, followUpResponses],
+  )
+
+  const careTimelineRows = useMemo(
+    () =>
+      buildCareTimelineRows({
+        voiceConcernLine: voiceConcernResolved,
+        planResult,
+        caseInformationUpdates,
+        followUpResponses,
+        actionGuideDemoTimeline,
+        completedPlanTaskIds,
+        completedTitlesSample: completedTaskTitles,
+      }),
+    [
+      actionGuideDemoTimeline,
+      caseInformationUpdates,
+      completedPlanTaskIds,
+      completedTaskTitles,
+      followUpResponses,
+      planResult,
+      voiceConcernResolved,
+    ],
+  )
+
+  const appointmentHandoffText = useMemo(() => {
+    const concern =
+      voiceConcernResolved.trim() ||
+      mirrorResult.fearQuote.trim() ||
+      "No voice/text concern captured yet."
+    const topQ = followUpResponses.slice(0, 3).map((r) => ({ label: r.questionLabel, title: r.title }))
+    const steps = collectActiveNextStepTitles(adaptivePlanTasks, completedPlanTaskIds, planResult)
+    return buildAppointmentHandoffBlocks({
+      careTeamConfirmsLine:
+        "Your oncology team confirms what is true for your situation. Anchor only organizes questions and next steps for this local demo.",
+      concernLine: concern,
+      knowFacts: packet.knowNow,
+      stillConfirm: mergedNeedsConfirmation,
+      topQuestions: topQ,
+      activeSteps: steps,
+      recordsLine: pickRecordsLineFromPacket(packet.careTeamBullets),
+      whoGoingLine: pickWhoGoingLine(packet.nightNote, lovedOneLabel),
+    })
+  }, [
+    adaptivePlanTasks,
+    completedPlanTaskIds,
+    followUpResponses,
+    lovedOneLabel,
+    mergedNeedsConfirmation,
+    mirrorResult.fearQuote,
+    packet.careTeamBullets,
+    packet.knowNow,
+    packet.nightNote,
+    planResult,
+    voiceConcernResolved,
+  ])
 
   function newDemoUpdateId() {
     return typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
@@ -4184,112 +4512,283 @@ function ResultsView({
           )}
 
           {activeResultTab === "memory" && (
-            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
-              <div>
-                <p className="m-0 text-[13px] font-semibold text-[#3f3a36] sm:text-base">Prototype memory preview</p>
-                <p className="mt-1 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  Stored locally for this demo. Start over clears this demo case. This is not HIPAA-grade or production memory.
+            <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
+              <div className="min-w-0 max-w-full">
+                <p className="m-0 text-[13px] font-semibold leading-snug text-[#3f3a35] sm:text-base">Case memory preview</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">
+                  {MEMORY_SUBTITLE_LINES[0]} {MEMORY_SUBTITLE_LINES[1]} Prototype memory preview · stored locally for this demo.
+                </p>
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="inline-flex max-w-full shrink-0 items-center rounded-full border border-[#c9b8d8]/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-[#6f6280] sm:text-[11px]">
+                    {MEMORY_PROTO_BADGE}
+                  </span>
+                </div>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{MEMORY_ANCHOR_ORGANIZED_LINE}</p>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Case snapshot</p>
+                <ul className="m-0 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Caregiver · </span>
+                    {caregiverCardName}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Relationship · </span>
+                    {lovedOneLabel}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Cancer context · </span>
+                    {cancerType ? `${titleCase(cancerType)} cancer` : "Not added yet"}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Mode · </span>
+                    {isBackupDemoMirror ? "Backup demo mirror" : "Demo"}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">72-hour plan · </span>
+                    {planResult ? "Generated for this case snapshot." : "Not generated yet — use the Plan tab."}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Last updated · </span>
+                    {memoryLastUpdated}
+                  </li>
+                </ul>
+                <p className="mt-2 border-t border-[#ece4dc] pt-2 text-[10px] leading-snug text-[#756f68] sm:text-[11px] sm:leading-relaxed">
+                  Your care team confirms what is true for your situation. This card is a local demo summary only — not a
+                  diagnosis, staging statement, or treatment plan.
                 </p>
               </div>
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Questions asked</p>
-                {followUpResponses.length === 0 ? (
-                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">
-                    No follow-up answers yet — use the Ask tab on this case.
-                  </p>
-                ) : (
-                  <ul className="m-0 list-none space-y-2 p-0">
-                    {followUpResponses.slice(0, 8).map((item) => (
-                      <li key={item.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2 sm:p-2.5">
-                        <p className="m-0 text-[10px] font-medium text-[#9b829c] sm:text-[11px]">{item.questionLabel}</p>
-                        <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">
-                          {item.answer.slice(0, 180)}
-                          {item.answer.length > 180 ? "…" : ""}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Voice/text detail</p>
+                <p className="m-0 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-[#3f3a35] sm:text-sm">
+                  {voiceConcernResolved.trim() || "No voice/text concern captured yet."}
+                </p>
               </div>
-              <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="Known facts (demo)">
+
+              <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="Known facts (careful summary)">
+                <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  What Anchor can reflect from this session — de-identified where this is a sample walkthrough. Verify every
+                  clinical detail with your care team.
+                </p>
                 <ResultBulletList items={packet.knowNow} />
               </ResultPacketCard>
+
               <ResultPacketCard icon={<Clipboard className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="Still needs confirmation">
-                <ResultBulletList items={packet.needsConfirmation} />
+                <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Includes implications noted when you added case updates — your clinicians still decide what applies.
+                </p>
+                <ResultBulletList items={mergedNeedsConfirmation} />
               </ResultPacketCard>
-              <ResultPacketCard icon={<HeartHandshake className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What Anchor heard (mirror)">
-                <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{mirrorResult.mirror}</p>
-              </ResultPacketCard>
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">New information added</p>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">New information added</p>
                 {caseInformationUpdates.length === 0 ? (
-                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">No structured updates yet — use the Updates tab.</p>
+                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">{MEMORY_EMPTY_CASE_UPDATES}</p>
                 ) : (
-                  <ul className="m-0 list-none space-y-2 p-0">
-                    {caseInformationUpdates.map((u) => (
-                      <li key={u.id} className="text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                        <span className="font-medium text-[#5f5a55]">{u.sourceLabel}: </span>
-                        {u.newInformation.slice(0, 220)}
-                        {u.newInformation.length > 220 ? "…" : ""}
+                  <ul className="m-0 grid list-none gap-2.5 p-0">
+                    {[...caseInformationUpdates].reverse().map((u) => (
+                      <li key={u.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:rounded-[14px] sm:p-3">
+                        <p className="m-0 text-[10px] font-medium text-[#9b829c] sm:text-[11px]">{u.sourceLabel}</p>
+                        <ul className="mt-1.5 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">New · </span>
+                            {u.newInformation}
+                          </li>
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">May affect · </span>
+                            {u.mayAffect}
+                          </li>
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">Still confirm · </span>
+                            {u.needsConfirmation}
+                          </li>
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">Ask next · </span>
+                            {u.askNext}
+                          </li>
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">Revised step · </span>
+                            {u.revisedStep}
+                          </li>
+                        </ul>
                       </li>
                     ))}
                   </ul>
                 )}
               </div>
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Tasks completed</p>
-                <p className="m-0 text-[12px] text-[#3f3a36] sm:text-sm">
-                  {completedPlanTaskIds.length} marked done in this demo session.
-                </p>
-                {completedTaskTitles.length > 0 && (
-                  <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">
-                    {completedTaskTitles.slice(0, 10).map((t, i) => (
-                      <li key={`${i}-${t.slice(0, 24)}`}>· {t}</li>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Questions asked</p>
+                {followUpResponses.length === 0 ? (
+                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">{MEMORY_EMPTY_QUESTIONS_ASKED}</p>
+                ) : (
+                  <ul className="m-0 grid list-none gap-2 p-0">
+                    {followUpResponses.map((item) => (
+                      <li
+                        key={item.id}
+                        className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:flex-row sm:items-start sm:justify-between sm:rounded-[14px] sm:p-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <span className="inline-flex max-w-full rounded-full border border-[#cbc4be] bg-[#faf7f4] px-2 py-0.5 text-[10px] font-medium text-[#3f3a35] sm:text-[11px]">
+                            {item.questionLabel}
+                          </span>
+                          <p className="mt-1.5 m-0 text-[12px] font-semibold leading-snug text-[#3f3a35] sm:text-sm">{item.title}</p>
+                          <p className="mt-1 m-0 text-[10px] text-[#9b829c] sm:text-[11px]">{formatDemoTimelineLabel(item.timestamp)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onActiveResultTabChange("ask")}
+                          className="shrink-0 self-start rounded-full border border-[#b98da0]/50 bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                        >
+                          View in Ask
+                        </button>
+                      </li>
                     ))}
                   </ul>
                 )}
               </div>
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Guide me saves (demo timeline)</p>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Tasks completed</p>
+                {completedPlanTaskIds.length === 0 ? (
+                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">{MEMORY_EMPTY_TASKS_DONE}</p>
+                ) : (
+                  <ul className="m-0 list-none space-y-2 p-0">
+                    {completedPlanTaskIds.map((id) => (
+                      <li key={id} className="text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                        <span className="font-medium text-[#5f5a55]">{inferCompletedTaskSourceLabel(id, adaptivePlanTasks)} · </span>
+                        {titleForCompletedTaskId(id, adaptivePlanTasks, planResult)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Plan changes (adaptive board)</p>
+                <p className="m-0 text-[12px] font-medium leading-snug text-[#3f3a36] sm:text-sm">{boardCountsLine}</p>
+                <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Counts follow the same buckets as the Plan tab (active includes urgent + active next steps). Generate the plan
+                  when you are ready for the full checklist.
+                </p>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Scripts and artifacts</p>
                 {actionGuideDemoTimeline.length === 0 ? (
-                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">
-                    Nothing saved yet — open Guide me on a task and tap &quot;Save to case timeline (demo)&quot;.
-                  </p>
+                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">{MEMORY_EMPTY_TIMELINE_ARTIFACTS}</p>
                 ) : (
                   <ul className="m-0 list-none space-y-2 p-0">
                     {actionGuideDemoTimeline.map((e) => (
-                      <li key={e.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2 sm:p-2.5">
-                        <p className="m-0 text-[10px] font-medium text-[#9b829c] sm:text-[11px]">
-                          {formatDemoTimelineLabel(e.savedAt)} · {e.badge}
+                      <li key={e.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:rounded-[14px] sm:p-3">
+                        <p className="m-0 text-[10px] font-medium uppercase tracking-wide text-[#9b829c] sm:text-[11px]">
+                          {e.badge} · {formatDemoTimelineLabel(e.savedAt)}
                         </p>
-                        <p className="mt-1 m-0 text-[12px] font-medium leading-snug text-[#3f3a36] sm:text-sm">{e.taskTitle}</p>
+                        <p className="mt-1 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{e.taskTitle}</p>
                       </li>
                     ))}
                   </ul>
                 )}
               </div>
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Plan status</p>
-                <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                  {planResult ? "72-hour plan generated for this demo case." : "72-hour plan not generated yet — use the Plan tab when you are ready."}
-                </p>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <div className="mb-2 flex min-w-0 items-start gap-2">
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Care timeline</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{MEMORY_CARE_TIMELINE_INTRO}</p>
+                  </div>
+                </div>
+                <div className="grid max-w-full gap-3">
+                  {careTimelineRows.map((row, idx) => (
+                    <div key={row.id} className="flex min-w-0 max-w-full gap-3">
+                      <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#b98da0]/90" aria-hidden />
+                      <div
+                        className={`min-w-0 flex-1 pb-3 ${idx < careTimelineRows.length - 1 ? "border-b border-[#ece4dc]/90" : ""}`}
+                      >
+                        <p className="m-0 text-[12px] font-semibold leading-snug text-[#3f3a36] sm:text-sm">{row.title}</p>
+                        <p className="mt-0.5 m-0 break-words text-[11px] leading-snug text-[#756f68] sm:text-xs">{row.description}</p>
+                        <p className="mt-1 m-0 text-[10px] text-[#9b829c] sm:text-[11px]">{row.timeLabel}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Last voice / text detail (demo)</p>
-                <p className="m-0 text-[12px] leading-snug text-[#3f3a35] sm:text-sm">
-                  {(() => {
-                    const echo = resultsTranscriptEcho.trim()
-                    if (echo) return echo
-                    if (isBackupDemoMirror || mirrorResult.fearQuote.trim() === SARAH_DEMO_CONCERN.trim()) {
-                      return SARAH_DEMO_CONCERN
-                    }
-                    return "Nothing captured yet in this browser session."
-                  })()}
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Appointment handoff</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Compact bullets you can paste for a family member or clinic admin — not sent by Anchor. Your care team still
+                  confirms decisions. Not diagnosis or treatment recommendation language.
                 </p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Concern · </span>
+                    {(() => {
+                      const c = voiceConcernResolved.trim() || "Not captured yet"
+                      return c.length > 160 ? `${c.slice(0, 160)}…` : c
+                    })()}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Known facts · </span>
+                    {(() => {
+                      const k = packet.knowNow[0] ?? "—"
+                      return k.length > 140 ? `${k.slice(0, 140)}…` : k
+                    })()}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Still confirm · </span>
+                    {(() => {
+                      const s = mergedNeedsConfirmation[0] ?? "—"
+                      return s.length > 140 ? `${s.slice(0, 140)}…` : s
+                    })()}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Top questions · </span>
+                    {followUpResponses.length
+                      ? followUpResponses
+                          .slice(0, 3)
+                          .map((r) => r.title)
+                          .join(" · ")
+                      : "None yet"}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Active next steps · </span>
+                    {collectActiveNextStepTitles(adaptivePlanTasks, completedPlanTaskIds, planResult, 4).join(" · ") || "Generate the plan when ready."}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Records to bring · </span>
+                    {pickRecordsLineFromPacket(packet.careTeamBullets)}
+                  </li>
+                  <li>
+                    <span className="font-medium text-[#5f5a55]">Who is going · </span>
+                    {pickWhoGoingLine(packet.nightNote, lovedOneLabel)}
+                  </li>
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => void onCopy("appointment", appointmentHandoffText)}
+                  className={`${GLASS_BUTTON} mt-3 flex w-full items-center justify-center gap-2 rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:rounded-[18px] sm:text-sm`}
+                >
+                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c] sm:h-4 sm:w-4" />
+                  Copy appointment handoff
+                </button>
+                {copied === "appointment" && (
+                  <p className="mt-2 m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
+                    Copied. Anchor did not send anything.
+                  </p>
+                )}
               </div>
+
+              <ResultPacketCard icon={<HeartHandshake className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What Anchor heard (mirror)">
+                <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{mirrorResult.mirror}</p>
+              </ResultPacketCard>
+
               <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                Deleting this case or tapping Start over clears local demo data in this browser. Nothing here is a medical record
-                or a substitute for your care team.
+                Start over (above) clears this local demo case in your browser. Nothing here is HIPAA-grade storage, a medical
+                record, or a substitute for your care team.
               </p>
             </motion.div>
           )}

@@ -9,6 +9,32 @@ export interface SarahMirrorResult {
 export const SARAH_DEMO_CONCERN =
   "I feel like I'm missing everything. My mom may have stage III colon cancer, and I don't even know what questions to ask tomorrow."
 
+/** Memory tab (Prompt 6) — prototype disclaimer copy. */
+export const MEMORY_PROTO_BADGE = "Prototype memory · local only"
+
+export const MEMORY_ANCHOR_ORGANIZED_LINE =
+  "Anchor keeps the case organized so the caregiver does not restart from zero."
+
+export const MEMORY_SUBTITLE_LINES = [
+  "Stored locally for this demo. Start over clears this demo case.",
+  "Not HIPAA-grade or production memory.",
+] as const
+
+export const MEMORY_EMPTY_QUESTIONS_ASKED =
+  "No Ask tab entries yet — open Ask to capture brief prep frames for your care team."
+
+export const MEMORY_EMPTY_CASE_UPDATES =
+  "No structured updates yet — open Updates to add a detail; Anchor will reflect it on the plan board."
+
+export const MEMORY_EMPTY_TASKS_DONE =
+  "No checklist items marked done yet — use the Plan tab when you are ready."
+
+export const MEMORY_EMPTY_TIMELINE_ARTIFACTS =
+  "Nothing saved from Guide me yet — open a task in Plan and tap Guide me, then save to the demo timeline if you want a record here."
+
+export const MEMORY_CARE_TIMELINE_INTRO =
+  "A lightweight story of what happened in this browser session — not a medical record."
+
 /** Intro paragraph for the NCCN-aware care preparation card (all result paths). */
 export const CARE_TEAM_ALIGNED_INTRO =
   "Anchor organizes this around common oncology guideline workflows: confirming what is known, identifying what is pending, preparing questions, and helping you bring the right records to your care team. This is preparation for your care team, not a diagnosis or treatment recommendation."
