@@ -53,6 +53,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 
 type CancerType = "colon" | "breast" | "lymphoma"
 type AppPhase = "idle" | "recording" | "processing" | "results"
+type ResultWorkspaceTab = "overview" | "plan" | "actions" | "updates" | "memory"
 type OnboardingStep = "name" | "relationship"
 type CompanionScreen = "breathe" | "control" | "say" | "oneThing" | null
 type AuthStatus = "checking" | "auth" | "authenticated" | "guest"
@@ -123,6 +124,7 @@ interface AnchorDemoCaseV1 {
   completedPlanTaskIds: string[]
   adaptivePlanTasks: StoredAdaptivePlanTask[]
   actionGuideDemoTimeline?: ActionGuideDemoTimelineEntry[]
+  activeResultTab?: ResultWorkspaceTab
 }
 
 function isValidPlanResult(value: unknown): value is PlanResult {
@@ -163,6 +165,16 @@ function isActionGuideDemoTimelineEntry(value: unknown): value is ActionGuideDem
     typeof o.taskTitle === "string" &&
     typeof o.badge === "string" &&
     typeof o.savedAt === "string"
+  )
+}
+
+function isResultWorkspaceTab(value: unknown): value is ResultWorkspaceTab {
+  return (
+    value === "overview" ||
+    value === "plan" ||
+    value === "actions" ||
+    value === "updates" ||
+    value === "memory"
   )
 }
 
@@ -455,6 +467,8 @@ export default function App() {
   const [completedPlanTaskIds, setCompletedPlanTaskIds] = useState<string[]>([])
   const [adaptivePlanTasks, setAdaptivePlanTasks] = useState<StoredAdaptivePlanTask[]>([])
   const [actionGuideDemoTimeline, setActionGuideDemoTimeline] = useState<ActionGuideDemoTimelineEntry[]>([])
+  const [activeResultTab, setActiveResultTab] = useState<ResultWorkspaceTab>("overview")
+  const [resultsTranscriptEcho, setResultsTranscriptEcho] = useState("")
 
   const {
     isSessionActive,
@@ -668,6 +682,11 @@ export default function App() {
       const tlRaw = o.actionGuideDemoTimeline
       const tl = Array.isArray(tlRaw) ? tlRaw.filter(isActionGuideDemoTimelineEntry) : []
       setActionGuideDemoTimeline(tl)
+      const tabRaw = o.activeResultTab
+      if (isResultWorkspaceTab(tabRaw)) setActiveResultTab(tabRaw)
+      else setActiveResultTab("overview")
+      const snip = o.lastTranscriptSnippet
+      setResultsTranscriptEcho(typeof snip === "string" ? snip.slice(0, 500) : "")
       setOnboarded(true)
       setPhase("results")
       setError(null)
@@ -695,6 +714,7 @@ export default function App() {
         completedPlanTaskIds,
         adaptivePlanTasks,
         actionGuideDemoTimeline,
+        activeResultTab,
       }
       window.localStorage.setItem(ANCHOR_DEMO_CASE_KEY, JSON.stringify(payload))
     } catch {
@@ -702,6 +722,7 @@ export default function App() {
     }
   }, [
     actionGuideDemoTimeline,
+    activeResultTab,
     adaptivePlanTasks,
     cancerType,
     caregiverName,
@@ -716,6 +737,13 @@ export default function App() {
     relationship,
     showExampleOutput,
   ])
+
+  useEffect(() => {
+    if (phase !== "results") return
+    const line = latestUserLine?.trim()
+    if (!line) return
+    setResultsTranscriptEcho(line.slice(0, 500))
+  }, [latestUserLine, phase])
 
   useEffect(() => {
     if (!hydrated || !onboarded) return
@@ -774,6 +802,7 @@ export default function App() {
   }, [])
 
   const markPlanTaskDone = useCallback((taskId: string) => {
+    if (taskId.startsWith("demo-quick-")) return
     setCompletedPlanTaskIds((prev) => (prev.includes(taskId) ? prev : [...prev, taskId]))
   }, [])
 
@@ -790,6 +819,8 @@ export default function App() {
   const processRant = useCallback(async (transcript: string) => {
     setPhase("processing")
     setError(null)
+    setActiveResultTab("overview")
+    setResultsTranscriptEcho("")
     setPlanResult(null)
     setIsBackupDemoMirror(false)
     setCaseInformationUpdates([])
@@ -866,6 +897,7 @@ export default function App() {
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
+    setActiveResultTab("overview")
     setPhase("results")
   }, [])
 
@@ -1044,6 +1076,8 @@ export default function App() {
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
+    setActiveResultTab("overview")
+    setResultsTranscriptEcho("")
     setFearTimeline([])
     setJournalEntries([])
     setOneThingCount(0)
@@ -1076,6 +1110,8 @@ export default function App() {
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
+    setActiveResultTab("overview")
+    setResultsTranscriptEcho("")
     setPhase("idle")
   }
 
@@ -1375,6 +1411,8 @@ export default function App() {
 
                   {phase === "results" && mirrorResult && (
                     <ResultsView
+                      actionGuideDemoTimeline={actionGuideDemoTimeline}
+                      activeResultTab={activeResultTab}
                       adaptivePlanTasks={adaptivePlanTasks}
                       appendActionGuideDemoTimeline={appendActionGuideDemoTimeline}
                       appendAdaptivePlanTasks={appendAdaptivePlanTasks}
@@ -1393,12 +1431,15 @@ export default function App() {
                       markPlanTaskDone={markPlanTaskDone}
                       mirrorResult={mirrorResult}
                       noteText={noteText}
+                      onActiveResultTabChange={setActiveResultTab}
                       onAddByVoice={beginVoiceFollowUp}
                       onCopy={copyText}
                       onHoverRegret={setHoveredRegret}
                       onPlan={requestPlan}
                       onSarahBackupDemo={showSarahBackupDemo}
+                      onStartOver={startOver}
                       planResult={planResult}
+                      resultsTranscriptEcho={resultsTranscriptEcho}
                     />
                   )}
                 </AnimatePresence>
@@ -2563,6 +2604,70 @@ function partitionAdaptiveRows(
   return { urgent, waiting, changed, otherActive, doneAdaptive }
 }
 
+const DEMO_QUICK_GUIDE_ROW_PREFIX = "demo-quick-"
+
+const DEMO_QUICK_GUIDE_ROWS: PlanBoardDisplayRow[] = [
+  {
+    id: `${DEMO_QUICK_GUIDE_ROW_PREFIX}doctor`,
+    title: "Questions for the oncologist or nurse about pathology, imaging, and what happens next",
+    detail: "Ask what is confirmed versus still pending — NCCN-aware prep, not treatment advice.",
+    source: "adaptive",
+    initialStatus: "active",
+  },
+  {
+    id: `${DEMO_QUICK_GUIDE_ROW_PREFIX}clinic`,
+    title: "Call the clinic line to confirm appointment time, records, and check-in",
+    detail: "Front desk or nurse line — keep it calm and specific.",
+    source: "adaptive",
+    initialStatus: "active",
+  },
+  {
+    id: `${DEMO_QUICK_GUIDE_ROW_PREFIX}family`,
+    title: "Family update — text or call siblings with a factual, calm summary",
+    detail: "Share what you know without guessing at diagnosis.",
+    source: "adaptive",
+    initialStatus: "active",
+  },
+  {
+    id: `${DEMO_QUICK_GUIDE_ROW_PREFIX}records`,
+    title: "Request missing records from the hospital records office",
+    detail: "Ask for pathology summaries, imaging discs, or addendum pages you do not have yet.",
+    source: "adaptive",
+    initialStatus: "active",
+  },
+  {
+    id: `${DEMO_QUICK_GUIDE_ROW_PREFIX}insurance`,
+    title: "Insurance authorization or referral follow-up",
+    detail: "Clarify what the insurer still needs and the deadline — administrative, but time-sensitive.",
+    source: "adaptive",
+    initialStatus: "active",
+  },
+]
+
+function resolveOpenGuideRow(
+  guideOpenId: string | null,
+  adaptivePlanTasks: StoredAdaptivePlanTask[],
+  completedPlanTaskIds: string[],
+  planResult: PlanResult | null,
+): PlanBoardDisplayRow | null {
+  if (!guideOpenId) return null
+  const quick = DEMO_QUICK_GUIDE_ROWS.find((r) => r.id === guideOpenId)
+  if (quick) return quick
+  const doneSet = new Set(completedPlanTaskIds)
+  const baselineRows = planResult ? baselineRowsFromPlan(planResult) : []
+  const activeBaseline: PlanBoardDisplayRow[] = []
+  const doneBaseline: PlanBoardDisplayRow[] = []
+  for (const row of baselineRows) {
+    if (doneSet.has(row.id)) doneBaseline.push(row)
+    else activeBaseline.push(row)
+  }
+  const part = partitionAdaptiveRows(adaptivePlanTasks, (id) => doneSet.has(id))
+  const activeCombined = [...part.otherActive, ...activeBaseline]
+  const doneCombined = [...doneBaseline, ...part.doneAdaptive]
+  const pool = [...part.urgent, ...activeCombined, ...part.waiting, ...part.changed, ...doneCombined]
+  return pool.find((r) => r.id === guideOpenId) ?? null
+}
+
 function PlanBoardTaskRow({
   done,
   onHoverRegret,
@@ -2679,24 +2784,25 @@ function PlanBoardDoneSubsection({
 
 function AdaptivePlanBoard({
   adaptivePlanTasks,
-  appendActionGuideDemoTimeline,
   completedPlanTaskIds,
+  guideOpenId,
   isBackupDemoMirror,
   lovedOneLabel,
+  onGuideOpenChange,
   onHoverRegret,
   onMarkDone,
   planResult,
 }: {
   adaptivePlanTasks: StoredAdaptivePlanTask[]
-  appendActionGuideDemoTimeline: (entry: ActionGuideDemoTimelineEntry) => void
   completedPlanTaskIds: string[]
+  guideOpenId: string | null
   isBackupDemoMirror: boolean
   lovedOneLabel: string
+  onGuideOpenChange: (taskId: string | null) => void
   onHoverRegret: (value: string | null) => void
   onMarkDone: (taskId: string) => void
   planResult: PlanResult | null
 }) {
-  const [guideOpenId, setGuideOpenId] = useState<string | null>(null)
   const doneSet = useMemo(() => new Set(completedPlanTaskIds), [completedPlanTaskIds])
 
   const baselineRows = useMemo(
@@ -2726,14 +2832,6 @@ function AdaptivePlanBoard({
   const activeCombined = useMemo(() => [...otherActive, ...activeBaseline], [activeBaseline, otherActive])
   const doneCombined = useMemo(() => [...doneBaseline, ...doneAdaptive], [doneAdaptive, doneBaseline])
 
-  const openGuideRow = useMemo(() => {
-    if (!guideOpenId) return null
-    const pool: PlanBoardDisplayRow[] = [...urgent, ...activeCombined, ...waiting, ...changed, ...doneCombined]
-    return pool.find((r) => r.id === guideOpenId) ?? null
-  }, [activeCombined, changed, doneCombined, guideOpenId, urgent, waiting])
-
-  const openGuideDone = Boolean(openGuideRow && doneSet.has(openGuideRow.id))
-
   const showBoard = Boolean(planResult) || adaptivePlanTasks.length > 0
   if (!showBoard) return null
 
@@ -2748,7 +2846,7 @@ function AdaptivePlanBoard({
       <PlanBoardSubsection
         onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
-        onOpenGuide={setGuideOpenId}
+        onOpenGuide={(id) => onGuideOpenChange(id)}
         rows={urgent}
         title="Urgent"
       />
@@ -2756,45 +2854,55 @@ function AdaptivePlanBoard({
         emptyHint="Baseline steps from your plan; mark done as you go."
         onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
-        onOpenGuide={setGuideOpenId}
+        onOpenGuide={(id) => onGuideOpenChange(id)}
         rows={activeCombined}
         title="Active next steps"
       />
       <PlanBoardSubsection
         onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
-        onOpenGuide={setGuideOpenId}
+        onOpenGuide={(id) => onGuideOpenChange(id)}
         rows={waiting}
         title="Waiting on care team"
       />
       <PlanBoardSubsection
         onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
-        onOpenGuide={setGuideOpenId}
+        onOpenGuide={(id) => onGuideOpenChange(id)}
         rows={changed}
         title="Changed because of new information"
       />
-      <PlanBoardDoneSubsection onHoverRegret={onHoverRegret} onOpenGuide={setGuideOpenId} rows={doneCombined} />
+      <PlanBoardDoneSubsection onHoverRegret={onHoverRegret} onOpenGuide={(id) => onGuideOpenChange(id)} rows={doneCombined} />
       <p className="mt-3 text-[12px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">
         {isBackupDemoMirror
           ? "Sample NCCN-aware checklist based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm timing and details with your care team."
           : "NCCN-aware question prep structured around common oncology guideline workflows, based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm with your doctor or care team."}
       </p>
-      {openGuideRow && (
-        <TaskActionGuideSheet
-          done={openGuideDone}
-          lovedOneLabel={lovedOneLabel}
-          onAppendTimeline={appendActionGuideDemoTimeline}
-          onClose={() => setGuideOpenId(null)}
-          onMarkDone={onMarkDone}
-          openRow={openGuideRow}
-        />
-      )}
     </div>
   )
 }
 
+function formatDemoTimelineLabel(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(
+      new Date(iso),
+    )
+  } catch {
+    return iso
+  }
+}
+
+const RESULT_WORKSPACE_TAB_DEFS: { id: ResultWorkspaceTab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "plan", label: "Plan" },
+  { id: "actions", label: "Actions" },
+  { id: "updates", label: "Updates" },
+  { id: "memory", label: "Memory" },
+]
+
 function ResultsView({
+  actionGuideDemoTimeline,
+  activeResultTab,
   adaptivePlanTasks,
   appendActionGuideDemoTimeline,
   appendAdaptivePlanTasks,
@@ -2813,13 +2921,18 @@ function ResultsView({
   markPlanTaskDone,
   mirrorResult,
   noteText,
+  onActiveResultTabChange,
   onAddByVoice,
   onCopy,
   onHoverRegret,
   onPlan,
   onSarahBackupDemo,
+  onStartOver,
   planResult,
+  resultsTranscriptEcho,
 }: {
+  actionGuideDemoTimeline: ActionGuideDemoTimelineEntry[]
+  activeResultTab: ResultWorkspaceTab
   adaptivePlanTasks: StoredAdaptivePlanTask[]
   appendActionGuideDemoTimeline: (entry: ActionGuideDemoTimelineEntry) => void
   appendAdaptivePlanTasks: (tasks: StoredAdaptivePlanTask[]) => void
@@ -2838,13 +2951,17 @@ function ResultsView({
   markPlanTaskDone: (taskId: string) => void
   mirrorResult: MirrorResult
   noteText: string
+  onActiveResultTabChange: (tab: ResultWorkspaceTab) => void
   onAddByVoice: () => void
   onCopy: (kind: "note" | "handoff", value: string) => void
   onHoverRegret: (value: string | null) => void
   onPlan: () => void
   onSarahBackupDemo: () => void
+  onStartOver: () => void
   planResult: PlanResult | null
+  resultsTranscriptEcho: string
 }) {
+  const [guideOpenId, setGuideOpenId] = useState<string | null>(null)
   const [infoPanelOpen, setInfoPanelOpen] = useState(false)
   const [infoDraft, setInfoDraft] = useState("")
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null)
@@ -2858,6 +2975,30 @@ function ResultsView({
     () => buildCaregiverResultPacket(mirrorResult, isBackupDemoMirror),
     [mirrorResult, isBackupDemoMirror],
   )
+
+  const openGuideRow = useMemo(
+    () => resolveOpenGuideRow(guideOpenId, adaptivePlanTasks, completedPlanTaskIds, planResult),
+    [adaptivePlanTasks, completedPlanTaskIds, guideOpenId, planResult],
+  )
+
+  const openGuideDone = useMemo(() => {
+    if (!openGuideRow) return false
+    return completedPlanTaskIds.includes(openGuideRow.id)
+  }, [completedPlanTaskIds, openGuideRow])
+
+  const completedTaskTitles = useMemo(() => {
+    const titles: string[] = []
+    const done = new Set(completedPlanTaskIds)
+    for (const t of adaptivePlanTasks) {
+      if (done.has(t.id)) titles.push(t.title)
+    }
+    if (planResult) {
+      for (const row of baselineRowsFromPlan(planResult)) {
+        if (done.has(row.id)) titles.push(row.title)
+      }
+    }
+    return titles
+  }, [adaptivePlanTasks, completedPlanTaskIds, planResult])
 
   function newDemoUpdateId() {
     return typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
@@ -2911,278 +3052,454 @@ function ResultsView({
         </motion.div>
       )}
 
-      <motion.p
-        variants={itemVariants}
-        className="mb-2 break-words text-[10px] font-semibold uppercase leading-snug tracking-wide text-[#8f7e9b] sm:mb-3 sm:text-xs"
-      >
-        YOUR NEXT MOVES FOR YOUR {lovedOne.toUpperCase()}&apos;S {cancerType.toUpperCase()} CANCER
-      </motion.p>
-      <motion.blockquote
-        variants={itemVariants}
-        className={`m-0 max-w-full break-words text-xl font-normal leading-snug sm:text-3xl md:text-4xl lg:text-5xl ${SOFT_GRADIENT_TEXT}`}
-      >
-        &quot;{mirrorResult.fearQuote}&quot;
-      </motion.blockquote>
-
-      <motion.div variants={itemVariants} className="mt-2 sm:mt-3">
-        <span className="inline-flex max-w-full items-center rounded-full border border-[#c9b8d8]/80 bg-white/70 px-2.5 py-1 text-[10px] font-semibold leading-tight tracking-wide text-[#6f6280] sm:px-3 sm:text-[11px]">
-          NCCN-aware prep · care team decides
-        </span>
-      </motion.div>
-
-      <motion.div variants={itemVariants} className="mt-3 grid min-w-0 gap-2 sm:mt-6 sm:gap-3">
-        <ResultPacketCard icon={<HeartHandshake className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What Anchor hears">
-          <p className="m-0 text-[13px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{mirrorResult.mirror}</p>
-        </ResultPacketCard>
-
-        <ResultPacketCard icon={<Brain className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="NCCN-aware care preparation">
-          <p className="mb-2 text-[12px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-sm sm:leading-relaxed">{packet.careTeamIntro}</p>
-          <ResultBulletList items={packet.careTeamBullets} />
-        </ResultPacketCard>
-
-        <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What we know right now">
-          <ResultBulletList items={packet.knowNow} />
-        </ResultPacketCard>
-
-        <ResultPacketCard icon={<Clipboard className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What still needs confirmation">
-          <ResultBulletList items={packet.needsConfirmation} />
-        </ResultPacketCard>
-
-        <ResultPacketCard icon={<Sparkles className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What could change this plan">
-          <ResultBulletList items={packet.planChangeFactors} />
-          <p className="mt-2 text-[11px] leading-snug text-[#5f5a55] sm:mt-2.5 sm:text-xs sm:leading-relaxed">{packet.planChangeUrgentNote}</p>
-        </ResultPacketCard>
-
-        <ResultPacketCard icon={<Wind className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What does not need to be solved tonight">
-          <ResultBulletList items={packet.notTonight} />
-        </ResultPacketCard>
-
-        <NightNoteCard note={packet.nightNote} />
-      </motion.div>
-
-      <motion.div variants={itemVariants} className="mt-3 sm:mt-5">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">THREE NEXT STEPS</p>
-        <div className="grid min-w-0 gap-1.5 sm:gap-2">
-          {mirrorResult.actions.slice(0, 3).map((action, index) => (
-            <motion.div
-              key={`${action}-${index}`}
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.12 + index * 0.08, duration: 0.45 }}
-            >
-              <ExpandableActionItem action={action} index={index} variant="compact" />
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
-
-      <motion.div variants={itemVariants} className="mt-3 sm:mt-5">
-        <ResultPacketCard icon={<CalendarClock className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="72-hour plan">
-          <p className="mb-1.5 text-[12px] leading-snug text-[#3f3a36] sm:mb-2 sm:text-sm sm:leading-relaxed">
-            Built as NCCN-aware preparation around what Anchor knows right now — not set in stone, and not a treatment
-            recommendation.
+      <div className="mx-auto w-full min-w-0 max-w-3xl">
+        <motion.div
+          variants={itemVariants}
+          className="mb-3 rounded-[16px] border border-[#e5ddd4]/90 bg-white/55 px-3 py-2.5 sm:rounded-[20px] sm:px-4 sm:py-3"
+        >
+          <p className="m-0 text-[13px] font-medium leading-snug text-[#3f3a36] sm:text-sm">Anchor has your case open</p>
+          <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">
+            You are not alone in holding this — Anchor is here to organize calm next steps.
           </p>
-          <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-xs sm:leading-relaxed">
-            If new information comes in, Anchor should update the plan. Update this when pathology, imaging, appointment
-            timing, or care-team instructions change.
-          </p>
-          <p className="mb-1.5 text-[11px] leading-snug text-[#8f7e9b] sm:mb-2 sm:text-xs sm:leading-relaxed">
-            Anchor keeps this case active locally for the demo — you do not need to restart after every new detail.
-          </p>
-          <div className="mb-2 flex min-w-0 flex-col gap-1.5 sm:mb-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-            <button
-              type="button"
-              onClick={() => setInfoPanelOpen((o) => !o)}
-              className="w-fit rounded-full border border-[#b98da0]/50 bg-white/75 px-3 py-1.5 text-left text-[11px] font-medium text-[#5c4a62] shadow-sm transition hover:border-[#b98da0] hover:bg-white sm:text-xs"
-            >
-              {infoPanelOpen ? "Close update panel" : "I have new information"}
-            </button>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="inline-flex max-w-full shrink-0 items-center rounded-full border border-[#c9b8d8]/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-[#6f6280] sm:text-[11px]">
+              NCCN-aware prep · care team decides
+            </span>
+            <span className="inline-flex max-w-full shrink-0 items-center rounded-full border border-[#d8cec5] bg-[#faf7f4]/90 px-2.5 py-1 text-[10px] font-medium text-[#756f68] sm:text-[11px]">
+              Case stays active locally for this demo
+            </span>
           </div>
-          <AnimatePresence initial={false}>
-            {infoPanelOpen && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.22 }}
-                className="mb-3 overflow-hidden rounded-[14px] border border-[#d8cec5]/90 bg-[#fdfaf7] p-2.5 sm:mb-3.5 sm:rounded-[16px] sm:p-3"
+          <button
+            type="button"
+            onClick={onStartOver}
+            className="mt-2.5 w-fit text-left text-[11px] font-medium text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-4 hover:text-[#242230] sm:text-xs"
+          >
+            Start over
+          </button>
+        </motion.div>
+
+        <div className="sticky top-0 z-[24] mb-3 border-b border-[#e8dfd8] bg-[#fdfbf8]/96 py-2 backdrop-blur-md sm:mb-4">
+          <div className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {RESULT_WORKSPACE_TAB_DEFS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onActiveResultTabChange(tab.id)}
+                className={`shrink-0 rounded-full border px-3 py-2 text-[12px] font-medium transition sm:px-3.5 sm:py-2 sm:text-sm ${
+                  activeResultTab === tab.id
+                    ? "border-[#b98da0] bg-[#f0e6f4] text-[#4a3548] shadow-sm"
+                    : "border-transparent bg-white/60 text-[#5f5a55] hover:border-[#d8cec5] hover:bg-white/90"
+                }`}
               >
-                <p className="m-0 text-[12px] font-medium text-[#3f3a36] sm:text-sm">I have new information</p>
-                <p className="mt-1 text-[11px] leading-snug text-[#756f68] sm:text-xs">
-                  Add one detail. Anchor will show what changes and what still needs confirmation — NCCN-aware prep, not
-                  set in stone.
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="min-w-0 max-w-full overflow-x-hidden pb-2">
+          {activeResultTab === "overview" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-2 sm:gap-3">
+              <motion.p
+                variants={itemVariants}
+                className="m-0 break-words text-[10px] font-semibold uppercase leading-snug tracking-wide text-[#8f7e9b] sm:text-xs"
+              >
+                YOUR NEXT MOVES FOR YOUR {lovedOne.toUpperCase()}&apos;S {cancerType.toUpperCase()} CANCER
+              </motion.p>
+              <motion.blockquote
+                variants={itemVariants}
+                className={`m-0 max-w-full break-words text-xl font-normal leading-snug sm:text-3xl md:text-4xl lg:text-5xl ${SOFT_GRADIENT_TEXT}`}
+              >
+                &quot;{mirrorResult.fearQuote}&quot;
+              </motion.blockquote>
+              <motion.div variants={itemVariants} className="mt-1 sm:mt-2">
+                <span className="inline-flex max-w-full items-center rounded-full border border-[#c9b8d8]/80 bg-white/70 px-2.5 py-1 text-[10px] font-semibold leading-tight tracking-wide text-[#6f6280] sm:px-3 sm:text-[11px]">
+                  NCCN-aware prep · care team decides
+                </span>
+              </motion.div>
+              <ResultPacketCard icon={<Brain className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="NCCN-aware care preparation">
+                <p className="mb-2 text-[12px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-sm sm:leading-relaxed">{packet.careTeamIntro}</p>
+                <ResultBulletList items={packet.careTeamBullets} />
+              </ResultPacketCard>
+              <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What we know right now">
+                <ResultBulletList items={packet.knowNow} />
+              </ResultPacketCard>
+              <ResultPacketCard icon={<Clipboard className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What still needs confirmation">
+                <ResultBulletList items={packet.needsConfirmation} />
+              </ResultPacketCard>
+              <ResultPacketCard icon={<Wind className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What does not need to be solved tonight">
+                <ResultBulletList items={packet.notTonight} />
+              </ResultPacketCard>
+              <NightNoteCard note={packet.nightNote} />
+              <button
+                type="button"
+                onClick={() => onActiveResultTabChange("plan")}
+                className="mt-2 w-full rounded-[20px] border border-white/80 bg-[#b7a6c9] px-4 py-3 text-sm font-medium text-white shadow-[0_14px_40px_rgba(151,128,163,0.22)] transition hover:-translate-y-0.5 sm:rounded-[22px]"
+              >
+                Next: open the 72-hour plan
+              </button>
+            </motion.div>
+          )}
+
+          {activeResultTab === "plan" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              {!planResult && (
+                <p className="m-0 rounded-[14px] border border-[#e5ddd4] bg-white/70 px-3 py-2.5 text-[12px] leading-snug text-[#5f5a55] sm:rounded-[16px] sm:text-sm">
+                  Generate the 72-hour plan to expand this checklist. New information you add will stay attached to this case.
                 </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {DEMO_INFO_UPDATE_CHIPS.map((chip) => (
-                    <button
-                      key={chip.id}
-                      type="button"
-                      onClick={() => setSelectedChipId((cur) => (cur === chip.id ? null : chip.id))}
-                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium leading-tight transition sm:text-[11px] ${
-                        selectedChipId === chip.id
-                          ? "border-[#b98da0] bg-[#f0e6f4] text-[#4a3548]"
-                          : "border-[#e5ddd4] bg-white/90 text-[#5f5a55] hover:border-[#c9b8d8]"
-                      }`}
+              )}
+              <ResultPacketCard icon={<Sparkles className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What could change this plan">
+                <ResultBulletList items={packet.planChangeFactors} />
+                <p className="mt-2 text-[11px] leading-snug text-[#5f5a55] sm:mt-2.5 sm:text-xs sm:leading-relaxed">{packet.planChangeUrgentNote}</p>
+              </ResultPacketCard>
+              <ResultPacketCard icon={<CalendarClock className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="72-hour plan">
+                <p className="mb-1.5 text-[12px] leading-snug text-[#3f3a36] sm:mb-2 sm:text-sm sm:leading-relaxed">
+                  Built as NCCN-aware preparation around what Anchor knows right now — not set in stone, and not a treatment
+                  recommendation.
+                </p>
+                <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-xs sm:leading-relaxed">
+                  If new information comes in, Anchor should update the plan. Update this when pathology, imaging, appointment
+                  timing, or care-team instructions change.
+                </p>
+                <p className="mb-1.5 text-[11px] leading-snug text-[#8f7e9b] sm:mb-2 sm:text-xs sm:leading-relaxed">
+                  Anchor keeps this case active locally for the demo — you do not need to restart after every new detail.
+                </p>
+                <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-xs sm:leading-relaxed">
+                  A compact checklist you can verify with your care team — generate it here when you are ready.
+                </p>
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:gap-2.5">
+                  <button
+                    type="button"
+                    onClick={onPlan}
+                    disabled={isPlanning}
+                    className="flex w-full shrink-0 items-center justify-center gap-2 rounded-[20px] border border-white/80 bg-[#b7a6c9] px-4 py-2.5 text-sm font-medium text-white shadow-[0_14px_40px_rgba(151,128,163,0.22)] outline-none transition hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[#b98da0]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] active:scale-[0.98] disabled:opacity-55 sm:rounded-[22px] sm:py-3"
+                  >
+                    {isPlanning ? "Building your 72-hour plan..." : "Get your 72-hour plan"}
+                    <CalendarClock className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onCopy("note", noteText)}
+                    className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[20px] px-4 py-2.5 text-sm text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:py-3`}
+                  >
+                    {copied === "note" ? "Saved to clipboard" : "Save this note"}
+                    {copied === "note" ? <Check className="h-4 w-4 sm:h-5 sm:w-5" /> : <Clipboard className="h-4 w-4 sm:h-5 sm:w-5" />}
+                  </button>
+                </div>
+              </ResultPacketCard>
+              <AnimatePresence>
+                {(planResult || adaptivePlanTasks.length > 0) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 24 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -16 }}
+                    transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+                    className="mt-1 sm:mt-2"
+                  >
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:mb-3 sm:text-xs">
+                      72 HOURS, MADE SMALL ENOUGH TO HOLD
+                    </p>
+                    <AdaptivePlanBoard
+                      adaptivePlanTasks={adaptivePlanTasks}
+                      completedPlanTaskIds={completedPlanTaskIds}
+                      guideOpenId={guideOpenId}
+                      isBackupDemoMirror={isBackupDemoMirror}
+                      lovedOneLabel={lovedOneLabel}
+                      onGuideOpenChange={setGuideOpenId}
+                      onHoverRegret={onHoverRegret}
+                      onMarkDone={markPlanTaskDone}
+                      planResult={planResult}
+                    />
+                    <AnimatePresence>
+                      {hoveredRegret && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 8 }}
+                          className={`${GLASS_PANEL} mt-3 rounded-[20px] p-3 text-[13px] italic leading-snug text-[#6f6280] sm:mt-4 sm:rounded-[24px] sm:p-4 sm:text-sm sm:leading-6`}
+                        >
+                          {hoveredRegret}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          )}
+
+          {activeResultTab === "actions" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
+                Open any task in the Plan tab and tap Guide me for exact words. These quick cards open the same guided sheet.
+              </p>
+              <div>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">THREE NEXT STEPS</p>
+                <div className="grid min-w-0 gap-1.5 sm:gap-2">
+                  {mirrorResult.actions.slice(0, 3).map((action, index) => (
+                    <motion.div
+                      key={`${action}-${index}`}
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.12 + index * 0.08, duration: 0.45 }}
                     >
-                      {chip.label}
+                      <ExpandableActionItem action={action} index={index} variant="compact" />
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Quick scripts (demo)</p>
+                <div className="grid min-w-0 gap-2 sm:grid-cols-2 sm:gap-2.5">
+                  {DEMO_QUICK_GUIDE_ROWS.map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => setGuideOpenId(row.id)}
+                      className={`${GLASS_BUTTON} rounded-[16px] p-3 text-left text-[#3f3a36] sm:rounded-[20px] sm:p-3.5`}
+                    >
+                      <span className="block text-[12px] font-medium leading-snug sm:text-sm">{row.title}</span>
+                      <span className="mt-1 block text-[10px] font-medium text-[#9b829c] sm:text-[11px]">Guide me · same sheet as Plan</span>
                     </button>
                   ))}
                 </div>
-                <label className="mt-2 block">
-                  <span className="sr-only">Additional detail</span>
-                  <input
-                    type="text"
-                    value={infoDraft}
-                    onChange={(e) => setInfoDraft(e.target.value)}
-                    placeholder="Example: The oncologist said imaging is still pending."
-                    className="w-full rounded-[12px] border border-[#e5ddd4] bg-white px-2.5 py-2 text-[12px] text-[#3f3a36] outline-none placeholder:text-[#a09a93] focus:border-[#b98da0]/70 sm:rounded-[14px] sm:py-2.5 sm:text-sm"
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={applyInfoUpdate}
-                  className="mt-2 w-full rounded-[14px] border border-white/80 bg-[#b7a6c9] py-2 text-[12px] font-medium text-white shadow-sm transition hover:opacity-95 sm:mt-2.5 sm:rounded-[16px] sm:text-sm"
-                >
-                  Update this plan
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-xs sm:leading-relaxed">
-            A compact checklist you can verify with your care team — generate it here when you are ready.
-          </p>
-          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:gap-2.5">
-            <button
-              type="button"
-              onClick={onPlan}
-              disabled={isPlanning}
-              className="flex w-full shrink-0 items-center justify-center gap-2 rounded-[20px] border border-white/80 bg-[#b7a6c9] px-4 py-2.5 text-sm font-medium text-white shadow-[0_14px_40px_rgba(151,128,163,0.22)] outline-none transition hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[#b98da0]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] active:scale-[0.98] disabled:opacity-55 sm:rounded-[22px] sm:py-3"
-            >
-              {isPlanning ? "Building your 72-hour plan..." : "Get your 72-hour plan"}
-              <CalendarClock className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onCopy("note", noteText)}
-              className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[20px] px-4 py-2.5 text-sm text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:py-3`}
-            >
-              {copied === "note" ? "Saved to clipboard" : "Save this note"}
-              {copied === "note" ? <Check className="h-4 w-4 sm:h-5 sm:w-5" /> : <Clipboard className="h-4 w-4 sm:h-5 sm:w-5" />}
-            </button>
-          </div>
-        </ResultPacketCard>
-      </motion.div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onCopy("handoff", handoffText)}
+                className={`${GLASS_BUTTON} flex items-center justify-between gap-2 rounded-[20px] p-3 text-left text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:p-3.5`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-[#242230]">Copy update for support person</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-[#756f68] sm:text-xs sm:text-sm">
+                    {copied === "handoff"
+                      ? "Copied. You can paste this into a text to your support person."
+                      : "Copies a short update to your clipboard — nothing is sent from Anchor."}
+                  </span>
+                </span>
+                <Copy className="h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" />
+              </button>
+            </motion.div>
+          )}
 
-      {caseInformationUpdates.length > 0 && (
-        <motion.div variants={itemVariants} className="mt-2 sm:mt-3">
-          <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">What changed</p>
-            <div className="grid gap-2.5 sm:gap-3">
-              {caseInformationUpdates.map((u) => (
-                <div key={u.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:rounded-[14px] sm:p-3">
-                  <p className="text-[10px] font-medium text-[#9b829c] sm:text-[11px]">{u.sourceLabel}</p>
-                  <ul className="mt-1.5 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
-                    <li>
-                      <span className="font-medium text-[#5f5a55]">1. New information added · </span>
-                      {u.newInformation}
-                    </li>
-                    <li>
-                      <span className="font-medium text-[#5f5a55]">2. What this may affect · </span>
-                      {u.mayAffect}
-                    </li>
-                    <li>
-                      <span className="font-medium text-[#5f5a55]">3. What still needs confirmation · </span>
-                      {u.needsConfirmation}
-                    </li>
-                    <li>
-                      <span className="font-medium text-[#5f5a55]">4. What to ask next · </span>
-                      {u.askNext}
-                    </li>
-                    <li>
-                      <span className="font-medium text-[#5f5a55]">5. Revised next step · </span>
-                      {u.revisedStep}
-                    </li>
-                  </ul>
+          {activeResultTab === "updates" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
+                Add one detail. Anchor will show what changed and update the plan board. Updates you save here also feed the
+                adaptive checklist on the Plan tab — NCCN-aware prep, not set in stone.
+              </p>
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <div className="mb-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                  <p className="m-0 text-[12px] font-medium text-[#3f3a36] sm:text-sm">I have new information</p>
+                  <button
+                    type="button"
+                    onClick={() => setInfoPanelOpen((o) => !o)}
+                    className="w-fit rounded-full border border-[#b98da0]/50 bg-white/75 px-3 py-1.5 text-left text-[11px] font-medium text-[#5c4a62] shadow-sm transition hover:border-[#b98da0] hover:bg-white sm:text-xs"
+                  >
+                    {infoPanelOpen ? "Close update panel" : "Open update panel"}
+                  </button>
                 </div>
-              ))}
-            </div>
-            <p className="mt-2.5 border-t border-[#ece4dc] pt-2 text-[10px] leading-snug text-[#756f68] sm:text-[11px] sm:leading-relaxed">
-              Based on what Anchor knows right now — not set in stone. Anchor can help prepare NCCN-aware questions and
-              organize next steps. It does not diagnose, prescribe, choose treatment, confirm stage, or replace your care
-              team.
-            </p>
-          </div>
-        </motion.div>
-      )}
-
-      <AnimatePresence>
-        {(planResult || adaptivePlanTasks.length > 0) && (
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-4 sm:mt-8"
-          >
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:mb-3 sm:text-xs">
-              72 HOURS, MADE SMALL ENOUGH TO HOLD
-            </p>
-            <AdaptivePlanBoard
-              adaptivePlanTasks={adaptivePlanTasks}
-              appendActionGuideDemoTimeline={appendActionGuideDemoTimeline}
-              completedPlanTaskIds={completedPlanTaskIds}
-              isBackupDemoMirror={isBackupDemoMirror}
-              lovedOneLabel={lovedOneLabel}
-              onHoverRegret={onHoverRegret}
-              onMarkDone={markPlanTaskDone}
-              planResult={planResult}
-            />
-            <AnimatePresence>
-              {hoveredRegret && (
-                <motion.div
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 8 }}
-                  className={`${GLASS_PANEL} mt-3 rounded-[20px] p-3 text-[13px] italic leading-snug text-[#6f6280] sm:mt-4 sm:rounded-[24px] sm:p-4 sm:text-sm sm:leading-6`}
-                >
-                  {hoveredRegret}
-                </motion.div>
+                <AnimatePresence initial={false}>
+                  {infoPanelOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.22 }}
+                      className="overflow-hidden rounded-[14px] border border-[#d8cec5]/90 bg-[#fdfaf7] p-2.5 sm:rounded-[16px] sm:p-3"
+                    >
+                      <p className="m-0 text-[12px] font-medium text-[#3f3a36] sm:text-sm">I have new information</p>
+                      <p className="mt-1 text-[11px] leading-snug text-[#756f68] sm:text-xs">
+                        Add one detail. Anchor will show what changed and update the plan board.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {DEMO_INFO_UPDATE_CHIPS.map((chip) => (
+                          <button
+                            key={chip.id}
+                            type="button"
+                            onClick={() => setSelectedChipId((cur) => (cur === chip.id ? null : chip.id))}
+                            className={`rounded-full border px-2.5 py-1 text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                              selectedChipId === chip.id
+                                ? "border-[#b98da0] bg-[#f0e6f4] text-[#4a3548]"
+                                : "border-[#e5ddd4] bg-white/90 text-[#5f5a55] hover:border-[#c9b8d8]"
+                            }`}
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
+                      </div>
+                      <label className="mt-2 block">
+                        <span className="sr-only">Additional detail</span>
+                        <input
+                          type="text"
+                          value={infoDraft}
+                          onChange={(e) => setInfoDraft(e.target.value)}
+                          placeholder="Example: The oncologist said imaging is still pending."
+                          className="w-full rounded-[12px] border border-[#e5ddd4] bg-white px-2.5 py-2 text-[12px] text-[#3f3a36] outline-none placeholder:text-[#a09a93] focus:border-[#b98da0]/70 sm:rounded-[14px] sm:py-2.5 sm:text-sm"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={applyInfoUpdate}
+                        className="mt-2 w-full rounded-[14px] border border-white/80 bg-[#b7a6c9] py-2 text-[12px] font-medium text-white shadow-sm transition hover:opacity-95 sm:mt-2.5 sm:rounded-[16px] sm:text-sm"
+                      >
+                        Update this plan
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              {caseInformationUpdates.length > 0 && (
+                <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">What changed</p>
+                  <div className="grid gap-2.5 sm:gap-3">
+                    {caseInformationUpdates.map((u) => (
+                      <div key={u.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:rounded-[14px] sm:p-3">
+                        <p className="text-[10px] font-medium text-[#9b829c] sm:text-[11px]">{u.sourceLabel}</p>
+                        <ul className="mt-1.5 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">1. New information added · </span>
+                            {u.newInformation}
+                          </li>
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">2. What this may affect · </span>
+                            {u.mayAffect}
+                          </li>
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">3. What still needs confirmation · </span>
+                            {u.needsConfirmation}
+                          </li>
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">4. What to ask next · </span>
+                            {u.askNext}
+                          </li>
+                          <li>
+                            <span className="font-medium text-[#5f5a55]">5. Revised next step · </span>
+                            {u.revisedStep}
+                          </li>
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2.5 border-t border-[#ece4dc] pt-2 text-[10px] leading-snug text-[#756f68] sm:text-[11px] sm:leading-relaxed">
+                    Based on what Anchor knows right now — not set in stone. Anchor can help prepare NCCN-aware questions and
+                    organize next steps. It does not diagnose, prescribe, choose treatment, confirm stage, or replace your care
+                    team.
+                  </p>
+                </div>
               )}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <button
+                type="button"
+                onClick={onAddByVoice}
+                className={`${GLASS_BUTTON} flex items-center justify-between gap-2 rounded-[20px] p-3 text-left text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:p-3.5`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-[#242230]">Add by voice</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-[#756f68] sm:text-xs sm:text-sm">
+                    Add another detail to this same case — your last result stays until you start over.
+                  </span>
+                </span>
+                <Mic className="h-4 w-4 shrink-0 text-[#b98da0] sm:h-5 sm:w-5" />
+              </button>
+            </motion.div>
+          )}
 
-      <motion.div variants={itemVariants} className="mt-3 grid min-w-0 gap-2 sm:mt-6 sm:grid-cols-2 sm:gap-2.5">
-        <button
-          type="button"
-          onClick={() => onCopy("handoff", handoffText)}
-          className={`${GLASS_BUTTON} flex items-center justify-between gap-2 rounded-[20px] p-3 text-left text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:p-3.5`}
-        >
-          <span className="min-w-0">
-            <span className="block text-sm font-medium text-[#242230]">Copy update for support person</span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-[#756f68] sm:text-xs sm:text-sm">
-              {copied === "handoff"
-                ? "Copied. You can paste this into a text to your support person."
-                : "Copies a short update to your clipboard — nothing is sent from Anchor."}
-            </span>
-          </span>
-          <Copy className="h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" />
-        </button>
-        <button
-          type="button"
-          onClick={onAddByVoice}
-          className={`${GLASS_BUTTON} flex items-center justify-between gap-2 rounded-[20px] p-3 text-left text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:p-3.5`}
-        >
-          <span className="min-w-0">
-            <span className="block text-sm font-medium text-[#242230]">Add by voice</span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-[#756f68] sm:text-xs sm:text-sm">
-              Add another detail to this same case — your last result stays until you start over.
-            </span>
-          </span>
-          <Mic className="h-4 w-4 shrink-0 text-[#b98da0] sm:h-5 sm:w-5" />
-        </button>
-      </motion.div>
+          {activeResultTab === "memory" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <div>
+                <p className="m-0 text-[13px] font-semibold text-[#3f3a36] sm:text-base">Prototype memory preview</p>
+                <p className="mt-1 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Stored locally for this demo. Start over clears this demo case. This is not HIPAA-grade or production memory.
+                </p>
+              </div>
+              <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="Known facts (demo)">
+                <ResultBulletList items={packet.knowNow} />
+              </ResultPacketCard>
+              <ResultPacketCard icon={<Clipboard className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="Still needs confirmation">
+                <ResultBulletList items={packet.needsConfirmation} />
+              </ResultPacketCard>
+              <ResultPacketCard icon={<HeartHandshake className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What Anchor heard (mirror)">
+                <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{mirrorResult.mirror}</p>
+              </ResultPacketCard>
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">New information added</p>
+                {caseInformationUpdates.length === 0 ? (
+                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">No structured updates yet — use the Updates tab.</p>
+                ) : (
+                  <ul className="m-0 list-none space-y-2 p-0">
+                    {caseInformationUpdates.map((u) => (
+                      <li key={u.id} className="text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                        <span className="font-medium text-[#5f5a55]">{u.sourceLabel}: </span>
+                        {u.newInformation.slice(0, 220)}
+                        {u.newInformation.length > 220 ? "…" : ""}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Tasks completed</p>
+                <p className="m-0 text-[12px] text-[#3f3a36] sm:text-sm">
+                  {completedPlanTaskIds.length} marked done in this demo session.
+                </p>
+                {completedTaskTitles.length > 0 && (
+                  <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">
+                    {completedTaskTitles.slice(0, 10).map((t, i) => (
+                      <li key={`${i}-${t.slice(0, 24)}`}>· {t}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Guide me saves (demo timeline)</p>
+                {actionGuideDemoTimeline.length === 0 ? (
+                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">
+                    Nothing saved yet — open Guide me on a task and tap &quot;Save to case timeline (demo)&quot;.
+                  </p>
+                ) : (
+                  <ul className="m-0 list-none space-y-2 p-0">
+                    {actionGuideDemoTimeline.map((e) => (
+                      <li key={e.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2 sm:p-2.5">
+                        <p className="m-0 text-[10px] font-medium text-[#9b829c] sm:text-[11px]">
+                          {formatDemoTimelineLabel(e.savedAt)} · {e.badge}
+                        </p>
+                        <p className="mt-1 m-0 text-[12px] font-medium leading-snug text-[#3f3a36] sm:text-sm">{e.taskTitle}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Plan status</p>
+                <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                  {planResult ? "72-hour plan generated for this demo case." : "72-hour plan not generated yet — use the Plan tab when you are ready."}
+                </p>
+              </div>
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Last voice / text detail (demo)</p>
+                <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                  {resultsTranscriptEcho.trim() || "Nothing captured yet in this browser session."}
+                </p>
+              </div>
+              <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                Deleting this case or tapping Start over clears local demo data in this browser. Nothing here is a medical record
+                or a substitute for your care team.
+              </p>
+            </motion.div>
+          )}
+        </div>
+      </div>
+
+      {openGuideRow && (
+        <TaskActionGuideSheet
+          done={openGuideDone}
+          lovedOneLabel={lovedOneLabel}
+          onAppendTimeline={appendActionGuideDemoTimeline}
+          onClose={() => setGuideOpenId(null)}
+          onMarkDone={markPlanTaskDone}
+          openRow={openGuideRow}
+        />
+      )}
 
       {error && (
         <div className="mt-3 sm:mt-5">
