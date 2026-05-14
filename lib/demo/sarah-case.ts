@@ -1446,3 +1446,196 @@ export function buildFrontDeskBriefFollowupTask(): StoredAdaptivePlanTask {
     fromUpdate: false,
   }
 }
+
+/** Phone Mode / Script Reader — one line at a time; local-only; no calls from Anchor. */
+export type PhoneModeFollowUpProfile = "visit" | "document" | "insurance" | "frontDesk" | "family" | "none"
+
+export interface PhoneModeScript {
+  id: string
+  typeLabel: string
+  goal: string
+  lines: string[]
+  writeDown: string[]
+  safetyNote: string
+  linkedTaskId?: string
+  phoneFollowUpProfile?: PhoneModeFollowUpProfile
+}
+
+export const PHONE_MODE_SAFETY_CORE =
+  "Anchor prepares words. You choose what to say. Your care team confirms medical decisions."
+
+export const PHONE_MODE_NOTHING_SENT = "Nothing is sent or called from Anchor."
+
+export const PHONE_MODE_URGENT_REMINDER =
+  "If symptoms feel severe or rapidly worsening, call your care team urgent line or local emergency services. Anchor does not triage."
+
+export const PHONE_SCRIPT_VISIT_PREP: PhoneModeScript = {
+  id: "anchor-phone-visit-prep",
+  typeLabel: "Visit prep",
+  goal: "Get clear answers from the next visit or call.",
+  lines: [
+    "Before we get into details, can we start by confirming what is known and what is still pending?",
+    "Is the stage confirmed, or are we waiting on pathology, imaging, or another result?",
+    "Which records should we bring, upload, or request before the next conversation?",
+    "What decision, if any, actually needs to be made next?",
+    "Who should we contact after this visit if we remember more questions?",
+  ],
+  writeDown: [
+    "Confirmed facts",
+    "Pending results",
+    "Next decision",
+    "Next appointment/contact",
+    "Instructions before the next visit",
+  ],
+  safetyNote: PHONE_MODE_SAFETY_CORE,
+  phoneFollowUpProfile: "visit",
+}
+
+export const PHONE_SCRIPT_DOCUMENT: PhoneModeScript = {
+  id: "anchor-phone-document",
+  typeLabel: "Document questions",
+  goal: "Turn a report into questions, not a self-diagnosis.",
+  lines: [
+    "Can you walk us through this report in plain language?",
+    "What does this report confirm?",
+    "What does it not answer yet?",
+    "Are any addenda, tests, imaging results, or biomarkers still pending?",
+    "Does staging depend on this document, imaging, pathology, or a combination?",
+    "What should we bring or upload before the next visit?",
+  ],
+  writeDown: ["Final vs pending", "Report name/date", "Missing pages/addenda", "Who will review it", "Next action"],
+  safetyNote: PHONE_MODE_SAFETY_CORE,
+  phoneFollowUpProfile: "document",
+}
+
+export const PHONE_SCRIPT_INSURANCE_RECORDS: PhoneModeScript = {
+  id: "anchor-phone-insurance-records",
+  typeLabel: "Insurance / records",
+  goal: "Find out exactly what is needed so the case does not stall.",
+  lines: [
+    "Hi, I'm calling for my mom's cancer-care records or authorization.",
+    "Can you tell me exactly what documents are needed?",
+    "Where should they be sent?",
+    "Is there a deadline, referral requirement, authorization number, or case number?",
+    "Who should I follow up with if the records are not received?",
+    "Can you repeat the reference number and best callback contact?",
+  ],
+  writeDown: [
+    "Person spoken to",
+    "Records needed",
+    "Destination",
+    "Deadline",
+    "Reference/case number",
+    "Follow-up contact",
+  ],
+  safetyNote: `${PHONE_MODE_SAFETY_CORE} ${PHONE_MODE_NOTHING_SENT}`,
+  phoneFollowUpProfile: "insurance",
+}
+
+export const PHONE_SCRIPT_FRONT_DESK: PhoneModeScript = {
+  id: "anchor-phone-front-desk",
+  typeLabel: "Records office",
+  goal: "Sound organized when calling a front desk, scheduler, or records office.",
+  lines: [
+    "Hi, I'm calling for my mom. We are trying to prepare for a cancer-care appointment or records review.",
+    "Can you help us confirm what records are needed before scheduling or review?",
+    "Do you need pathology, imaging summaries, image files, visit notes, or referral information?",
+    "Is authorization or a referral required before the appointment?",
+    "Who should we contact if something is missing?",
+  ],
+  writeDown: [
+    "Required records",
+    "Scheduling requirements",
+    "Referral/auth requirement",
+    "Upload/fax instructions",
+    "Follow-up contact",
+  ],
+  safetyNote: `${PHONE_MODE_SAFETY_CORE} ${PHONE_MODE_NOTHING_SENT}`,
+  phoneFollowUpProfile: "frontDesk",
+}
+
+export const PHONE_SCRIPT_FAMILY_UPDATE: PhoneModeScript = {
+  id: "anchor-phone-family-update",
+  typeLabel: "Family update",
+  goal: "Give a calm update without guessing a treatment plan.",
+  lines: [
+    "Quick update: we are still confirming details with the care team.",
+    "Some reports or results may still be pending.",
+    "The most helpful thing right now is preparing for the next conversation and gathering records.",
+    "Please do not assume a treatment plan until the doctors explain what is confirmed.",
+    "If you want to help, please take one concrete task.",
+  ],
+  writeDown: ["Who can help", "What task they can take", "Who needs future updates"],
+  safetyNote: PHONE_MODE_SAFETY_CORE,
+  phoneFollowUpProfile: "family",
+}
+
+export const PHONE_DOC_FOLLOWUP_ID = "local:phone-doc-followup"
+
+export function buildPhoneDocumentFollowupTask(): StoredAdaptivePlanTask {
+  return {
+    id: PHONE_DOC_FOLLOWUP_ID,
+    title: "Ask care team what this document confirms and what is still pending",
+    detail: "From Phone Mode — your clinicians interpret the record; Anchor does not diagnose from documents.",
+    initialStatus: "active",
+    fromUpdate: false,
+  }
+}
+
+export const PHONE_FAMILY_FOLLOWUP_ID = "local:phone-family-followup"
+
+export function buildPhoneFamilyFollowupTask(): StoredAdaptivePlanTask {
+  return {
+    id: PHONE_FAMILY_FOLLOWUP_ID,
+    title: "After the next touchpoint, share one concrete family update",
+    detail: "From Phone Mode — keep updates accurate and bounded; not sent from Anchor.",
+    initialStatus: "waiting",
+    fromUpdate: false,
+  }
+}
+
+export function buildPhoneVisitAfterTask(): StoredAdaptivePlanTask {
+  return {
+    id: HERO_VISIT_PLAN_IDS.after,
+    title: "After the visit, add what changed into Anchor",
+    detail: "From Phone Mode visit prep — update the 72-hour plan when you know more; local demo memory only.",
+    initialStatus: "active",
+    fromUpdate: false,
+  }
+}
+
+export function buildPhoneInsuranceRecordsFollowupTask(): StoredAdaptivePlanTask {
+  return {
+    id: HERO_INSURANCE_PLAN_IDS.follow,
+    title: INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE,
+    detail: "From Phone Mode — you follow up; Anchor does not place calls or send messages.",
+    initialStatus: "waiting",
+    fromUpdate: false,
+  }
+}
+
+export function buildPhoneModeFullScriptBlock(script: PhoneModeScript): string {
+  return [
+    `ANCHOR — PHONE MODE · ${script.typeLabel}`,
+    script.goal,
+    "",
+    ...script.lines.map((l, i) => `${i + 1}. ${l}`),
+    "",
+    "WHAT TO WRITE DOWN",
+    ...script.writeDown.map((w) => `• ${w}`),
+    "",
+    script.safetyNote,
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+/** Split multi-sentence scripts into readable Phone Mode lines. */
+export function splitScriptTextToPhoneLines(text: string): string[] {
+  const t = text.trim()
+  if (!t) return []
+  const byNl = t.split(/\n+/).map((l) => l.trim()).filter(Boolean)
+  if (byNl.length > 1) return byNl
+  const bySentence = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length > 6)
+  return bySentence.length ? bySentence : [t]
+}

@@ -37,6 +37,11 @@ import {
   buildHumanOutreachApprovalChecklistBlock,
   buildInsuranceIssueClipboardBlock,
   buildMemoryHoldingNarrative,
+  buildPhoneDocumentFollowupTask,
+  buildPhoneFamilyFollowupTask,
+  buildPhoneInsuranceRecordsFollowupTask,
+  buildPhoneModeFullScriptBlock,
+  buildPhoneVisitAfterTask,
   buildRecordsChecklistAdaptiveTask,
   buildRecordsQuickAdaptiveTask,
   buildSentinelDelayedFollowupTask,
@@ -98,6 +103,14 @@ import {
   MEMORY_EMPTY_TIMELINE_ARTIFACTS,
   MEMORY_PROTO_BADGE,
   normalizeFollowUpChipKind,
+  PHONE_MODE_NOTHING_SENT,
+  PHONE_MODE_SAFETY_CORE,
+  PHONE_MODE_URGENT_REMINDER,
+  PHONE_SCRIPT_DOCUMENT,
+  PHONE_SCRIPT_FAMILY_UPDATE,
+  PHONE_SCRIPT_FRONT_DESK,
+  PHONE_SCRIPT_INSURANCE_RECORDS,
+  PHONE_SCRIPT_VISIT_PREP,
   PLAN_CHANGE_FACTORS_BULLETS,
   PLAN_CHANGE_URGENT_SAFETY,
   RECORDS_DOCUMENT_STACK_DEFS,
@@ -122,6 +135,7 @@ import {
   SARAH_KNOW_NOW_BULLETS,
   SARAH_NEEDS_CONFIRMATION_BULLETS,
   SARAH_NOT_TONIGHT_BULLETS,
+  splitScriptTextToPhoneLines,
   SYSTEM_MAPPER_COMPARISON_QUESTIONS,
   SYSTEM_MAPPER_FACTORS,
   SYSTEM_MAPPER_NOT_RANKING_LINE,
@@ -149,6 +163,8 @@ import {
   type FollowUpChipId,
   type LastHeroFlowUsed,
   type NightNoteContent,
+  type PhoneModeFollowUpProfile,
+  type PhoneModeScript,
   type RecordsChecklistItemDef,
   type StoredAdaptivePlanTask,
   type WordsToSayScriptDef,
@@ -177,6 +193,8 @@ type ResultCopyKind =
   | "futureMapperQuestions"
   | "futureFrontDeskBrief"
   | "futureOutreachChecklist"
+  | "phoneModeLine"
+  | "phoneModeFull"
 
 interface CopyTimelineMeta {
   taskTitle: string
@@ -3274,12 +3292,56 @@ function buildTaskActionGuide(row: PlanBoardDisplayRow, lovedOneLabel: string): 
   }
 }
 
+function buildPhoneScriptFromTaskGuide(guide: TaskActionGuideContent, row: PlanBoardDisplayRow): PhoneModeScript {
+  const lines = splitScriptTextToPhoneLines(guide.exactWords)
+  const safeLines = lines.length ? lines : ["Open the full guide and read the exact words section slowly."]
+  const urgentLine = guide.isUrgentPanel ? ` ${PHONE_MODE_URGENT_REMINDER}` : ""
+  return {
+    id: `anchor-phone-guide-${row.id}`,
+    typeLabel: `${guide.artifact.badge} · Guide me`,
+    goal: guide.whatFor.length > 200 ? `${guide.whatFor.slice(0, 197)}…` : guide.whatFor,
+    lines: safeLines,
+    writeDown: guide.writeDown.length ? guide.writeDown : ["What you heard", "What is still pending", "Next step"],
+    safetyNote: `${PHONE_MODE_SAFETY_CORE}${urgentLine}`.trim(),
+    linkedTaskId: row.id.startsWith("demo-quick-") ? undefined : row.id,
+    phoneFollowUpProfile: "none",
+  }
+}
+
+function buildWordsToSayPhoneScript(def: WordsToSayScriptDef): PhoneModeScript {
+  const lines = splitScriptTextToPhoneLines(def.script)
+  let profile: PhoneModeFollowUpProfile = "none"
+  if (def.id === "insurance_call") profile = "insurance"
+  else if (def.id === "family_update") profile = "family"
+  else if (def.id === "visit_opener" || def.id === "clinic_call" || def.id === "portal_message") profile = "visit"
+  const extra = profile === "insurance" ? ` ${PHONE_MODE_NOTHING_SENT}` : ""
+  return {
+    id: `anchor-phone-words-${def.id}`,
+    typeLabel: def.label,
+    goal: "Hold this open and read one line at a time.",
+    lines: lines.length ? lines : [def.script.trim()].filter(Boolean),
+    writeDown: [
+      "Who you spoke with",
+      "What they said was confirmed",
+      "What is still pending",
+      "Records needed",
+      "Reference/case number if relevant",
+      "Callback/contact",
+      "Next step",
+    ],
+    safetyNote: `${PHONE_MODE_SAFETY_CORE}${extra}`.trim(),
+    linkedTaskId: def.guideRowId?.startsWith("demo-quick-") ? undefined : def.guideRowId,
+    phoneFollowUpProfile: profile,
+  }
+}
+
 function TaskActionGuideSheet({
   done,
   lovedOneLabel,
   onAppendTimeline,
   onClose,
   onMarkDone,
+  onOpenPhoneMode,
   openRow,
 }: {
   done: boolean
@@ -3287,6 +3349,7 @@ function TaskActionGuideSheet({
   onAppendTimeline: (entry: ActionGuideDemoTimelineEntry) => void
   onClose: () => void
   onMarkDone: (taskId: string) => void
+  onOpenPhoneMode?: (script: PhoneModeScript) => void
   openRow: PlanBoardDisplayRow | null
 }) {
   const [copyNote, setCopyNote] = useState<string | null>(null)
@@ -3426,6 +3489,15 @@ function TaskActionGuideSheet({
         </div>
 
         <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {onOpenPhoneMode && !guide.isUrgentPanel && (
+            <button
+              type="button"
+              onClick={() => onOpenPhoneMode(buildPhoneScriptFromTaskGuide(guide, row))}
+              className="inline-flex min-w-0 flex-1 items-center justify-center rounded-[14px] border border-[#f0d4c4]/45 bg-[#5c4038]/90 px-3 py-2.5 text-[12px] font-semibold text-[#fff5ef] transition hover:bg-[#6d4d44] sm:flex-none sm:px-4"
+            >
+              Phone Mode
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void handleCopyWords()}
@@ -3460,6 +3532,320 @@ function TaskActionGuideSheet({
           </p>
         )}
         <p className="mt-2.5 text-[10px] leading-snug text-[#c9beb6] sm:text-[11px] sm:leading-relaxed">{guide.standardFooter}</p>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
+function PhoneModeReader({
+  appendActionGuideDemoTimeline,
+  appendDedupedPlanTasks,
+  appendDemoCaseUpdate,
+  markPlanTaskDone,
+  onClose,
+  onCopy,
+  open,
+  script,
+}: {
+  appendActionGuideDemoTimeline: (entry: ActionGuideDemoTimelineEntry) => void
+  appendDedupedPlanTasks: (tasks: StoredAdaptivePlanTask[], ok: string, dup: string) => void
+  appendDemoCaseUpdate: (update: DemoCaseUpdate) => void
+  markPlanTaskDone: (taskId: string) => void
+  onClose: () => void
+  onCopy: (kind: ResultCopyKind, value: string, timelineTitle?: string, meta?: CopyTimelineMeta) => void
+  open: boolean
+  script: PhoneModeScript | null
+}) {
+  const [lineIndex, setLineIndex] = useState(0)
+  const [phase, setPhase] = useState<"lines" | "summary">("lines")
+  const [outcomeText, setOutcomeText] = useState("")
+  const [inlineMsg, setInlineMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open || !script) return
+    setLineIndex(0)
+    setPhase("lines")
+    setOutcomeText("")
+    setInlineMsg(null)
+  }, [open, script?.id])
+
+  if (!open || !script) return null
+
+  const s = script
+  const n = s.lines.length
+  const atSummary = phase === "summary"
+  const currentLine = atSummary ? "" : s.lines[Math.min(lineIndex, n - 1)] ?? ""
+
+  function goNext() {
+    if (atSummary) return
+    if (lineIndex < n - 1) setLineIndex((i) => i + 1)
+    else setPhase("summary")
+  }
+
+  function goBack() {
+    if (atSummary) {
+      setPhase("lines")
+      setLineIndex(Math.max(0, n - 1))
+      return
+    }
+    setLineIndex((i) => Math.max(0, i - 1))
+  }
+
+  function handleCopyLine() {
+    if (!currentLine) return
+    void onCopy("phoneModeLine", currentLine, "Copied Phone Mode line", {
+      taskTitle: "Copied Phone Mode line",
+      badge: "Phone Mode",
+      taskId: "phone-mode",
+    })
+    setInlineMsg("Copied. Anchor did not send anything.")
+    window.setTimeout(() => setInlineMsg(null), 2200)
+  }
+
+  function handleCopyFull() {
+    void onCopy("phoneModeFull", buildPhoneModeFullScriptBlock(s), "Copied full Phone Mode script", {
+      taskTitle: "Copied full Phone Mode script",
+      badge: "Phone Mode",
+      taskId: "phone-mode",
+    })
+    setInlineMsg("Copied. Anchor did not send anything.")
+    window.setTimeout(() => setInlineMsg(null), 2200)
+  }
+
+  function handleSaveOutcome() {
+    const trimmed = outcomeText.trim()
+    if (!trimmed) {
+      setInlineMsg("Add a short note first.")
+      window.setTimeout(() => setInlineMsg(null), 2400)
+      return
+    }
+    const id =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `tl-${Date.now()}`
+    appendActionGuideDemoTimeline({
+      id,
+      taskId: "phone-mode",
+      taskTitle: `Phone Mode outcome · ${trimmed.slice(0, 140)}`,
+      badge: "Phone Mode",
+      savedAt: new Date().toISOString(),
+    })
+    const updId =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `upd-${Date.now()}`
+    appendDemoCaseUpdate({
+      id: updId,
+      sourceLabel: "Phone Mode outcome",
+      ...getDemoCaseDeltaFromCustomNote(trimmed),
+    })
+    setInlineMsg("Saved locally to this demo case.")
+    window.setTimeout(() => setInlineMsg(null), 3200)
+  }
+
+  function handleAddFollowUp() {
+    const p = s.phoneFollowUpProfile ?? "none"
+    if (p === "visit") {
+      appendDedupedPlanTasks(
+        [buildPhoneVisitAfterTask()],
+        "Added after-visit reminder from Phone Mode.",
+        "That reminder is already on your plan.",
+      )
+      return
+    }
+    if (p === "document") {
+      appendDedupedPlanTasks(
+        [buildPhoneDocumentFollowupTask()],
+        "Added document follow-up from Phone Mode.",
+        "That follow-up is already on your plan.",
+      )
+      return
+    }
+    if (p === "insurance") {
+      appendDedupedPlanTasks(
+        [buildPhoneInsuranceRecordsFollowupTask()],
+        "Added records/insurance follow-up from Phone Mode.",
+        "That follow-up is already on your plan.",
+      )
+      return
+    }
+    if (p === "frontDesk") {
+      appendDedupedPlanTasks(
+        [buildFrontDeskBriefFollowupTask()],
+        "Added front-desk follow-up from Phone Mode.",
+        "That follow-up is already on your plan.",
+      )
+      return
+    }
+    if (p === "family") {
+      appendDedupedPlanTasks(
+        [buildPhoneFamilyFollowupTask()],
+        "Added family update follow-up from Phone Mode.",
+        "That follow-up is already on your plan.",
+      )
+    }
+  }
+
+  function handleMarkDone() {
+    if (!s.linkedTaskId || s.linkedTaskId.startsWith("demo-quick-")) return
+    markPlanTaskDone(s.linkedTaskId)
+    onClose()
+  }
+
+  const showAdminExtra =
+    s.phoneFollowUpProfile === "insurance" ||
+    s.phoneFollowUpProfile === "frontDesk" ||
+    s.id.includes("insurance")
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        key="phone-overlay"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 z-[80] flex items-end justify-center bg-[#1c1816]/60 p-0 sm:items-center sm:p-5"
+        role="presentation"
+      >
+        <motion.div
+          initial={{ y: 40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 24, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 380, damping: 32 }}
+          onClick={(e) => e.stopPropagation()}
+          className="flex max-h-[min(92dvh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-t-[22px] border border-[#4a3f3a]/90 bg-[#fdfbf8] shadow-[0_-20px_60px_rgba(20,16,14,0.45)] sm:max-h-[min(90vh,680px)] sm:rounded-[24px]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Phone Mode script reader"
+        >
+          <div className="flex min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[#e5ddd4] px-4 py-3 sm:px-5">
+            <div className="min-w-0">
+              <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b]">Phone Mode</p>
+              <p className="mt-0.5 m-0 truncate text-[13px] font-semibold text-[#2a2420] sm:text-sm">{s.typeLabel}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 rounded-full border border-[#d8cec5] bg-white px-3 py-1.5 text-[11px] font-medium text-[#3f3a35]"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-4">
+            <p className="m-0 text-[12px] font-semibold leading-snug text-[#3f2f28] sm:text-sm">Goal: {s.goal}</p>
+            <p className="mt-2 m-0 text-[11px] leading-snug text-[#3a322c] sm:text-xs sm:leading-relaxed">{s.safetyNote}</p>
+            {showAdminExtra && !s.safetyNote.includes("Nothing is sent") && (
+              <p className="mt-1 m-0 text-[11px] font-medium text-[#3a322c] sm:text-xs">{PHONE_MODE_NOTHING_SENT}</p>
+            )}
+
+            {!atSummary ? (
+              <>
+                <p className="mt-4 m-0 text-center text-[11px] font-semibold text-[#5c4a62]">
+                  Line {lineIndex + 1} of {n}
+                </p>
+                <div className="mt-3 min-h-[7rem] rounded-[18px] border border-[#2a2420]/90 bg-[#2a2420] px-4 py-5 shadow-inner sm:min-h-[8.5rem] sm:px-5 sm:py-6">
+                  <p className="m-0 text-center text-[clamp(1.05rem,4.2vw,1.35rem)] font-medium leading-snug text-[#fdf6f0] sm:text-xl">
+                    {currentLine}
+                  </p>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    disabled={lineIndex === 0 && !atSummary}
+                    className="rounded-[14px] border border-[#d8cec5] bg-white py-3 text-[13px] font-medium text-[#2a2420] disabled:opacity-40 sm:flex-1"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="rounded-[14px] border border-[#8a5f72] bg-[#b98da0] py-3 text-[13px] font-semibold text-white shadow-sm sm:flex-1"
+                  >
+                    {lineIndex >= n - 1 ? "Review checklist" : "Next"}
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={handleCopyLine}
+                    className={`${GLASS_BUTTON} w-full rounded-[14px] py-2.5 text-[12px] font-medium text-[#2a2420] sm:flex-1`}
+                  >
+                    Copy this line
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyFull}
+                    className="w-full rounded-[14px] border border-[#b98da0]/70 bg-[#f5eef8] py-2.5 text-[12px] font-semibold text-[#3a2538] sm:flex-1"
+                  >
+                    Copy full script
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="mt-4 space-y-3">
+                <p className="m-0 text-[12px] font-semibold text-[#2a2420] sm:text-sm">What to write down</p>
+                <ul className="m-0 list-none space-y-1.5 rounded-[14px] border border-[#e5ddd4] bg-white/95 p-3 text-[12px] leading-snug text-[#2a2420] sm:text-sm">
+                  {s.writeDown.map((w) => (
+                    <li key={w} className="relative pl-3.5 before:absolute before:left-0 before:top-[0.45em] before:h-1.5 before:w-1.5 before:rounded-full before:bg-[#b98da0]">
+                      {w}
+                    </li>
+                  ))}
+                </ul>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold text-[#4a3548]">What happened?</span>
+                  <textarea
+                    value={outcomeText}
+                    onChange={(e) => setOutcomeText(e.target.value.slice(0, 600))}
+                    placeholder="Example: Records office said pathology is final but imaging summary is still pending."
+                    rows={3}
+                    className="w-full resize-none rounded-[14px] border border-[#d8cec5] bg-white px-3 py-2.5 text-[13px] leading-snug text-[#2a2420] placeholder:text-[#6f665f]"
+                  />
+                </label>
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleSaveOutcome}
+                    className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] py-2.5 text-[12px] font-semibold text-white sm:flex-1"
+                  >
+                    Save outcome
+                  </button>
+                  {(s.phoneFollowUpProfile && s.phoneFollowUpProfile !== "none") && (
+                    <button
+                      type="button"
+                      onClick={handleAddFollowUp}
+                      className={`${GLASS_BUTTON} w-full rounded-[14px] py-2.5 text-[12px] font-medium text-[#2a2420] sm:flex-1`}
+                    >
+                      Add follow-up task
+                    </button>
+                  )}
+                  {s.linkedTaskId && !s.linkedTaskId.startsWith("demo-quick-") && (
+                    <button
+                      type="button"
+                      onClick={handleMarkDone}
+                      className="w-full rounded-[14px] border border-[#4a7c59]/50 bg-[#e8f4ea] py-2.5 text-[12px] font-semibold text-[#2d4a32] sm:flex-1"
+                    >
+                      Mark done
+                    </button>
+                  )}
+                  <button type="button" onClick={goBack} className={`${GLASS_BUTTON} w-full rounded-[14px] py-2.5 text-[12px] sm:flex-1`}>
+                    Back to lines
+                  </button>
+                </div>
+              </div>
+            )}
+            {inlineMsg && (
+              <p className="mt-3 text-center text-[11px] font-medium text-[#2d4a32]" role="status">
+                {inlineMsg}
+              </p>
+            )}
+            <p className="mt-4 text-center text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">
+              Read line by line · Anchor does not call, text, or schedule for you.
+            </p>
+          </div>
+        </motion.div>
       </motion.div>
     </AnimatePresence>
   )
@@ -4234,6 +4620,8 @@ function ResultsView({
   const [todayHeroModal, setTodayHeroModal] = useState<LastHeroFlowUsed | null>(null)
   const [wordsSayModal, setWordsSayModal] = useState<WordsToSayScriptDef | null>(null)
   const [futurePreviewModal, setFuturePreviewModal] = useState<"sentinel" | "mapper" | "brief" | "outreach" | null>(null)
+  const [phoneModeOpen, setPhoneModeOpen] = useState(false)
+  const [phoneModeScript, setPhoneModeScript] = useState<PhoneModeScript | null>(null)
   const [askShowAll, setAskShowAll] = useState(false)
   const [visitPrepInlineNote, setVisitPrepInlineNote] = useState<string | null>(null)
 
@@ -4333,6 +4721,14 @@ function ResultsView({
     onHeroFlowUsed(flow)
     setTodayHeroModal(flow)
   }
+
+  const openPhoneMode = useCallback((s: PhoneModeScript) => {
+    setTodayHeroModal(null)
+    setFuturePreviewModal(null)
+    setWordsSayModal(null)
+    setPhoneModeScript(s)
+    setPhoneModeOpen(true)
+  }, [])
 
   function handleSentinelOpenInsuranceFlow() {
     setFuturePreviewModal(null)
@@ -5241,6 +5637,13 @@ function ResultsView({
                           <p className="mt-2 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{VISIT_GUIDE_VISIT_NOTES_HINT}</p>
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => openPhoneMode(PHONE_SCRIPT_VISIT_PREP)}
+                        className="mt-3 w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-3 text-[13px] font-semibold leading-snug text-[#fdf6f0] shadow-sm sm:py-3.5"
+                      >
+                        Phone Mode — read line by line
+                      </button>
                       <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
                         <button
                           type="button"
@@ -5326,6 +5729,13 @@ function ResultsView({
                           </ul>
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => openPhoneMode(PHONE_SCRIPT_DOCUMENT)}
+                        className="mt-3 w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-3 text-[13px] font-semibold leading-snug text-[#fdf6f0] shadow-sm sm:py-3.5"
+                      >
+                        Phone Mode — read line by line
+                      </button>
                       <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
                         <button
                           type="button"
@@ -5404,6 +5814,13 @@ function ResultsView({
                           <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE}</p>
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => openPhoneMode(PHONE_SCRIPT_INSURANCE_RECORDS)}
+                        className="mt-3 w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-3 text-[13px] font-semibold leading-snug text-[#fdf6f0] shadow-sm sm:py-3.5"
+                      >
+                        Phone Mode — read line by line
+                      </button>
                       <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
                         <button
                           type="button"
@@ -5452,7 +5869,11 @@ function ResultsView({
                     </>
                   )}
 
-                  {(copied === "visitPrep" || copied === "documentGuideCopy" || copied === "insuranceIssueCopy") && (
+                  {(copied === "visitPrep" ||
+                    copied === "documentGuideCopy" ||
+                    copied === "insuranceIssueCopy" ||
+                    copied === "phoneModeLine" ||
+                    copied === "phoneModeFull") && (
                     <p className="mt-3 m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
                       Copied. Anchor did not send anything.
                     </p>
@@ -5499,6 +5920,13 @@ function ResultsView({
                     </button>
                   </div>
                   <p className="mt-3 m-0 text-[12px] leading-relaxed text-[#3f3a36] sm:text-sm">{wordsSayModal.script}</p>
+                  <button
+                    type="button"
+                    onClick={() => openPhoneMode(buildWordsToSayPhoneScript(wordsSayModal))}
+                    className="mt-3 w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] py-3 text-[13px] font-semibold text-[#fdf6f0]"
+                  >
+                    Phone Mode — read line by line
+                  </button>
                   <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row">
                     {wordsSayModal.guideRowId && (
                       <button
@@ -5697,6 +6125,13 @@ function ResultsView({
                           ))}
                         </ul>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => openPhoneMode(PHONE_SCRIPT_FRONT_DESK)}
+                        className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] py-3 text-[13px] font-semibold text-[#fdf6f0]"
+                      >
+                        Phone Mode — read line by line
+                      </button>
                       <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                         <button
                           type="button"
@@ -6544,6 +6979,14 @@ function ResultsView({
                 </div>
               </div>
 
+              <button
+                type="button"
+                onClick={() => openPhoneMode(PHONE_SCRIPT_FAMILY_UPDATE)}
+                className="w-full rounded-[16px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-3 text-[13px] font-semibold text-[#fdf6f0] shadow-sm sm:rounded-[18px]"
+              >
+                Phone Mode — family update script
+              </button>
+
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <div className="mb-2 flex min-w-0 items-start gap-2">
                   <Users className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" aria-hidden />
@@ -7165,7 +7608,27 @@ function ResultsView({
           onAppendTimeline={appendActionGuideDemoTimeline}
           onClose={() => setGuideOpenId(null)}
           onMarkDone={markPlanTaskDone}
+          onOpenPhoneMode={(s) => {
+            setGuideOpenId(null)
+            openPhoneMode(s)
+          }}
           openRow={openGuideRow}
+        />
+      )}
+
+      {phoneModeOpen && phoneModeScript && (
+        <PhoneModeReader
+          appendActionGuideDemoTimeline={appendActionGuideDemoTimeline}
+          appendDedupedPlanTasks={appendDedupedPlanTasks}
+          appendDemoCaseUpdate={appendDemoCaseUpdate}
+          markPlanTaskDone={markPlanTaskDone}
+          onClose={() => {
+            setPhoneModeOpen(false)
+            setPhoneModeScript(null)
+          }}
+          onCopy={onCopy}
+          open={phoneModeOpen}
+          script={phoneModeScript}
         />
       )}
 
