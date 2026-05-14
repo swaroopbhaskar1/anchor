@@ -1259,3 +1259,190 @@ export const WORDS_TO_SAY_SCRIPT_DEFS: WordsToSayScriptDef[] = [
     guideRowId: "demo-quick-insurance",
   },
 ]
+
+/** Prototype “future agents” — copy and plan helpers only; no live automation. */
+export const FUTURE_PREVIEW_BOUNDARY =
+  "Prototype preview only. Nothing is sent, scheduled, called, or shared."
+
+export const FUTURE_PREVIEW_TOOLS_TITLE = "Future agent previews"
+
+export const FUTURE_PREVIEW_TOOLS_SUBTITLE =
+  "Prototype-only previews for where Anchor goes next. Nothing is sent, called, scheduled, or shared."
+
+export const SENTINEL_PREVIEW_TITLE = "Sentinel preview"
+
+export const SENTINEL_PREVIEW_INTRO =
+  "Sentinel only watches what happens inside Anchor in this prototype. It does not read other apps, record your screen, or monitor your phone."
+
+export const SENTINEL_SIGNAL_ROWS: { signal: string; response: string }[] = [
+  {
+    signal: "“denied”",
+    response: "Offer the Insurance / records issue hero flow — administrative prep only.",
+  },
+  {
+    signal: "“appointment delayed”",
+    response: "Suggest a follow-up task to confirm timing with the care team or scheduler.",
+  },
+  {
+    signal: "“symptoms worse”",
+    response: "Show urgent safety language — Anchor is not emergency monitoring.",
+  },
+  {
+    signal: "“overwhelmed” / “lost”",
+    response: "Collapse to one next action so the thread stays workable.",
+  },
+]
+
+export const SENTINEL_DEMO_OUTPUT_LINE =
+  "Anchor noticed this may change the next action. Open the right flow?"
+
+export const SENTINEL_NOT_EMERGENCY_LINE =
+  "Sentinel is a prototype support layer, not emergency monitoring."
+
+export const SYSTEM_MAPPER_PREVIEW_TITLE = "System Mapper preview"
+
+export const SYSTEM_MAPPER_PREVIEW_INTRO =
+  "Anchor does not rank doctors or choose care. It helps you understand what type of place or specialist to ask about."
+
+export const SYSTEM_MAPPER_FACTORS: string[] = [
+  "Current care team",
+  "Local oncology clinic",
+  "Academic cancer center",
+  "Second-opinion clinic",
+  "Insurance / referral requirements",
+  "Records required",
+  "Travel / logistics",
+]
+
+export const SYSTEM_MAPPER_COMPARISON_QUESTIONS: string[] = [
+  "What type of specialist should we be seeing next?",
+  "Is a referral required?",
+  "What records are needed before scheduling?",
+  "Can this be a second opinion?",
+  "Should pending results come back first?",
+]
+
+export const SYSTEM_MAPPER_NOT_RANKING_LINE =
+  "Not doctor ranking. Not medical quality scoring."
+
+export function buildSystemMapperComparisonQuestionsBlock(): string {
+  return [
+    "ANCHOR — SYSTEM MAPPER (PROTOTYPE PREVIEW)",
+    FUTURE_PREVIEW_BOUNDARY,
+    "",
+    SYSTEM_MAPPER_NOT_RANKING_LINE,
+    "",
+    "QUESTIONS TO ASK BEFORE COMPARING OPTIONS",
+    ...SYSTEM_MAPPER_COMPARISON_QUESTIONS.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. No search, no rankings, no care decisions by Anchor.",
+  ].join("\n")
+}
+
+export const FRONT_DESK_BRIEF_PREVIEW_TITLE = "Front-Desk Brief"
+
+export const FRONT_DESK_BRIEF_PREVIEW_INTRO =
+  "Use this when calling a scheduler, records office, insurer, or clinic front desk."
+
+export const FRONT_DESK_BRIEF_SCRIPT =
+  "Hi, I'm calling for my mom. We are trying to prepare for a cancer-care appointment or records review. Can you help us confirm what records are needed, where to send them, whether a referral or authorization is required, and who we should follow up with?"
+
+export const FRONT_DESK_BRIEF_FIELD_LIST: string[] = [
+  "Name of person spoken to",
+  "Records needed",
+  "Where to send records",
+  "Referral / authorization requirement",
+  "Deadline",
+  "Reference number",
+  "Follow-up contact",
+]
+
+export function buildFrontDeskBriefClipboardBlock(): string {
+  return [
+    "ANCHOR — FRONT-DESK BRIEF (PROTOTYPE PREVIEW)",
+    FUTURE_PREVIEW_BOUNDARY,
+    "",
+    "OPENING SCRIPT",
+    FRONT_DESK_BRIEF_SCRIPT,
+    "",
+    "FIELDS TO CAPTURE AFTER THE CALL",
+    ...FRONT_DESK_BRIEF_FIELD_LIST.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. Anchor did not place a call or send a message.",
+  ].join("\n")
+}
+
+export const HUMAN_OUTREACH_PREVIEW_TITLE = "Human-approved outreach preview"
+
+export const HUMAN_OUTREACH_PREVIEW_INTRO =
+  "Future Anchor could prepare calls, messages, or logistics steps. The caregiver stays in control."
+
+export const HUMAN_OUTREACH_STEPS: string[] = [
+  "Anchor drafts the action.",
+  "Caregiver reviews.",
+  "Caregiver edits.",
+  "Caregiver approves.",
+  "Anchor logs the outcome.",
+]
+
+export const HUMAN_OUTREACH_PROTOTYPE_NOTE =
+  "No call is made. No message is sent. No appointment is scheduled."
+
+export const HUMAN_OUTREACH_NO_AUTONOMOUS_LINE =
+  "Human approval required. No autonomous action in this demo."
+
+export function buildHumanOutreachApprovalChecklistBlock(): string {
+  return [
+    "ANCHOR — HUMAN-APPROVED OUTREACH (PROTOTYPE PREVIEW)",
+    FUTURE_PREVIEW_BOUNDARY,
+    "",
+    HUMAN_OUTREACH_NO_AUTONOMOUS_LINE,
+    "",
+    "INTENDED FLOW",
+    ...HUMAN_OUTREACH_STEPS.map((l, i) => `${i + 1}. ${l}`),
+    "",
+    "CURRENT PROTOTYPE",
+    HUMAN_OUTREACH_PROTOTYPE_NOTE,
+    "",
+    "— Copied from Anchor prototype. Anchor does not send external messages or place calls.",
+  ].join("\n")
+}
+
+export const FUTURE_PREVIEW_PLAN_IDS = {
+  sentinelDelayed: "local:fp-sentinel-delayed",
+  sentinelOneNext: "local:fp-sentinel-one-next",
+  frontDeskFollowup: "local:fp-frontdesk-followup",
+} as const
+
+export function buildSentinelDelayedFollowupTask(): StoredAdaptivePlanTask {
+  return {
+    id: FUTURE_PREVIEW_PLAN_IDS.sentinelDelayed,
+    title: "Follow up on delayed appointment or scheduling window",
+    detail:
+      "From Sentinel preview — confirm dates and instructions with your care team. Prototype cue only; not monitoring.",
+    initialStatus: "waiting",
+    fromUpdate: false,
+  }
+}
+
+export function buildSentinelOneNextActionTask(): StoredAdaptivePlanTask {
+  return {
+    id: FUTURE_PREVIEW_PLAN_IDS.sentinelOneNext,
+    title: "One next action: add a short update in Anchor",
+    detail:
+      "From Sentinel preview — capture what feels most stuck in Tools → Updates. Local demo only; nothing sent automatically.",
+    initialStatus: "active",
+    fromUpdate: false,
+  }
+}
+
+export function buildFrontDeskBriefFollowupTask(): StoredAdaptivePlanTask {
+  return {
+    id: FUTURE_PREVIEW_PLAN_IDS.frontDeskFollowup,
+    title: "Follow up on front-desk / records call details",
+    detail:
+      "From Front-Desk Brief preview — you placed any call yourself; Anchor only held a checklist locally.",
+    initialStatus: "waiting",
+    fromUpdate: false,
+  }
+}

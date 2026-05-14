@@ -29,13 +29,19 @@ import {
   buildAdaptiveTasksFromCustomPlanNote,
   buildDocumentGuideClipboardBlock,
   buildFamilySupportAdaptiveTask,
+  buildFrontDeskBriefClipboardBlock,
+  buildFrontDeskBriefFollowupTask,
   buildHeroDocumentGuidePlanTasks,
   buildHeroInsuranceIssuePlanTasks,
   buildHeroVisitPrepPlanTasks,
+  buildHumanOutreachApprovalChecklistBlock,
   buildInsuranceIssueClipboardBlock,
   buildMemoryHoldingNarrative,
   buildRecordsChecklistAdaptiveTask,
   buildRecordsQuickAdaptiveTask,
+  buildSentinelDelayedFollowupTask,
+  buildSentinelOneNextActionTask,
+  buildSystemMapperComparisonQuestionsBlock,
   buildVisitGuideClipboardBlock,
   CARE_TEAM_ALIGNED_INTRO,
   COCKPIT_LOCAL_CONSENT_LINE,
@@ -48,6 +54,13 @@ import {
   DOCUMENT_GUIDE_PANEL_TITLE,
   DOCUMENT_GUIDE_WHAT_TO_BRING,
   FOLLOW_UP_CHIP_DEFS,
+  FRONT_DESK_BRIEF_FIELD_LIST,
+  FRONT_DESK_BRIEF_PREVIEW_INTRO,
+  FRONT_DESK_BRIEF_PREVIEW_TITLE,
+  FRONT_DESK_BRIEF_SCRIPT,
+  FUTURE_PREVIEW_BOUNDARY,
+  FUTURE_PREVIEW_TOOLS_SUBTITLE,
+  FUTURE_PREVIEW_TOOLS_TITLE,
   FAMILY_AVOID_PRESSURE_LINES,
   FAMILY_EXPLAIN_CARDS,
   FAMILY_HELPS_LINES,
@@ -61,6 +74,11 @@ import {
   FAMILY_UPDATE_DRAFT_HELP,
   GENERIC_CARE_TEAM_CONTEXT_BULLETS,
   GENERIC_NIGHT_NOTE,
+  HUMAN_OUTREACH_NO_AUTONOMOUS_LINE,
+  HUMAN_OUTREACH_PREVIEW_INTRO,
+  HUMAN_OUTREACH_PREVIEW_TITLE,
+  HUMAN_OUTREACH_PROTOTYPE_NOTE,
+  HUMAN_OUTREACH_STEPS,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
   HERO_DOCUMENT_PATHOLOGY_QUESTIONS,
@@ -104,7 +122,17 @@ import {
   SARAH_KNOW_NOW_BULLETS,
   SARAH_NEEDS_CONFIRMATION_BULLETS,
   SARAH_NOT_TONIGHT_BULLETS,
+  SYSTEM_MAPPER_COMPARISON_QUESTIONS,
+  SYSTEM_MAPPER_FACTORS,
+  SYSTEM_MAPPER_NOT_RANKING_LINE,
+  SYSTEM_MAPPER_PREVIEW_INTRO,
+  SYSTEM_MAPPER_PREVIEW_TITLE,
   SARAH_NIGHT_NOTE,
+  SENTINEL_DEMO_OUTPUT_LINE,
+  SENTINEL_NOT_EMERGENCY_LINE,
+  SENTINEL_PREVIEW_INTRO,
+  SENTINEL_PREVIEW_TITLE,
+  SENTINEL_SIGNAL_ROWS,
   VISIT_GUIDE_AFTER_VISIT,
   VISIT_GUIDE_END_LINE,
   VISIT_GUIDE_IF_CONFUSED,
@@ -146,6 +174,9 @@ type ResultCopyKind =
   | "visitPrep"
   | "documentGuideCopy"
   | "insuranceIssueCopy"
+  | "futureMapperQuestions"
+  | "futureFrontDeskBrief"
+  | "futureOutreachChecklist"
 
 interface CopyTimelineMeta {
   taskTitle: string
@@ -661,6 +692,7 @@ export default function App() {
   const wasActiveRef = useRef(false)
   const voiceFollowUpRef = useRef(false)
   const breathStepRef = useRef(0)
+  const pendingResultsCockpitScrollRef = useRef(false)
 
   const [caseInformationUpdates, setCaseInformationUpdates] = useState<DemoCaseUpdate[]>([])
   const [completedPlanTaskIds, setCompletedPlanTaskIds] = useState<string[]>([])
@@ -914,6 +946,17 @@ export default function App() {
     }
   }, [hydrated])
 
+  useLayoutEffect(() => {
+    if (!hydrated) return
+    if (phase !== "results" || !mirrorResult || !pendingResultsCockpitScrollRef.current) return
+    pendingResultsCockpitScrollRef.current = false
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" })
+      })
+    })
+  }, [hydrated, phase, mirrorResult])
+
   useEffect(() => {
     if (!hydrated) return
     if (phase !== "results" || !mirrorResult) return
@@ -1090,6 +1133,25 @@ export default function App() {
     setIntakeUpdatesSignal((n) => n + 1)
   }, [])
 
+  const scheduleResultsCockpitScroll = useCallback(() => {
+    pendingResultsCockpitScrollRef.current = true
+  }, [])
+
+  const backToIntake = useCallback(() => {
+    setPhase("idle")
+    setError(null)
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" })
+    })
+  }, [])
+
+  const returnToCase = useCallback(() => {
+    setPhase("results")
+    setWorkspaceTab("today")
+    setToolPanel(null)
+    scheduleResultsCockpitScroll()
+  }, [scheduleResultsCockpitScroll])
+
   const processRant = useCallback(async (transcript: string) => {
     setPhase("processing")
     setError(null)
@@ -1106,6 +1168,7 @@ export default function App() {
     setLastHeroFlowUsed(null)
 
     const useSarahFallbackMirror = (echoFromUser?: string) => {
+      scheduleResultsCockpitScroll()
       setMirrorResult(SARAH_MIRROR_RESULT)
       setIsBackupDemoMirror(true)
       const echo = (echoFromUser?.trim() || SARAH_DEMO_CONCERN).slice(0, 500)
@@ -1157,6 +1220,7 @@ export default function App() {
         return
       }
 
+      scheduleResultsCockpitScroll()
       setMirrorResult(parsed)
       setIsBackupDemoMirror(false)
       rememberFear(parsed)
@@ -1166,7 +1230,7 @@ export default function App() {
       console.error(err)
       useSarahFallbackMirror(transcript)
     }
-  }, [cancerType, lovedOne, pathologyText, rememberFear, sessionId, userId])
+  }, [cancerType, lovedOne, pathologyText, rememberFear, scheduleResultsCockpitScroll, sessionId, userId])
 
   const showSarahBackupDemo = useCallback(() => {
     setMirrorResult(SARAH_MIRROR_RESULT)
@@ -1182,8 +1246,9 @@ export default function App() {
     setWorkspaceTab("today")
     setToolPanel(null)
     setResultsTranscriptEcho(SARAH_DEMO_CONCERN)
+    scheduleResultsCockpitScroll()
     setPhase("results")
-  }, [])
+  }, [scheduleResultsCockpitScroll])
 
   useEffect(() => {
     if (wasActiveRef.current && !isSessionActive) {
@@ -1206,6 +1271,7 @@ export default function App() {
           })
           appendAdaptivePlanTasks(buildAdaptiveTasksFromCustomPlanNote(trimmed))
         }
+        scheduleResultsCockpitScroll()
         setPhase("results")
         return
       }
@@ -1219,7 +1285,7 @@ export default function App() {
 
     wasActiveRef.current = isSessionActive
     if (isSessionActive) setPhase("recording")
-  }, [appendAdaptivePlanTasks, appendDemoCaseUpdate, isSessionActive, processRant, transcriptRef])
+  }, [appendAdaptivePlanTasks, appendDemoCaseUpdate, isSessionActive, processRant, scheduleResultsCockpitScroll, transcriptRef])
 
   async function requestPlan() {
     if (!mirrorResult) return
@@ -1703,11 +1769,13 @@ export default function App() {
                     <IdleView
                       cancerType={cancerType}
                       displayName={displayName}
+                      error={error}
                       handleStartStopClick={handleStartStopClick}
+                      hasOpenCase={Boolean(mirrorResult)}
                       lovedOne={lovedOne}
                       lovedOneLabel={lovedOneLabel}
                       onCancerTypeChange={handleCancerTypeChange}
-                      error={error}
+                      onReturnToCase={returnToCase}
                       onSarahBackupDemo={showSarahBackupDemo}
                       showExampleOutput={showExampleOutput}
                     />
@@ -1752,6 +1820,7 @@ export default function App() {
                       noteText={noteText}
                       onAddByVoice={beginVoiceFollowUp}
                       onAskFollowUpSubmit={submitAskFollowUp}
+                      onBackToIntake={backToIntake}
                       onCopy={copyText}
                       onHeroFlowUsed={setLastHeroFlowUsed}
                       onOpenToolPanel={(panel) => {
@@ -2006,9 +2075,11 @@ function IdleView({
   displayName,
   error,
   handleStartStopClick,
+  hasOpenCase,
   lovedOne,
   lovedOneLabel,
   onCancerTypeChange,
+  onReturnToCase,
   onSarahBackupDemo,
   showExampleOutput,
 }: {
@@ -2016,9 +2087,11 @@ function IdleView({
   displayName: string
   error: string | null
   handleStartStopClick: () => void
+  hasOpenCase: boolean
   lovedOne: string
   lovedOneLabel: string
   onCancerTypeChange: (value: CancerType) => void
+  onReturnToCase: () => void
   onSarahBackupDemo: () => void
   showExampleOutput: boolean
 }) {
@@ -2067,6 +2140,21 @@ function IdleView({
           Keep it messy. The transcript becomes your grounded note.
         </p>
       </motion.div>
+
+      {hasOpenCase && (
+        <motion.div variants={itemVariants} className="mt-4 min-w-0">
+          <button
+            type="button"
+            onClick={onReturnToCase}
+            className={`${GLASS_BUTTON} w-full rounded-[22px] border border-[#b98da0]/60 px-5 py-3 text-left text-sm font-medium text-[#3f3a36] shadow-sm transition hover:bg-white/95 sm:w-auto sm:rounded-[26px]`}
+          >
+            Return to case
+          </button>
+          <p className="mt-2 m-0 max-w-xl text-[11px] leading-snug text-[#756f68] sm:text-xs">
+            Your demo case is still saved locally in this browser — nothing was cleared.
+          </p>
+        </motion.div>
+      )}
       {showExampleOutput && (
         <p className="mt-3 text-xs leading-6 text-[#756f68] sm:text-sm">
           This is a live demo — speak your own concern to try it yourself, or Start over to enter your own details. Sarah is an adult child supporting her mom before a tomorrow-morning visit (sample colon scenario).
@@ -4075,6 +4163,7 @@ function ResultsView({
   noteText,
   onAddByVoice,
   onAskFollowUpSubmit,
+  onBackToIntake,
   onCopy,
   onHeroFlowUsed,
   onOpenToolPanel,
@@ -4113,6 +4202,7 @@ function ResultsView({
   noteText: string
   onAddByVoice: () => void
   onAskFollowUpSubmit: (chipId: FollowUpChipId | null, customText: string) => CreateFollowUpResult
+  onBackToIntake: () => void
   onCopy: (kind: ResultCopyKind, value: string, timelineTitle?: string, timelineMeta?: CopyTimelineMeta) => void
   onHeroFlowUsed: (flow: LastHeroFlowUsed) => void
   onOpenToolPanel: (panel: ToolPanelId | null) => void
@@ -4143,6 +4233,7 @@ function ResultsView({
   const [memoryTimelineExpanded, setMemoryTimelineExpanded] = useState(false)
   const [todayHeroModal, setTodayHeroModal] = useState<LastHeroFlowUsed | null>(null)
   const [wordsSayModal, setWordsSayModal] = useState<WordsToSayScriptDef | null>(null)
+  const [futurePreviewModal, setFuturePreviewModal] = useState<"sentinel" | "mapper" | "brief" | "outreach" | null>(null)
   const [askShowAll, setAskShowAll] = useState(false)
   const [visitPrepInlineNote, setVisitPrepInlineNote] = useState<string | null>(null)
 
@@ -4224,9 +4315,59 @@ function ResultsView({
     window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
   }
 
+  function appendFuturePreviewTimeline(taskTitle: string) {
+    const id =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `tl-${Date.now()}`
+    appendActionGuideDemoTimeline({
+      id,
+      taskId: "future-preview",
+      taskTitle,
+      badge: "Future preview",
+      savedAt: new Date().toISOString(),
+    })
+  }
+
   function openHeroModal(flow: LastHeroFlowUsed) {
     onHeroFlowUsed(flow)
     setTodayHeroModal(flow)
+  }
+
+  function handleSentinelOpenInsuranceFlow() {
+    setFuturePreviewModal(null)
+    onWorkspaceTabChange("today")
+    openHeroModal("insurance")
+  }
+
+  function handleSentinelAddDelayedTask() {
+    appendDedupedPlanTasks(
+      [buildSentinelDelayedFollowupTask()],
+      "Added a scheduling follow-up from the Sentinel preview (prototype).",
+      "That Sentinel-style follow-up is already on your plan.",
+    )
+  }
+
+  function handleSentinelOneNextAction() {
+    appendDedupedPlanTasks(
+      [buildSentinelOneNextActionTask()],
+      "Added a “one next action” reminder from the Sentinel preview (prototype).",
+      "That reminder is already on your plan.",
+    )
+  }
+
+  function handleFrontDeskPreviewAddPlanTask() {
+    appendDedupedPlanTasks(
+      [buildFrontDeskBriefFollowupTask()],
+      "Added a front-desk follow-up task from the preview (prototype).",
+      "That front-desk follow-up is already on your plan.",
+    )
+  }
+
+  function handleOutreachSavePreviewTimeline() {
+    appendFuturePreviewTimeline("Saved Human-approved outreach preview checklist")
+    setVisitPrepInlineNote("Saved preview note to Saved timeline (local demo).")
+    window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
   }
 
   function familyRoleTaskAlreadyPresent(roleKey: string): boolean {
@@ -4616,6 +4757,20 @@ function ResultsView({
         </motion.div>
 
         <div className="sticky top-0 z-[24] mb-3 border-b border-[#e8dfd8] bg-[#fdfbf8]/96 py-2 backdrop-blur-md sm:mb-4">
+          <div className="mb-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+            <button
+              type="button"
+              onClick={onBackToIntake}
+              className="inline-flex max-w-full shrink-0 items-center gap-1.5 self-start rounded-full border border-[#d8cec5] bg-white/90 px-3 py-1.5 text-[11px] font-medium text-[#5f5a55] transition hover:bg-white sm:text-xs"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 shrink-0 text-[#9b829c] sm:h-4 sm:w-4" aria-hidden />
+              <span className="hidden sm:inline">Back to intake</span>
+              <span className="sm:hidden">Intake</span>
+            </button>
+            <p className="m-0 min-w-0 flex-1 text-[10px] leading-snug text-[#756f68] sm:text-[11px]">
+              Back to intake lets you add a new concern. Start over clears this demo case.
+            </p>
+          </div>
           <div className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {COCKPIT_TAB_DEFS.map((tab) => (
               <button
@@ -4899,6 +5054,83 @@ function ResultsView({
                   </button>
                 ))}
               </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#d8cec5]/70 bg-[#faf7f4]/90 p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-sm">{FUTURE_PREVIEW_TOOLS_TITLE}</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  {FUTURE_PREVIEW_TOOLS_SUBTITLE}
+                </p>
+                <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 sm:gap-3">
+                  <div className={`${GLASS_PANEL} min-w-0 rounded-[14px] border border-[#e8dfd8]/90 p-3 sm:rounded-[16px]`}>
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Sentinel</p>
+                    <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      Notices when a detail may change the next action, like &quot;denied,&quot; &quot;delayed,&quot; &quot;worse,&quot; or
+                      &quot;overwhelmed.&quot;
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTodayHeroModal(null)
+                        setFuturePreviewModal("sentinel")
+                      }}
+                      className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
+                    >
+                      Preview Sentinel
+                    </button>
+                  </div>
+                  <div className={`${GLASS_PANEL} min-w-0 rounded-[14px] border border-[#e8dfd8]/90 p-3 sm:rounded-[16px]`}>
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">System Mapper</p>
+                    <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      Helps map what kind of clinic, specialist, records, or second-opinion pathway to ask about — without ranking
+                      doctors.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTodayHeroModal(null)
+                        setFuturePreviewModal("mapper")
+                      }}
+                      className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
+                    >
+                      Preview Mapper
+                    </button>
+                  </div>
+                  <div className={`${GLASS_PANEL} min-w-0 rounded-[14px] border border-[#e8dfd8]/90 p-3 sm:rounded-[16px]`}>
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Front-Desk Brief</p>
+                    <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      Turns your case into a short script for a scheduler, records office, or insurance desk.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTodayHeroModal(null)
+                        setFuturePreviewModal("brief")
+                      }}
+                      className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
+                    >
+                      Preview Brief
+                    </button>
+                  </div>
+                  <div className={`${GLASS_PANEL} min-w-0 rounded-[14px] border border-[#e8dfd8]/90 p-3 sm:rounded-[16px]`}>
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Human-approved outreach</p>
+                    <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      Anchor prepares the call or message. The caregiver reviews and approves. No autonomous action.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTodayHeroModal(null)
+                        setFuturePreviewModal("outreach")
+                      }}
+                      className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
+                    >
+                      Preview approval flow
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-2 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{FUTURE_PREVIEW_BOUNDARY}</p>
+              </div>
+
               <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_LOCAL_CONSENT_LINE}</p>
             </motion.div>
           )}
@@ -5302,6 +5534,248 @@ function ResultsView({
                   <p className="mt-2 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
                     Preparation only — not sent from Anchor. Your care team confirms medical details.
                   </p>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {futurePreviewModal && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setFuturePreviewModal(null)}
+                className="fixed inset-0 z-[60] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
+                role="presentation"
+              >
+                <motion.div
+                  initial={{ y: 48, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 32, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`${GLASS_PANEL} max-h-[min(92vh,640px)] w-full max-w-lg overflow-y-auto rounded-[20px] p-4 shadow-[0_24px_80px_rgba(36,34,48,0.18)] sm:rounded-[24px] sm:p-5`}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Future agent preview"
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="m-0 text-[15px] font-semibold text-[#3f3a35] sm:text-base">
+                        {futurePreviewModal === "sentinel"
+                          ? SENTINEL_PREVIEW_TITLE
+                          : futurePreviewModal === "mapper"
+                            ? SYSTEM_MAPPER_PREVIEW_TITLE
+                            : futurePreviewModal === "brief"
+                              ? FRONT_DESK_BRIEF_PREVIEW_TITLE
+                              : HUMAN_OUTREACH_PREVIEW_TITLE}
+                      </p>
+                      <p className="mt-1 m-0 text-[10px] font-medium uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                        {FUTURE_PREVIEW_BOUNDARY}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFuturePreviewModal(null)}
+                      className="shrink-0 rounded-full border border-[#e5ddd4] bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  {futurePreviewModal === "sentinel" && (
+                    <div className="mt-3 grid gap-3">
+                      <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{SENTINEL_PREVIEW_INTRO}</p>
+                      <div>
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                          Example signals (inside Anchor only)
+                        </p>
+                        <ul className="mt-1.5 m-0 list-none space-y-2 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                          {SENTINEL_SIGNAL_ROWS.map((row) => (
+                            <li key={row.signal} className="rounded-[12px] border border-[#ece4dc] bg-white/70 p-2 sm:p-2.5">
+                              <span className="font-semibold text-[#5f5a55]">{row.signal}</span>
+                              <span className="text-[#756f68]"> — {row.response}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <p className="m-0 text-[12px] font-medium text-[#3f3a35] sm:text-sm">{SENTINEL_DEMO_OUTPUT_LINE}</p>
+                      <div className="rounded-[12px] border border-[#e8c9c9]/80 bg-[#fff8f8]/95 p-2.5 sm:p-3">
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#9b6b6b] sm:text-[11px]">
+                          If someone says symptoms feel worse
+                        </p>
+                        <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">
+                          {PLAN_CHANGE_URGENT_SAFETY}
+                        </p>
+                      </div>
+                      <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{SENTINEL_NOT_EMERGENCY_LINE}</p>
+                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <button
+                          type="button"
+                          onClick={handleSentinelOpenInsuranceFlow}
+                          className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
+                        >
+                          Open insurance/records issue
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSentinelAddDelayedTask}
+                          className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1"
+                        >
+                          Add follow-up task
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSentinelOneNextAction}
+                          className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
+                        >
+                          Show one next action
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {futurePreviewModal === "mapper" && (
+                    <div className="mt-3 grid gap-3">
+                      <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{SYSTEM_MAPPER_PREVIEW_INTRO}</p>
+                      <p className="m-0 text-[11px] font-medium text-[#5f5a55] sm:text-xs">{SYSTEM_MAPPER_NOT_RANKING_LINE}</p>
+                      <div>
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Factors</p>
+                        <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                          {SYSTEM_MAPPER_FACTORS.map((f) => (
+                            <li key={f} className="relative pl-3 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                          Questions to ask before comparing options
+                        </p>
+                        <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                          {SYSTEM_MAPPER_COMPARISON_QUESTIONS.map((q) => (
+                            <li key={q} className="relative pl-3 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                              {q}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void onCopy(
+                            "futureMapperQuestions",
+                            buildSystemMapperComparisonQuestionsBlock(),
+                            "Copied comparison questions",
+                            { taskTitle: "Copied System Mapper preview questions", badge: "Future preview", taskId: "fp-mapper" },
+                          )
+                        }
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2.5 text-[12px] font-semibold text-white sm:rounded-[16px]"
+                      >
+                        <Copy className="h-4 w-4 shrink-0" />
+                        Copy comparison questions
+                      </button>
+                    </div>
+                  )}
+
+                  {futurePreviewModal === "brief" && (
+                    <div className="mt-3 grid gap-3">
+                      <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{FRONT_DESK_BRIEF_PREVIEW_INTRO}</p>
+                      <div className="rounded-[12px] border border-[#ece4dc] bg-white/75 p-2.5 sm:p-3">
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Structured brief</p>
+                        <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{FRONT_DESK_BRIEF_SCRIPT}</p>
+                      </div>
+                      <div>
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Fields to collect</p>
+                        <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                          {FRONT_DESK_BRIEF_FIELD_LIST.map((f) => (
+                            <li key={f} className="relative pl-3 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void onCopy(
+                              "futureFrontDeskBrief",
+                              buildFrontDeskBriefClipboardBlock(),
+                              "Copied front-desk brief",
+                              { taskTitle: "Copied Front-Desk Brief preview", badge: "Future preview", taskId: "fp-brief" },
+                            )
+                          }
+                          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
+                        >
+                          <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
+                          Copy front-desk brief
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleFrontDeskPreviewAddPlanTask}
+                          className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1"
+                        >
+                          Add follow-up task to Plan
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {futurePreviewModal === "outreach" && (
+                    <div className="mt-3 grid gap-3">
+                      <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{HUMAN_OUTREACH_PREVIEW_INTRO}</p>
+                      <p className="m-0 text-[11px] font-medium text-[#5f5a55] sm:text-xs">{HUMAN_OUTREACH_NO_AUTONOMOUS_LINE}</p>
+                      <div>
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Intended steps</p>
+                        <ol className="mt-1.5 m-0 list-decimal space-y-1 pl-4 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                          {HUMAN_OUTREACH_STEPS.map((s) => (
+                            <li key={s}>{s}</li>
+                          ))}
+                        </ol>
+                      </div>
+                      <p className="m-0 text-[12px] font-medium text-[#3f3a35] sm:text-sm">{HUMAN_OUTREACH_PROTOTYPE_NOTE}</p>
+                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void onCopy(
+                              "futureOutreachChecklist",
+                              buildHumanOutreachApprovalChecklistBlock(),
+                              "Copied approval checklist",
+                              { taskTitle: "Copied Human-approved outreach preview", badge: "Future preview", taskId: "fp-outreach" },
+                            )
+                          }
+                          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
+                        >
+                          <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
+                          Copy approval checklist
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleOutreachSavePreviewTimeline}
+                          className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1"
+                        >
+                          Save preview to case
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {(copied === "futureMapperQuestions" ||
+                    copied === "futureFrontDeskBrief" ||
+                    copied === "futureOutreachChecklist") && (
+                    <p className="mt-3 m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
+                      Copied. Anchor did not send anything.
+                    </p>
+                  )}
+                  {visitPrepInlineNote && futurePreviewModal && (
+                    <p className="mt-2 m-0 text-center text-[11px] text-[#8b6914] sm:text-xs" role="status">
+                      {visitPrepInlineNote}
+                    </p>
+                  )}
                 </motion.div>
               </motion.div>
             )}
