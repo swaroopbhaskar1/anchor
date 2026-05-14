@@ -23,7 +23,12 @@ import {
 import useWebRTCAudioSession from "@/hooks/use-webrtc"
 import { tools } from "@/lib/tools"
 import {
+  CARE_TEAM_ALIGNED_INTRO,
+  GENERIC_CARE_TEAM_CONTEXT_BULLETS,
   GENERIC_NIGHT_NOTE,
+  PLAN_CHANGE_FACTORS_BULLETS,
+  PLAN_CHANGE_URGENT_SAFETY,
+  SARAH_CARE_TEAM_CONTEXT_BULLETS,
   SARAH_DEMO_ACTION_PREFIXES,
   SARAH_DEMO_ACTION_SCRIPTS,
   SARAH_DEMO_CONCERN,
@@ -1641,7 +1646,7 @@ function ProcessingView({ phrase }: { phrase: string }) {
         </motion.h1>
       </AnimatePresence>
       <p className="mt-5 max-w-xl text-base leading-7 text-[#5f5a55] sm:mt-7 sm:text-lg sm:leading-8">
-        Anchor is turning what you said into clear next steps you can bring to your care team.
+        Anchor is turning what you said into plain-language next steps you can verify with your care team.
       </p>
     </motion.div>
   )
@@ -1660,8 +1665,12 @@ function isSarahStructuredMirror(m: MirrorResult): boolean {
 }
 
 interface CaregiverResultPacket {
+  careTeamIntro: string
+  careTeamBullets: string[]
   knowNow: string[]
   needsConfirmation: string[]
+  planChangeFactors: string[]
+  planChangeUrgentNote: string
   notTonight: string[]
   nightNote: NightNoteContent
 }
@@ -1713,8 +1722,15 @@ function fallbackKnowBullets(ground: string): string[] {
 }
 
 function buildCaregiverResultPacket(mirrorResult: MirrorResult, isBackupDemoMirror: boolean): CaregiverResultPacket {
+  const sharedAdaptive = {
+    careTeamIntro: CARE_TEAM_ALIGNED_INTRO,
+    planChangeFactors: PLAN_CHANGE_FACTORS_BULLETS,
+    planChangeUrgentNote: PLAN_CHANGE_URGENT_SAFETY,
+  }
   if (isBackupDemoMirror || isSarahStructuredMirror(mirrorResult)) {
     return {
+      ...sharedAdaptive,
+      careTeamBullets: SARAH_CARE_TEAM_CONTEXT_BULLETS,
       knowNow: SARAH_KNOW_NOW_BULLETS,
       needsConfirmation: SARAH_NEEDS_CONFIRMATION_BULLETS,
       notTonight: SARAH_NOT_TONIGHT_BULLETS,
@@ -1727,6 +1743,8 @@ function buildCaregiverResultPacket(mirrorResult: MirrorResult, isBackupDemoMirr
     const confBullets = confirm ? splitConfirmBullets(confirm) : []
     const notBullets = notTonight ? splitNotTonightFromGround(notTonight) : []
     return {
+      ...sharedAdaptive,
+      careTeamBullets: GENERIC_CARE_TEAM_CONTEXT_BULLETS,
       knowNow: knowBullets.length ? knowBullets : fallbackKnowBullets(mirrorResult.ground),
       needsConfirmation: confBullets.length ? confBullets : DEFAULT_NEEDS_CONFIRMATION_BULLETS,
       notTonight: notBullets.length ? notBullets : SARAH_NOT_TONIGHT_BULLETS,
@@ -1734,6 +1752,8 @@ function buildCaregiverResultPacket(mirrorResult: MirrorResult, isBackupDemoMirr
     }
   }
   return {
+    ...sharedAdaptive,
+    careTeamBullets: GENERIC_CARE_TEAM_CONTEXT_BULLETS,
     knowNow: fallbackKnowBullets(mirrorResult.ground),
     needsConfirmation: DEFAULT_NEEDS_CONFIRMATION_BULLETS,
     notTonight: SARAH_NOT_TONIGHT_BULLETS,
@@ -1815,9 +1835,20 @@ function ResultsView({
         &quot;{mirrorResult.fearQuote}&quot;
       </motion.blockquote>
 
+      <motion.div variants={itemVariants} className="mt-2 sm:mt-3">
+        <span className="inline-flex max-w-full items-center rounded-full border border-[#c9b8d8]/80 bg-white/70 px-2.5 py-1 text-[10px] font-semibold leading-tight tracking-wide text-[#6f6280] sm:px-3 sm:text-[11px]">
+          NCCN-aware prep · care team decides
+        </span>
+      </motion.div>
+
       <motion.div variants={itemVariants} className="mt-3 grid min-w-0 gap-2 sm:mt-6 sm:gap-3">
         <ResultPacketCard icon={<HeartHandshake className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What Anchor hears">
           <p className="m-0 text-[13px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{mirrorResult.mirror}</p>
+        </ResultPacketCard>
+
+        <ResultPacketCard icon={<Brain className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="NCCN-aware care preparation">
+          <p className="mb-2 text-[12px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-sm sm:leading-relaxed">{packet.careTeamIntro}</p>
+          <ResultBulletList items={packet.careTeamBullets} />
         </ResultPacketCard>
 
         <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What we know right now">
@@ -1826,6 +1857,11 @@ function ResultsView({
 
         <ResultPacketCard icon={<Clipboard className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What still needs confirmation">
           <ResultBulletList items={packet.needsConfirmation} />
+        </ResultPacketCard>
+
+        <ResultPacketCard icon={<Sparkles className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What could change this plan">
+          <ResultBulletList items={packet.planChangeFactors} />
+          <p className="mt-2 text-[11px] leading-snug text-[#5f5a55] sm:mt-2.5 sm:text-xs sm:leading-relaxed">{packet.planChangeUrgentNote}</p>
         </ResultPacketCard>
 
         <ResultPacketCard icon={<Wind className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What does not need to be solved tonight">
@@ -1853,8 +1889,30 @@ function ResultsView({
 
       <motion.div variants={itemVariants} className="mt-3 sm:mt-5">
         <ResultPacketCard icon={<CalendarClock className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="72-hour plan">
-          <p className="mb-2 text-[12px] leading-snug text-[#756f68] sm:mb-3 sm:text-sm sm:leading-relaxed">
-            A compact checklist you can verify with your care team — tap when you are ready to generate it here.
+          <p className="mb-1.5 text-[12px] leading-snug text-[#3f3a36] sm:mb-2 sm:text-sm sm:leading-relaxed">
+            Built as NCCN-aware preparation around what Anchor knows right now — not set in stone, and not a treatment
+            recommendation.
+          </p>
+          <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-xs sm:leading-relaxed">
+            If new information comes in, Anchor should update the plan. Update this when pathology, imaging, appointment
+            timing, or care-team instructions change.
+          </p>
+          <div className="mb-2.5 flex min-w-0 flex-col gap-1 sm:mb-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="w-fit cursor-not-allowed rounded-full border border-dashed border-[#c9b8d8] bg-white/50 px-3 py-1.5 text-left text-[11px] font-medium text-[#6f6280] opacity-85 sm:text-xs"
+              title="Preview only in this demo"
+            >
+              I have new information
+            </button>
+            <p className="m-0 min-w-0 text-[10px] leading-snug text-[#8f7e9b] sm:text-[11px]">
+              Coming next: update the plan when new details arrive.
+            </p>
+          </div>
+          <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-xs sm:leading-relaxed">
+            A compact checklist you can verify with your care team — generate it here when you are ready.
           </p>
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:gap-2.5">
             <button
@@ -1897,8 +1955,8 @@ function ResultsView({
             </div>
             <p className="mt-3 text-[12px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">
               {isBackupDemoMirror
-                ? "Sample caregiver checklist — confirm timing and details with your care team."
-                : "Steps grounded in NCCN oncology guidelines · Always verify with your care team"}
+                ? "Sample NCCN-aware checklist based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm timing and details with your care team."
+                : "NCCN-aware question prep structured around common oncology guideline workflows, based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm with your doctor or care team."}
             </p>
             <AnimatePresence>
               {hoveredRegret && (
@@ -1964,8 +2022,8 @@ function ResultsView({
         variants={itemVariants}
         className="mt-3 rounded-[16px] border border-[#d8cec5]/80 bg-[#faf7f4]/90 px-3 py-2.5 text-[11px] leading-snug text-[#5f5a55] sm:mt-4 sm:rounded-[20px] sm:px-4 sm:py-3 sm:text-xs sm:leading-relaxed"
       >
-        Anchor helps prepare questions and organize next steps. It does not diagnose, prescribe, choose treatment, or
-        replace your care team.
+        Anchor can help prepare NCCN-aware questions and organize next steps. It does not diagnose, prescribe, choose
+        treatment, confirm stage, or replace your care team.
       </motion.div>
 
       <p className="mt-3 text-[11px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">
@@ -2503,7 +2561,7 @@ function ClearMyHeadScreen({ cancerType }: { cancerType: CancerType }) {
             <ResultBand label="What's underneath this" icon={<HeartHandshake className="h-5 w-5" />}>
               {result.mirror}
             </ResultBand>
-            <ResultBand label="What is clinically true right now (NCCN-aligned)" icon={<ShieldCheck className="h-5 w-5" />}>
+            <ResultBand label="NCCN-aware questions to confirm with your care team" icon={<ShieldCheck className="h-5 w-5" />}>
               {result.ground}
             </ResultBand>
             <div className={`${GLASS_PANEL} rounded-[30px] p-5`}>

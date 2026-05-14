@@ -9,11 +9,46 @@ export interface SarahMirrorResult {
 export const SARAH_DEMO_CONCERN =
   "I feel like I'm missing everything. My mom may have stage III colon cancer, and I don't even know what questions to ask tomorrow."
 
+/** Intro paragraph for the NCCN-aware care preparation card (all result paths). */
+export const CARE_TEAM_ALIGNED_INTRO =
+  "Anchor organizes this around common oncology guideline workflows: confirming what is known, identifying what is pending, preparing questions, and helping you bring the right records to your care team. This is preparation for your care team, not a diagnosis or treatment recommendation."
+
+/** Bullets for NCCN-aware care preparation (Sarah demo / backup mirror). */
+export const SARAH_CARE_TEAM_CONTEXT_BULLETS = [
+  "Confirm what diagnosis and stage are actually documented.",
+  "Ask which reports are final and which are still pending.",
+  "Bring pathology, imaging summaries, medication list, and portal messages.",
+  "Ask what decisions, if any, are expected at the next appointment.",
+  "Use NCCN-aware questions to clarify what the care team already knows and what still needs confirmation.",
+]
+
+/** Generic NCCN-aware prep bullets when the mirror is not the Sarah demo shape. */
+export const GENERIC_CARE_TEAM_CONTEXT_BULLETS = [
+  "Confirm with your care team what is documented versus still in workup.",
+  "Ask which reports are final and which are still pending.",
+  "Bring or list pathology, imaging summaries, medications, and portal messages your team requests.",
+  "Ask what decisions, if any, are expected at the next visit — and what is still needed before those decisions.",
+  "Use NCCN-aware question prep to organize what to ask — your care team decides what applies.",
+]
+
+/** Factors that should prompt updating the 72-hour plan (UI copy only). */
+export const PLAN_CHANGE_FACTORS_BULLETS = [
+  "Final pathology details",
+  "Imaging results",
+  "Biomarker/MMR/MSI status",
+  "Appointment timing",
+  "Care-team instructions",
+  "New symptoms or urgent concerns",
+]
+
+export const PLAN_CHANGE_URGENT_SAFETY =
+  "If something urgent or severe is happening, contact the care team or emergency services instead of relying on Anchor."
+
 /** Bullets for structured results UI (Sarah demo / backup mirror). */
 export const SARAH_KNOW_NOW_BULLETS = [
-  "Your mom may have possible stage III colon cancer — confirm staging and details with your care team.",
-  "There is an appointment tomorrow morning.",
-  "Some details still need confirmation before you rely on them.",
+  "The sample concern mentions possible stage III colon cancer — that wording is not confirmed by Anchor and must be verified with pathology and your care team.",
+  "There may be a recent colon cancer diagnosis or active workup — ask what is documented versus still being finalized.",
+  "Tomorrow's appointment is the next practical place to clarify what is confirmed, what is pending, and what decisions are actually on the table.",
   "In demo or backup mode, this is a sample, de-identified case — not a real medical record.",
 ]
 
@@ -26,10 +61,10 @@ export const SARAH_NEEDS_CONFIRMATION_BULLETS = [
 ]
 
 export const SARAH_NOT_TONIGHT_BULLETS = [
-  "You do not need to decide treatment tonight.",
-  "You do not need to understand every medical term tonight.",
-  "You do not need to call every hospital or finish every portal task tonight.",
-  "The goal is to rest enough to ask clear questions tomorrow.",
+  "You do not need to finalize a treatment plan before your next conversation with the care team.",
+  "You do not need to memorize every medical term tonight — a short, plain-language question list is enough prep.",
+  "You do not need to solve every portal or scheduling task tonight — focus on what makes the next visit clearer.",
+  "The goal is enough rest and organization to ask good questions and hear the answers — not to solve cancer care alone.",
 ]
 
 export interface NightNoteContent {
@@ -40,23 +75,25 @@ export interface NightNoteContent {
 
 /** Night Note for Sarah-structured caregiver packet. */
 export const SARAH_NIGHT_NOTE: NightNoteContent = {
-  subtitle: "For the moment when everything feels too big.",
-  body: "You are carrying a lot, and the timeline may feel unfair. Tonight you can pause the research spiral — one honest sentence for tomorrow still counts as preparation. Your care team owns the medical decisions; you own showing up as prepared as you can be.",
+  subtitle: "Use this anytime the situation feels too big.",
+  body: "Your job is not to solve the entire cancer plan alone. Your job is to make the next conversation clearer: gather the records you have, write the questions you are afraid you will forget, and decide who will be in the room or on the call. It is still okay to breathe — preparation and rest both belong in the same night.",
   tinyActions: [
-    "Name one worry out loud, then exhale slowly for ten counts.",
-    "Write one plain-language question for tomorrow — you can edit after you sleep.",
-    "Set your list or folder by the door so the morning starts calmer.",
+    "Save or screenshot the records you have.",
+    "Write the top 3 questions for the care team.",
+    "Choose who is going to the appointment or call.",
+    "Put the appointment time, location, and portal login somewhere easy to find.",
   ],
 }
 
 /** Night Note when mirror content is not the Sarah demo shape. */
 export const GENERIC_NIGHT_NOTE: NightNoteContent = {
-  subtitle: "For the moment when everything feels too big.",
-  body: "Nothing tonight has to be perfect to be worth rest. A small pause between you and the next search or call is allowed. Tomorrow you can bring questions to the people trained to answer them.",
+  subtitle: "Use this anytime the situation feels too big.",
+  body: "You cannot resolve the whole care path in one sitting. You can make the next touchpoint with your care team clearer: gather what you know, name what is still uncertain, and line up who should attend or follow up. A short pause before the next search is allowed — the point is to land ready for the conversation, not to disappear the fear in one try.",
   tinyActions: [
-    "Name one feeling in a single word.",
-    "Drink a glass of water.",
-    "Set one reminder for the next concrete task, not the whole week.",
+    "Save or screenshot the records you have so far.",
+    "Write three questions you do not want to forget to ask.",
+    "Choose who will join the visit or help with follow-up notes.",
+    "Put appointment or call details where you will see them.",
   ],
 }
 
@@ -89,7 +126,7 @@ export const SARAH_DEMO_ACTION_PREFIXES = [
 ]
 
 export const SARAH_DEMO_ACTION_SCRIPTS = [
-  "Tonight, open one note and write three headings: \"Confirmed,\" \"Still unclear,\" and \"Questions for tomorrow.\" Under each, add bullets as you remember them — you can fix details after you speak with your care team.",
+  "Open one note and write three headings: \"Confirmed,\" \"Still unclear,\" and \"Questions for the next visit.\" Under each, add bullets as you remember them — you can fix details after you speak with your care team.",
   "Hi, I'm calling for my mom. We were told she may have possible stage III colon cancer, and we have an appointment tomorrow. Before we come in, can you help us confirm what records we should bring, whether the full pathology report is finalized, and whether any imaging or biomarker testing is still pending?",
   [
     "What is confirmed right now, and what is still uncertain?",
