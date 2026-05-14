@@ -333,6 +333,201 @@ export interface StoredAdaptivePlanTask {
   initialStatus: AdaptivePlanTaskInitialStatus
   fromUpdate: boolean
   regretQuote?: string
+  /** True when the row was added from the Records tab checklist or quick-add. */
+  fromRecords?: boolean
+  /** Stable key for dedupe (checklist id or quick-add id). */
+  recordsChecklistId?: string
+}
+
+/** Records tab (Prompt 7) — prototype disclaimer. */
+export const RECORDS_PROTO_BADGE = "Prototype records preview · sample only"
+
+export const RECORDS_TAB_SUBTITLE =
+  "Organize what you have, what is missing, and what to ask the care team. Anchor does not diagnose from documents."
+
+export const RECORDS_WHAT_CAN_CLARIFY_BULLETS = [
+  "Records can help you list dates, test names, and what you were told — so you do not rely on memory alone in the visit.",
+  "They can highlight gaps (missing imaging, pending biomarkers) you want the scheduler or nurse line to clarify.",
+  "They support plain-language question prep — not a private interpretation of your chart.",
+  "Only your care team diagnoses, stages, and recommends treatment; Anchor stays in the preparation lane.",
+] as const
+
+export interface RecordsChecklistItemDef {
+  id: string
+  title: string
+  detail?: string
+}
+
+/** “What is missing” — each row can become an adaptive plan task with dedupe by id. */
+export const RECORDS_MISSING_CHECKLIST_DEFS: RecordsChecklistItemDef[] = [
+  {
+    id: "path-final-copy",
+    title: "Bring or upload the final pathology report (all pages, including addenda if any).",
+    detail: "Ask the team which version is considered final — Anchor does not verify documents.",
+  },
+  {
+    id: "imaging-summary",
+    title: "Gather imaging summaries or discs your team requested (CT/MRI/PET as applicable).",
+  },
+  {
+    id: "med-list",
+    title: "Update a one-page medication list (name, dose, schedule, prescribers).",
+  },
+  {
+    id: "labs-biomarkers",
+    title: "Collect recent labs or biomarker/MMR/MSI reports if they were mentioned.",
+    detail: "Confirm which tests are done versus pending with your clinicians.",
+  },
+  {
+    id: "portal-thread",
+    title: "Export or screenshot key portal messages about scheduling, instructions, or results.",
+  },
+  {
+    id: "visit-synopsis",
+    title: "Write a short visit synopsis: what you were told last time and what still feels unclear.",
+  },
+  {
+    id: "insurance-packet",
+    title: "Keep copies of insurance letters, authorization forms, or records requests your team mentioned.",
+    detail: "Administrative only — confirm medical details with your clinicians.",
+  },
+]
+
+export type RecordsDocStackStatus = "sample" | "missing" | "optional"
+
+export interface RecordsDocumentStackDef {
+  id: string
+  label: string
+  status: RecordsDocStackStatus
+  body: string
+  /** When set, “Add to checklist” creates this checklist task by id. */
+  checklistId?: string
+}
+
+export const RECORDS_DOCUMENT_STACK_DEFS: RecordsDocumentStackDef[] = [
+  {
+    id: "pathology",
+    label: "Pathology",
+    status: "sample",
+    body: "Sample available — de-identified sample-pathology.txt / sample-pathology.pdf style placeholder. Not your real chart.",
+  },
+  {
+    id: "imaging",
+    label: "Imaging",
+    status: "missing",
+    body: "Not uploaded in this demo — add when your team names which scans matter.",
+    checklistId: "imaging-summary",
+  },
+  {
+    id: "visit-summary",
+    label: "Visit summary",
+    status: "missing",
+    body: "Optional until you have a written after-visit summary to bring or upload.",
+    checklistId: "visit-synopsis",
+  },
+  {
+    id: "portal-message",
+    label: "Portal message",
+    status: "optional",
+    body: "Optional — capture threads about timing, instructions, or follow-up questions.",
+    checklistId: "portal-thread",
+  },
+  {
+    id: "insurance-letter",
+    label: "Insurance letter",
+    status: "optional",
+    body: "Optional — keep authorization or records-request letters if your team asked for them.",
+    checklistId: "insurance-packet",
+  },
+]
+
+export const SAMPLE_PATHOLOGY_RECORD_LINES: { label: string; value: string }[] = [
+  { label: "Specimen (sample)", value: "De-identified biopsy sample — not linked to a real person in this demo." },
+  { label: "Procedure (sample)", value: "Excisional biopsy — wording is illustrative only." },
+  { label: "Diagnosis line (sample)", value: "Malignant neoplasm, morphology and grade per report — exact wording belongs to your pathologist." },
+  { label: "Key descriptors (sample)", value: "Margins, lymphovascular invasion, perineural invasion — ask what each line means for your case." },
+  { label: "Addendum status (sample)", value: "Ask whether any addendum is expected or already on file — do not assume completeness from a screenshot." },
+]
+
+export const SAMPLE_PATHOLOGY_QUESTIONS: string[] = [
+  "Is this pathology report considered final, including any addenda?",
+  "Which parts of the report are still pending or awaiting outside review?",
+  "How should we reconcile this wording with what we were told in plain language?",
+  "What records or tests are still needed before staging or treatment discussions?",
+  "Who should we contact if we receive updated pages after this visit?",
+  "What symptoms or changes should we report before the next appointment?",
+]
+
+export const RECORDS_SECOND_OPINION_INTRO =
+  "Second opinions can be useful when you want another center to review the same records. Anchor only helps you pack what to send — it does not choose where to go or what treatment fits."
+
+export const RECORDS_SECOND_OPINION_CHECKLIST_LINES: string[] = [
+  "Final pathology (full report, all pages)",
+  "Imaging reports or disc instructions from radiology",
+  "Operative or procedure notes if applicable",
+  "Tumor board or multidisciplinary summary if available",
+  "Medication list and allergy list",
+  "Visit summaries that explain the current plan in plain language",
+  "Contact information for records release at your current facility",
+]
+
+export const RECORDS_TRANSFER_CHECKLIST_BULLETS: string[] = [
+  "Confirm the correct legal name and date of birth on every request form.",
+  "Ask how long records release usually takes at your facility.",
+  "Request both PDF and disc if your destination center specifies a format.",
+  "Keep a dated list of what you requested and what you received.",
+  "Follow up on missing pages (addenda, amended reports) before shipping.",
+  "Never send Anchor screenshots as if they were official records — use your portal or records office.",
+]
+
+export const RECORDS_QUICK_ADD_TASK_DEFS: {
+  id: string
+  title: string
+  detail?: string
+  initialStatus: AdaptivePlanTaskInitialStatus
+}[] = [
+  {
+    id: "call-records-desk",
+    title: "Call the hospital records desk to confirm how to request a complete pathology packet.",
+    initialStatus: "active",
+  },
+  {
+    id: "portal-export",
+    title: "Export or print portal visit summaries and key messages for the next appointment folder.",
+    initialStatus: "active",
+  },
+  {
+    id: "insurance-docs",
+    title: "List what insurance asked for and confirm deadlines with the clinic if anything is unclear.",
+    detail: "Administrative only — your care team confirms medical details.",
+    initialStatus: "waiting",
+  },
+]
+
+export function buildRecordsChecklistAdaptiveTask(item: RecordsChecklistItemDef): StoredAdaptivePlanTask {
+  return {
+    id: `records-checklist:${item.id}:${Date.now()}`,
+    title: item.title,
+    detail: item.detail,
+    initialStatus: "active",
+    fromUpdate: false,
+    fromRecords: true,
+    recordsChecklistId: `checklist:${item.id}`,
+  }
+}
+
+export function buildRecordsQuickAdaptiveTask(
+  def: (typeof RECORDS_QUICK_ADD_TASK_DEFS)[number],
+): StoredAdaptivePlanTask {
+  return {
+    id: `records-quick:${def.id}:${Date.now()}`,
+    title: def.title,
+    detail: def.detail,
+    initialStatus: def.initialStatus,
+    fromUpdate: false,
+    fromRecords: true,
+    recordsChecklistId: `quick:${def.id}`,
+  }
 }
 
 function adaptiveId(chipId: string, stamp: number, slot: string) {

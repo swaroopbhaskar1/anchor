@@ -52,12 +52,26 @@ import {
   SARAH_NIGHT_NOTE,
   ASK_ANCHOR_SUBTITLE,
   FOLLOW_UP_CHIP_DEFS,
+  RECORDS_DOCUMENT_STACK_DEFS,
+  RECORDS_MISSING_CHECKLIST_DEFS,
+  RECORDS_PROTO_BADGE,
+  RECORDS_QUICK_ADD_TASK_DEFS,
+  RECORDS_SECOND_OPINION_CHECKLIST_LINES,
+  RECORDS_SECOND_OPINION_INTRO,
+  RECORDS_TAB_SUBTITLE,
+  RECORDS_TRANSFER_CHECKLIST_BULLETS,
+  RECORDS_WHAT_CAN_CLARIFY_BULLETS,
+  SAMPLE_PATHOLOGY_QUESTIONS,
+  SAMPLE_PATHOLOGY_RECORD_LINES,
+  buildRecordsChecklistAdaptiveTask,
+  buildRecordsQuickAdaptiveTask,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
   normalizeFollowUpChipKind,
   type AdaptivePlanTaskInitialStatus,
   type FollowUpChipId,
   type NightNoteContent,
+  type RecordsChecklistItemDef,
   type StoredAdaptivePlanTask,
 } from "@/lib/demo/sarah-case"
 import { getAccount, getDatabases, ID, Query, DB_ID, COLLECTIONS } from "@/lib/appwrite"
@@ -65,7 +79,17 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 
 type CancerType = "colon" | "breast" | "lymphoma"
 type AppPhase = "idle" | "recording" | "processing" | "results"
-type ResultWorkspaceTab = "overview" | "plan" | "ask" | "actions" | "updates" | "memory"
+type ResultWorkspaceTab = "overview" | "plan" | "ask" | "actions" | "updates" | "records" | "memory"
+
+type ResultCopyKind =
+  | "note"
+  | "handoff"
+  | "followup"
+  | "appointment"
+  | "recordsPathology"
+  | "recordsSecondOpinion"
+  | "recordsTransfer"
+  | "recordsOnePager"
 type OnboardingStep = "name" | "relationship"
 type CompanionScreen = "breathe" | "control" | "say" | "oneThing" | null
 type AuthStatus = "checking" | "auth" | "authenticated" | "guest"
@@ -204,6 +228,7 @@ function isResultWorkspaceTab(value: unknown): value is ResultWorkspaceTab {
     value === "ask" ||
     value === "actions" ||
     value === "updates" ||
+    value === "records" ||
     value === "memory"
   )
 }
@@ -241,6 +266,8 @@ function isStoredAdaptivePlanTask(value: unknown): value is StoredAdaptivePlanTa
   if (o.initialStatus !== "active" && o.initialStatus !== "waiting" && o.initialStatus !== "urgent") return false
   if (o.detail != null && typeof o.detail !== "string") return false
   if (o.regretQuote != null && typeof o.regretQuote !== "string") return false
+  if (o.fromRecords !== undefined && typeof o.fromRecords !== "boolean") return false
+  if (o.recordsChecklistId != null && typeof o.recordsChecklistId !== "string") return false
   return true
 }
 
@@ -503,7 +530,7 @@ export default function App() {
   const [pathologyText, setPathologyText] = useState("")
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "done" | "error">("idle")
   const [uploadLabel, setUploadLabel] = useState("")
-  const [copied, setCopied] = useState<"note" | "handoff" | "followup" | "appointment" | null>(null)
+  const [copied, setCopied] = useState<ResultCopyKind | null>(null)
   const [showExampleOutput, setShowExampleOutput] = useState(false)
   const [isBackupDemoMirror, setIsBackupDemoMirror] = useState(false)
   const [fearTimeline, setFearTimeline] = useState<FearMemory[]>([])
@@ -1136,13 +1163,26 @@ export default function App() {
     }
   }
 
-  async function copyText(kind: "note" | "handoff" | "followup" | "appointment", value: string) {
+  async function copyText(kind: ResultCopyKind, value: string, timelineTitle?: string) {
     if (!value) return
 
     try {
       await navigator.clipboard.writeText(value)
       setCopied(kind)
       window.setTimeout(() => setCopied(null), 1800)
+      if (timelineTitle) {
+        const id =
+          typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+            ? globalThis.crypto.randomUUID()
+            : `tl-${Date.now()}`
+        appendActionGuideDemoTimeline({
+          id,
+          taskId: "records-activity",
+          taskTitle: timelineTitle,
+          badge: "Records",
+          savedAt: new Date().toISOString(),
+        })
+      }
     } catch {
       setError("Clipboard permission was blocked. The note is still visible here.")
     }
@@ -3176,6 +3216,8 @@ interface PlanBoardDisplayRow {
   regretQuote?: string
   source: "baseline" | "adaptive"
   fromUpdate?: boolean
+  fromRecords?: boolean
+  recordsChecklistId?: string
   initialStatus?: AdaptivePlanTaskInitialStatus
 }
 
@@ -3207,6 +3249,8 @@ function adaptiveToDisplayRow(task: StoredAdaptivePlanTask): PlanBoardDisplayRow
     regretQuote: task.regretQuote,
     source: "adaptive",
     fromUpdate: task.fromUpdate,
+    fromRecords: task.fromRecords,
+    recordsChecklistId: task.recordsChecklistId,
     initialStatus: task.initialStatus,
   }
 }
@@ -3317,7 +3361,7 @@ function PlanBoardTaskRow({
   onOpenGuide: (taskId: string) => void
   row: PlanBoardDisplayRow
 }) {
-  const { detail, fromUpdate, id, regretQuote, title } = row
+  const { detail, fromRecords, fromUpdate, id, regretQuote, title } = row
   const artifact = inferTaskArtifact(row)
   const guideLabel = planRowGuideTriggerLabel(done, artifact.code)
   const borderClass = done ? "border-[#d8e8d8]/90 bg-white/50" : "border-[#e5ddd4] bg-white/70"
@@ -3351,7 +3395,12 @@ function PlanBoardTaskRow({
         </div>
       </div>
       {detail && <p className="mt-1.5 text-[11px] leading-snug text-[#756f68] sm:text-xs">{detail}</p>}
-      {fromUpdate && !done && (
+      {fromRecords && !done && (
+        <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wide text-[#9b829c] sm:text-[11px]">
+          Added from records
+        </p>
+      )}
+      {fromUpdate && !fromRecords && !done && (
         <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wide text-[#9b829c] sm:text-[11px]">
           Added from new information
         </p>
@@ -3634,7 +3683,12 @@ function buildCareTimelineRows(input: {
   }
   const tlAscending = [...input.actionGuideDemoTimeline].sort((a, b) => Date.parse(a.savedAt) - Date.parse(b.savedAt))
   for (const e of tlAscending) {
-    push(`Guide me · ${e.badge}`, e.taskTitle, formatDemoTimelineLabel(e.savedAt))
+    const tlab = Number.isNaN(Date.parse(e.savedAt)) ? "Demo session" : formatDemoTimelineLabel(e.savedAt)
+    if (e.taskId === "records-activity") {
+      push(`Records · ${e.taskTitle}`, "Saved locally in this demo timeline — not sent from Anchor.", tlab)
+      continue
+    }
+    push(`Guide me · ${e.badge}`, e.taskTitle, tlab)
   }
   if (input.completedPlanTaskIds.length) {
     const tail = input.completedTitlesSample.slice(0, 3).join("; ")
@@ -3692,6 +3746,45 @@ function buildAppointmentHandoffBlocks(input: {
   ].join("\n")
 }
 
+function buildPathologyQuestionsCopyBlock(): string {
+  return [
+    "ANCHOR — SAMPLE PATHOLOGY QUESTIONS (LOCAL DEMO)",
+    "De-identified sample only. Anchor does not diagnose, stage, or interpret your real documents.",
+    "",
+    ...SAMPLE_PATHOLOGY_QUESTIONS.map((q, i) => `${i + 1}. ${q}`),
+    "",
+    "Bring these as prompts for conversation — your pathologist and oncology team interpret findings.",
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+function buildSecondOpinionChecklistCopyBlock(): string {
+  return [
+    "ANCHOR — SECOND-OPINION PACKET CHECKLIST (LOCAL DEMO)",
+    RECORDS_SECOND_OPINION_INTRO,
+    "",
+    ...RECORDS_SECOND_OPINION_CHECKLIST_LINES.map((l, i) => `${i + 1}. ${l}`),
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+function buildRecordTransferChecklistCopyBlock(): string {
+  return [
+    "ANCHOR — RECORD TRANSFER CHECKLIST (LOCAL DEMO)",
+    "Use when coordinating copies between facilities — verify requirements with each office.",
+    "",
+    ...RECORDS_TRANSFER_CHECKLIST_BULLETS.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+function normalizeRecordsDedupeKey(title: string): string {
+  return title.trim().toLowerCase().replace(/\s+/g, " ")
+}
+
 function resolvedVoiceConcernForMemory(
   resultsTranscriptEcho: string,
   isBackupDemoMirror: boolean,
@@ -3742,6 +3835,7 @@ function inferCompletedTaskSourceLabel(id: string, adaptivePlanTasks: StoredAdap
   if (id.startsWith("base:")) return "Baseline plan"
   const t = adaptivePlanTasks.find((x) => x.id === id)
   if (!t) return "Plan board"
+  if (t.fromRecords) return "Added from records"
   if (t.fromUpdate) return "Added after case update"
   if (t.initialStatus === "waiting") return "Waiting-on-team track"
   return "Adaptive checklist"
@@ -3764,6 +3858,7 @@ const RESULT_WORKSPACE_TAB_DEFS: { id: ResultWorkspaceTab; label: string }[] = [
   { id: "ask", label: "Ask" },
   { id: "actions", label: "Actions" },
   { id: "updates", label: "Updates" },
+  { id: "records", label: "Records" },
   { id: "memory", label: "Memory" },
 ]
 
@@ -3809,7 +3904,7 @@ function ResultsView({
   cancerType: CancerType
   caseInformationUpdates: DemoCaseUpdate[]
   completedPlanTaskIds: string[]
-  copied: "note" | "handoff" | "followup" | "appointment" | null
+  copied: ResultCopyKind | null
   displayName: string
   error: string | null
   followUpResponses: FollowUpResponseItem[]
@@ -3824,7 +3919,7 @@ function ResultsView({
   onActiveResultTabChange: (tab: ResultWorkspaceTab) => void
   onAddByVoice: () => void
   onAskFollowUpSubmit: (chipId: FollowUpChipId | null, customText: string) => CreateFollowUpResult
-  onCopy: (kind: "note" | "handoff" | "followup" | "appointment", value: string) => void
+  onCopy: (kind: ResultCopyKind, value: string, timelineTitle?: string) => void
   onHoverRegret: (value: string | null) => void
   onPlan: () => void
   onSarahBackupDemo: () => void
@@ -3839,6 +3934,9 @@ function ResultsView({
   const [selectedFollowUpPrompt, setSelectedFollowUpPrompt] = useState<FollowUpChipId | null>(null)
   const [customFollowUpQuestion, setCustomFollowUpQuestion] = useState("")
   const [askFollowUpError, setAskFollowUpError] = useState<string | null>(null)
+  const [recordsInlineNote, setRecordsInlineNote] = useState<string | null>(null)
+  const [pathologyQuestionsOpen, setPathologyQuestionsOpen] = useState(false)
+  const pathologyBlockRef = useRef<HTMLDivElement | null>(null)
 
   const lovedOneLabel = useMemo(
     () => RELATIONSHIPS.find((item) => item.value === lovedOne)?.label ?? "Your person",
@@ -3963,6 +4061,98 @@ function ResultsView({
     planResult,
     voiceConcernResolved,
   ])
+
+  const pathologyQuestionsCopyText = useMemo(() => buildPathologyQuestionsCopyBlock(), [])
+
+  const secondOpinionChecklistCopyText = useMemo(() => buildSecondOpinionChecklistCopyBlock(), [])
+
+  const recordTransferChecklistCopyText = useMemo(() => buildRecordTransferChecklistCopyBlock(), [])
+
+  const recordsOnePagerText = useMemo(() => {
+    const addon = [
+      "",
+      "RECORDS ORGANIZER ADD-ON (LOCAL DEMO)",
+      RECORDS_SECOND_OPINION_INTRO,
+      "",
+      "Second-opinion packet checklist (short version):",
+      ...RECORDS_SECOND_OPINION_CHECKLIST_LINES.map((l, i) => `${i + 1}. ${l}`),
+      "",
+      "Record transfer hygiene:",
+      ...RECORDS_TRANSFER_CHECKLIST_BULLETS.map((l) => `• ${l}`),
+      "",
+      "— End of add-on. Nothing was sent by Anchor.",
+    ].join("\n")
+    return `${appointmentHandoffText}${addon}`
+  }, [appointmentHandoffText])
+
+  const recordsOnePagerPreview = useMemo(() => {
+    const t = recordsOnePagerText
+    if (t.length <= 560) return t
+    return `${t.slice(0, 560)}…`
+  }, [recordsOnePagerText])
+
+  function appendRecordsActivityEntry(taskTitle: string) {
+    const id =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `tl-${Date.now()}`
+    appendActionGuideDemoTimeline({
+      id,
+      taskId: "records-activity",
+      taskTitle,
+      badge: "Records",
+      savedAt: new Date().toISOString(),
+    })
+  }
+
+  function recordsTaskAlreadyPresent(checklistKey: string, title: string): boolean {
+    const norm = normalizeRecordsDedupeKey(title)
+    return adaptivePlanTasks.some(
+      (t) =>
+        t.recordsChecklistId === checklistKey ||
+        (Boolean(t.fromRecords) && normalizeRecordsDedupeKey(t.title) === norm),
+    )
+  }
+
+  function handleAddRecordsChecklistItem(def: RecordsChecklistItemDef) {
+    const key = `checklist:${def.id}`
+    if (recordsTaskAlreadyPresent(key, def.title)) {
+      setRecordsInlineNote("Already added")
+      window.setTimeout(() => setRecordsInlineNote(null), 3200)
+      return
+    }
+    appendAdaptivePlanTasks([buildRecordsChecklistAdaptiveTask(def)])
+    appendRecordsActivityEntry(`Added records task: ${def.title}`)
+  }
+
+  function handleDocumentStackAdd(checklistId: string | undefined) {
+    if (!checklistId) return
+    const def = RECORDS_MISSING_CHECKLIST_DEFS.find((d) => d.id === checklistId)
+    if (!def) return
+    handleAddRecordsChecklistItem(def)
+  }
+
+  function handleAddRecordsQuick(def: (typeof RECORDS_QUICK_ADD_TASK_DEFS)[number]) {
+    const key = `quick:${def.id}`
+    if (recordsTaskAlreadyPresent(key, def.title)) {
+      setRecordsInlineNote("Already added")
+      window.setTimeout(() => setRecordsInlineNote(null), 3200)
+      return
+    }
+    appendAdaptivePlanTasks([buildRecordsQuickAdaptiveTask(def)])
+    appendRecordsActivityEntry(`Added records task: ${def.title}`)
+  }
+
+  function handlePathologyFromStack() {
+    setPathologyQuestionsOpen(true)
+    window.requestAnimationFrame(() => {
+      pathologyBlockRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+  }
+
+  function handleTogglePathologyQuestions() {
+    setPathologyQuestionsOpen((o) => !o)
+  }
 
   function newDemoUpdateId() {
     return typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
@@ -4508,6 +4698,268 @@ function ResultsView({
                 </span>
                 <Mic className="h-4 w-4 shrink-0 text-[#b98da0] sm:h-5 sm:w-5" />
               </button>
+            </motion.div>
+          )}
+
+          {activeResultTab === "records" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-base">Records</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{RECORDS_TAB_SUBTITLE}</p>
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="inline-flex max-w-full shrink-0 items-center rounded-full border border-[#c9b8d8]/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-[#6f6280] sm:text-[11px]">
+                    {RECORDS_PROTO_BADGE}
+                  </span>
+                </div>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Sample document stack</p>
+                <div className="grid min-w-0 gap-2 sm:gap-2.5">
+                  {RECORDS_DOCUMENT_STACK_DEFS.map((doc) => {
+                    const statusLabel =
+                      doc.status === "sample" ? "Sample available" : doc.status === "missing" ? "Missing / not uploaded" : "Optional"
+                    const statusClass =
+                      doc.status === "sample"
+                        ? "border-[#b8d4c4]/80 bg-[#f4faf6]/95 text-[#3d5c4f]"
+                        : doc.status === "missing"
+                          ? "border-[#e0c9a8]/90 bg-[#fff9f0]/95 text-[#6b4f2f]"
+                          : "border-[#d8cec5]/90 bg-white/80 text-[#5f5a55]"
+                    return (
+                      <div
+                        key={doc.id}
+                        className="flex min-w-0 flex-col gap-2 rounded-[14px] border border-[#e8dfd8] bg-white/70 p-2.5 sm:flex-row sm:items-start sm:justify-between sm:rounded-[16px] sm:p-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-[#9b829c] sm:h-4 sm:w-4" aria-hidden />
+                            <p className="m-0 text-[12px] font-semibold text-[#3f3a36] sm:text-sm">{doc.label}</p>
+                            <span className={`inline-flex max-w-full shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide sm:text-[10px] ${statusClass}`}>
+                              {statusLabel}
+                            </span>
+                          </div>
+                          <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{doc.body}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-col gap-1.5 sm:items-end">
+                          {doc.id === "pathology" ? (
+                            <button
+                              type="button"
+                              onClick={handlePathologyFromStack}
+                              className="w-full rounded-full border border-[#8f7e9b]/45 bg-[#faf7f4]/95 px-3 py-1.5 text-left text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:w-auto sm:text-[11px]"
+                            >
+                              View what to ask
+                            </button>
+                          ) : doc.checklistId ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDocumentStackAdd(doc.checklistId)}
+                              className="w-full rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-3 py-1.5 text-left text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:w-auto sm:text-[11px]"
+                            >
+                              Add to checklist
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-[#9b829c] sm:text-[11px]">No auto task</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <ResultPacketCard icon={<Clipboard className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What records can clarify">
+                <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Records help you prepare questions and spot gaps — they do not replace clinician judgment, diagnosis, staging,
+                  or treatment decisions.
+                </p>
+                <ResultBulletList items={[...RECORDS_WHAT_CAN_CLARIFY_BULLETS]} />
+              </ResultPacketCard>
+
+              <div ref={pathologyBlockRef} className={`${GLASS_PANEL} min-w-0 scroll-mt-28 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Sample pathology record</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Illustrative wording only — de-identified demo. Anchor does not read your files in this prototype and does not
+                  interpret pathology.
+                </p>
+                <dl className="mt-2 m-0 grid gap-2 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                  {SAMPLE_PATHOLOGY_RECORD_LINES.map((row) => (
+                    <div key={row.label} className="min-w-0 rounded-[12px] border border-[#ece4dc] bg-white/60 p-2 sm:p-2.5">
+                      <dt className="font-semibold text-[#5f5a55]">{row.label}</dt>
+                      <dd className="m-0 mt-0.5 break-words">{row.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="mt-2.5 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleTogglePathologyQuestions}
+                    className="inline-flex min-w-0 flex-1 items-center justify-center rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:flex-none sm:px-4 sm:text-xs"
+                  >
+                    {pathologyQuestionsOpen ? "Hide sample questions" : "Generate questions from this sample"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void onCopy("recordsPathology", pathologyQuestionsCopyText, "Copied pathology questions")
+                    }
+                    className={`${GLASS_BUTTON} inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[14px] px-3 py-2 text-[11px] font-medium sm:flex-none sm:px-4 sm:text-xs`}
+                  >
+                    <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Copy pathology questions
+                  </button>
+                </div>
+                <AnimatePresence initial={false}>
+                  {pathologyQuestionsOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.22 }}
+                      className="overflow-hidden"
+                    >
+                      <ul className="mt-2 m-0 list-none space-y-1.5 border-t border-[#ece4dc] p-0 pt-2 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                        {SAMPLE_PATHOLOGY_QUESTIONS.map((q, i) => (
+                          <li key={i} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                            {q}
+                          </li>
+                        ))}
+                      </ul>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">What is missing</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Tap Add as task to place a row on your Plan board — deduped so the same checklist line does not stack twice.
+                </p>
+                <ul className="mt-2 m-0 grid list-none gap-2 p-0">
+                  {RECORDS_MISSING_CHECKLIST_DEFS.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:flex-row sm:items-center sm:justify-between sm:rounded-[14px] sm:p-3"
+                    >
+                      <p className="m-0 min-w-0 flex-1 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{item.title}</p>
+                      <button
+                        type="button"
+                        onClick={() => handleAddRecordsChecklistItem(item)}
+                        className="shrink-0 rounded-full border border-[#8f7e9b]/45 bg-[#faf7f4]/95 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                      >
+                        Add as task
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <div className="mb-2 flex min-w-0 items-start gap-2">
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Appointment one-pager</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">
+                      Built from this session&apos;s case memory — same handoff memo as Memory, plus a records add-on for your
+                      clipboard.
+                    </p>
+                  </div>
+                </div>
+                <pre className="m-0 max-h-48 min-w-0 overflow-x-auto whitespace-pre-wrap break-words rounded-[12px] border border-[#ece4dc] bg-white/70 p-2.5 font-sans text-[10px] leading-snug text-[#3f3a36] sm:text-[11px]">
+                  {recordsOnePagerPreview}
+                </pre>
+                <button
+                  type="button"
+                  onClick={() => void onCopy("recordsOnePager", recordsOnePagerText, "Copied appointment one-pager")}
+                  className={`${GLASS_BUTTON} mt-2 flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
+                >
+                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                  Copy appointment one-pager
+                </button>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Second-opinion packet checklist</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{RECORDS_SECOND_OPINION_INTRO}</p>
+                <ul className="mt-2 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                  {RECORDS_SECOND_OPINION_CHECKLIST_LINES.map((line) => (
+                    <li key={line} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void onCopy("recordsSecondOpinion", secondOpinionChecklistCopyText, "Copied second-opinion checklist")
+                  }
+                  className={`${GLASS_BUTTON} mt-2 flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
+                >
+                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                  Copy second-opinion checklist
+                </button>
+              </div>
+
+              <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="Record transfer checklist">
+                <ResultBulletList items={[...RECORDS_TRANSFER_CHECKLIST_BULLETS]} />
+                <button
+                  type="button"
+                  onClick={() =>
+                    void onCopy("recordsTransfer", recordTransferChecklistCopyText, "Copied record transfer checklist")
+                  }
+                  className={`${GLASS_BUTTON} mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:rounded-[16px] sm:text-sm`}
+                >
+                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                  Copy record transfer checklist
+                </button>
+              </ResultPacketCard>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Records quick-add tasks</p>
+                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  These land on your Plan board with the same persistence as other adaptive tasks — demo only, not sent to your
+                  clinic.
+                </p>
+                <div className="mt-2 grid min-w-0 gap-2">
+                  {RECORDS_QUICK_ADD_TASK_DEFS.map((def) => (
+                    <div
+                      key={def.id}
+                      className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:flex-row sm:items-center sm:justify-between sm:rounded-[14px] sm:p-3"
+                    >
+                      <p className="m-0 min-w-0 flex-1 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{def.title}</p>
+                      <button
+                        type="button"
+                        onClick={() => handleAddRecordsQuick(def)}
+                        className="shrink-0 rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-3 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                      >
+                        Add to plan
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {(copied === "recordsPathology" ||
+                copied === "recordsSecondOpinion" ||
+                copied === "recordsTransfer" ||
+                copied === "recordsOnePager") && (
+                <p className="m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
+                  Copied. Anchor did not send anything.
+                </p>
+              )}
+              {recordsInlineNote && (
+                <p className="m-0 text-center text-[11px] text-[#8b6914] sm:text-xs" role="status">
+                  {recordsInlineNote}
+                </p>
+              )}
+
+              <div className="rounded-[14px] border border-[#e5ddd4] bg-[#faf7f4]/90 px-3 py-2.5 text-[10px] leading-snug text-[#5f5a55] sm:rounded-[16px] sm:px-3.5 sm:py-3 sm:text-[11px] sm:leading-relaxed">
+                <p className="m-0 font-semibold text-[#3f3a36]">Safety</p>
+                <p className="mt-1 m-0">
+                  Anchor organizes materials for preparation and visit clarity. It does not diagnose from documents, interpret
+                  findings as medical advice, confirm cancer stage, or choose treatment. Ask your care team to interpret every
+                  report. This demo is not HIPAA-grade storage and not a substitute for your hospital record system.
+                </p>
+              </div>
             </motion.div>
           )}
 
