@@ -9,11 +9,11 @@ import {
   CalendarClock,
   Check,
   Clipboard,
+  Copy,
   FileText,
   HeartHandshake,
   Mic,
   PenLine,
-  Phone,
   ShieldCheck,
   Sparkles,
   Square,
@@ -23,12 +23,18 @@ import {
 import useWebRTCAudioSession from "@/hooks/use-webrtc"
 import { tools } from "@/lib/tools"
 import {
+  GENERIC_NIGHT_NOTE,
   SARAH_DEMO_ACTION_PREFIXES,
   SARAH_DEMO_ACTION_SCRIPTS,
   SARAH_DEMO_CONCERN,
   SARAH_DEMO_MIRROR_RESULT,
   SARAH_DEMO_ORIENTATION_LINES,
   SARAH_FALLBACK_PLAN_RESULT,
+  SARAH_KNOW_NOW_BULLETS,
+  SARAH_NEEDS_CONFIRMATION_BULLETS,
+  SARAH_NOT_TONIGHT_BULLETS,
+  SARAH_NIGHT_NOTE,
+  type NightNoteContent,
 } from "@/lib/demo/sarah-case"
 import { getAccount, getDatabases, ID, Query, DB_ID, COLLECTIONS } from "@/lib/appwrite"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
@@ -1641,6 +1647,100 @@ function ProcessingView({ phrase }: { phrase: string }) {
   )
 }
 
+const DEFAULT_NEEDS_CONFIRMATION_BULLETS = [
+  "What your care team considers confirmed versus still in workup — ask in plain language.",
+  "Whether imaging discussed with you is complete and how results will be reviewed.",
+  "Whether pathology or biopsy documentation is finalized.",
+  "Whether biomarker, MMR, or MSI testing is pending or done, if it applies to your situation.",
+  "What decisions are expected at the next visit — and what can reasonably wait.",
+]
+
+function isSarahStructuredMirror(m: MirrorResult): boolean {
+  return m.fearQuote === SARAH_DEMO_CONCERN || m.mirror === SARAH_DEMO_MIRROR_RESULT.mirror
+}
+
+interface CaregiverResultPacket {
+  knowNow: string[]
+  needsConfirmation: string[]
+  notTonight: string[]
+  nightNote: NightNoteContent
+}
+
+function extractGroundSections(ground: string): { know: string; confirm: string; notTonight: string } {
+  const out = { know: "", confirm: "", notTonight: "" }
+  const parts = ground.split(/\n\n+/).map((p) => p.trim()).filter(Boolean)
+  for (const p of parts) {
+    if (/^what we know right now:/i.test(p)) out.know = p.replace(/^what we know right now:\s*/i, "").trim()
+    else if (/^what still needs confirmation/i.test(p)) out.confirm = p.replace(/^what still needs confirmation[^:]*:\s*/i, "").trim()
+    else if (/^what does not need/i.test(p)) out.notTonight = p.replace(/^what does not need[^:]*:\s*/i, "").trim()
+  }
+  return out
+}
+
+function sentencesToBullets(text: string, max: number): string[] {
+  if (!text) return []
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 10)
+    .slice(0, max)
+}
+
+function splitConfirmBullets(text: string): string[] {
+  if (!text) return []
+  const byWhether = text.split(/\s+(?=Whether\s)/i).map((s) => s.trim()).filter(Boolean)
+  if (byWhether.length > 1) return byWhether.map((s) => (s.endsWith(".") ? s : `${s}.`))
+  const byWhat = text.split(/\s+(?=What\s)/i).map((s) => s.trim()).filter(Boolean)
+  if (byWhat.length > 1) return byWhat.map((s) => (s.endsWith(".") ? s : `${s}.`))
+  return sentencesToBullets(text, 8)
+}
+
+function splitNotTonightFromGround(text: string): string[] {
+  if (!text) return []
+  return text
+    .split(/\.\s+(?=(?:You do not need|The goal))/i)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 12)
+    .map((s) => (s.endsWith(".") ? s : `${s}.`))
+}
+
+function fallbackKnowBullets(ground: string): string[] {
+  const t = ground.trim()
+  if (!t) return ["Confirm the details you have with your care team — Anchor only reflects what you shared."]
+  const lines = t.split(/\n+/).map((l) => l.trim()).filter((l) => l.length > 8 && l.length < 280)
+  if (lines.length >= 2) return lines.slice(0, 5)
+  return sentencesToBullets(t, 4).length ? sentencesToBullets(t, 4) : [t.slice(0, 280) + (t.length > 280 ? "…" : "")]
+}
+
+function buildCaregiverResultPacket(mirrorResult: MirrorResult, isBackupDemoMirror: boolean): CaregiverResultPacket {
+  if (isBackupDemoMirror || isSarahStructuredMirror(mirrorResult)) {
+    return {
+      knowNow: SARAH_KNOW_NOW_BULLETS,
+      needsConfirmation: SARAH_NEEDS_CONFIRMATION_BULLETS,
+      notTonight: SARAH_NOT_TONIGHT_BULLETS,
+      nightNote: SARAH_NIGHT_NOTE,
+    }
+  }
+  const { know, confirm, notTonight } = extractGroundSections(mirrorResult.ground)
+  if (know || confirm || notTonight) {
+    const knowBullets = know ? sentencesToBullets(know, 6) : []
+    const confBullets = confirm ? splitConfirmBullets(confirm) : []
+    const notBullets = notTonight ? splitNotTonightFromGround(notTonight) : []
+    return {
+      knowNow: knowBullets.length ? knowBullets : fallbackKnowBullets(mirrorResult.ground),
+      needsConfirmation: confBullets.length ? confBullets : DEFAULT_NEEDS_CONFIRMATION_BULLETS,
+      notTonight: notBullets.length ? notBullets : SARAH_NOT_TONIGHT_BULLETS,
+      nightNote: GENERIC_NIGHT_NOTE,
+    }
+  }
+  return {
+    knowNow: fallbackKnowBullets(mirrorResult.ground),
+    needsConfirmation: DEFAULT_NEEDS_CONFIRMATION_BULLETS,
+    notTonight: SARAH_NOT_TONIGHT_BULLETS,
+    nightNote: GENERIC_NIGHT_NOTE,
+  }
+}
+
 function ResultsView({
   cancerType,
   copied,
@@ -1678,6 +1778,11 @@ function ResultsView({
   onSarahBackupDemo: () => void
   planResult: PlanResult | null
 }) {
+  const packet = useMemo(
+    () => buildCaregiverResultPacket(mirrorResult, isBackupDemoMirror),
+    [mirrorResult, isBackupDemoMirror],
+  )
+
   return (
     <motion.div
       key="results"
@@ -1685,103 +1790,112 @@ function ResultsView({
       initial="hidden"
       animate="show"
       exit={{ opacity: 0, y: -16 }}
-      className="max-w-4xl"
+      className="max-w-4xl min-w-0 overflow-x-hidden"
     >
       {isBackupDemoMirror && (
         <motion.div
           variants={itemVariants}
-          className="mb-4 rounded-[22px] border border-[#c9b8d8]/70 bg-[#f5eef8]/90 px-3 py-2.5 text-xs leading-snug text-[#6f6280] sm:mb-6 sm:rounded-[24px] sm:px-4 sm:py-3 sm:text-sm sm:leading-6"
+          className="mb-3 rounded-[18px] border border-[#c9b8d8]/70 bg-[#f5eef8]/90 px-3 py-2 text-[0.7rem] leading-snug text-[#6f6280] sm:mb-4 sm:rounded-[22px] sm:px-3.5 sm:py-2.5 sm:text-sm sm:leading-6"
           role="status"
         >
           Showing backup demo response — sample only; confirm everything with your care team.
         </motion.div>
       )}
 
-      <motion.p variants={itemVariants} className="mb-4 font-mono text-xs tracking-[0.18em] text-[#8f7e9b] sm:mb-5">
+      <motion.p
+        variants={itemVariants}
+        className="mb-2 break-words text-[10px] font-semibold uppercase leading-snug tracking-wide text-[#8f7e9b] sm:mb-3 sm:text-xs"
+      >
         YOUR NEXT MOVES FOR YOUR {lovedOne.toUpperCase()}&apos;S {cancerType.toUpperCase()} CANCER
       </motion.p>
       <motion.blockquote
         variants={itemVariants}
-        className={`m-0 max-w-4xl text-2xl font-normal leading-tight sm:text-4xl lg:text-6xl xl:text-7xl ${SOFT_GRADIENT_TEXT}`}
+        className={`m-0 max-w-full break-words text-xl font-normal leading-snug sm:text-3xl md:text-4xl lg:text-5xl ${SOFT_GRADIENT_TEXT}`}
       >
         &quot;{mirrorResult.fearQuote}&quot;
       </motion.blockquote>
 
-      <motion.div variants={itemVariants} className="mt-6 grid gap-3 sm:mt-12 sm:gap-4">
-        <ResultBand label="What Anchor hears" icon={<HeartHandshake className="h-5 w-5" />}>
-          {mirrorResult.mirror}
-        </ResultBand>
-        <ResultBand
-          label={
-            isBackupDemoMirror
-              ? "What we know and what still needs confirmation"
-              : "What is clinically true right now"
-          }
-          icon={<ShieldCheck className="h-5 w-5" />}
-        >
-          {mirrorResult.ground}
-        </ResultBand>
+      <motion.div variants={itemVariants} className="mt-3 grid min-w-0 gap-2 sm:mt-6 sm:gap-3">
+        <ResultPacketCard icon={<HeartHandshake className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What Anchor hears">
+          <p className="m-0 text-[13px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{mirrorResult.mirror}</p>
+        </ResultPacketCard>
+
+        <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What we know right now">
+          <ResultBulletList items={packet.knowNow} />
+        </ResultPacketCard>
+
+        <ResultPacketCard icon={<Clipboard className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What still needs confirmation">
+          <ResultBulletList items={packet.needsConfirmation} />
+        </ResultPacketCard>
+
+        <ResultPacketCard icon={<Wind className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What does not need to be solved tonight">
+          <ResultBulletList items={packet.notTonight} />
+        </ResultPacketCard>
+
+        <NightNoteCard note={packet.nightNote} />
       </motion.div>
 
-      <motion.div variants={itemVariants} className="mt-6 sm:mt-10">
-        {isBackupDemoMirror ? (
-          <p className="mb-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b] sm:mb-4">NEXT MOVES</p>
-        ) : (
-          <>
-            <p className="mb-2 font-mono text-xs tracking-[0.16em] text-[#8f7e9b]">NCCN-ALIGNED NEXT STEPS</p>
-            <p className="mb-3 font-mono text-xs tracking-[0.16em] text-[#8f7e9b] sm:mb-4">NEXT MOVES</p>
-          </>
-        )}
-        <div className="grid gap-2 sm:gap-3">
+      <motion.div variants={itemVariants} className="mt-3 sm:mt-5">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">THREE NEXT STEPS</p>
+        <div className="grid min-w-0 gap-1.5 sm:gap-2">
           {mirrorResult.actions.slice(0, 3).map((action, index) => (
             <motion.div
               key={`${action}-${index}`}
-              initial={{ opacity: 0, x: -18 }}
+              initial={{ opacity: 0, x: -12 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.25 + index * 0.12, duration: 0.55 }}
+              transition={{ delay: 0.12 + index * 0.08, duration: 0.45 }}
             >
-              <ExpandableActionItem action={action} index={index} />
+              <ExpandableActionItem action={action} index={index} variant="compact" />
             </motion.div>
           ))}
         </div>
       </motion.div>
 
-      <motion.div variants={itemVariants} className="mt-6 flex flex-col gap-3 sm:mt-10 sm:flex-row">
-        <button
-          type="button"
-          onClick={onPlan}
-          disabled={isPlanning}
-          className="flex w-full items-center justify-center gap-3 rounded-[26px] border border-white/80 bg-[#b7a6c9] px-6 py-4 text-white shadow-[0_20px_58px_rgba(151,128,163,0.24)] transition hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-55"
-        >
-          {isPlanning ? "Building your 72-hour plan..." : "Get your 72-hour plan"}
-          <CalendarClock className="h-5 w-5 shrink-0" />
-        </button>
-        <button
-          type="button"
-          onClick={() => onCopy("note", noteText)}
-          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-3 rounded-[26px] px-6 py-4 text-[#3f3a36]`}
-        >
-          {copied === "note" ? "Saved to clipboard" : "Save this note"}
-          {copied === "note" ? <Check className="h-5 w-5" /> : <Clipboard className="h-5 w-5" />}
-        </button>
+      <motion.div variants={itemVariants} className="mt-3 sm:mt-5">
+        <ResultPacketCard icon={<CalendarClock className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="72-hour plan">
+          <p className="mb-2 text-[12px] leading-snug text-[#756f68] sm:mb-3 sm:text-sm sm:leading-relaxed">
+            A compact checklist you can verify with your care team — tap when you are ready to generate it here.
+          </p>
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:gap-2.5">
+            <button
+              type="button"
+              onClick={onPlan}
+              disabled={isPlanning}
+              className="flex w-full shrink-0 items-center justify-center gap-2 rounded-[20px] border border-white/80 bg-[#b7a6c9] px-4 py-2.5 text-sm font-medium text-white shadow-[0_14px_40px_rgba(151,128,163,0.22)] outline-none transition hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[#b98da0]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] active:scale-[0.98] disabled:opacity-55 sm:rounded-[22px] sm:py-3"
+            >
+              {isPlanning ? "Building your 72-hour plan..." : "Get your 72-hour plan"}
+              <CalendarClock className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onCopy("note", noteText)}
+              className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[20px] px-4 py-2.5 text-sm text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:py-3`}
+            >
+              {copied === "note" ? "Saved to clipboard" : "Save this note"}
+              {copied === "note" ? <Check className="h-4 w-4 sm:h-5 sm:w-5" /> : <Clipboard className="h-4 w-4 sm:h-5 sm:w-5" />}
+            </button>
+          </div>
+        </ResultPacketCard>
       </motion.div>
 
       <AnimatePresence>
         {planResult && (
           <motion.div
-            initial={{ opacity: 0, y: 35 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-8 sm:mt-12"
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-4 sm:mt-8"
           >
-            <p className="mb-4 font-mono text-xs tracking-[0.16em] text-[#8f7e9b] sm:mb-5">72 HOURS, MADE SMALL ENOUGH TO HOLD</p>
-            <div className="grid gap-3 sm:gap-4 xl:grid-cols-3">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:mb-3 sm:text-xs">
+              72 HOURS, MADE SMALL ENOUGH TO HOLD
+            </p>
+            <div className="grid min-w-0 gap-2 sm:gap-3 xl:grid-cols-3">
               <PlanColumn actions={planResult.tonight} label="First steps" onHoverRegret={onHoverRegret} />
               <PlanColumn actions={planResult.tomorrow} label="Tomorrow" onHoverRegret={onHoverRegret} />
               <PlanColumn actions={planResult.next48} label="Next 48" onHoverRegret={onHoverRegret} />
             </div>
-            <p className="mt-5 text-sm leading-6 text-[#756f68]">
+            <p className="mt-3 text-[12px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">
               {isBackupDemoMirror
                 ? "Sample caregiver checklist — confirm timing and details with your care team."
                 : "Steps grounded in NCCN oncology guidelines · Always verify with your care team"}
@@ -1792,7 +1906,7 @@ function ResultsView({
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
-                  className={`${GLASS_PANEL} mt-4 rounded-[28px] p-4 text-sm italic leading-6 text-[#6f6280]`}
+                  className={`${GLASS_PANEL} mt-3 rounded-[20px] p-3 text-[13px] italic leading-snug text-[#6f6280] sm:mt-4 sm:rounded-[24px] sm:p-4 sm:text-sm sm:leading-6`}
                 >
                   {hoveredRegret}
                 </motion.div>
@@ -1802,51 +1916,117 @@ function ResultsView({
         )}
       </AnimatePresence>
 
-      <motion.div variants={itemVariants} className="mt-6 grid gap-2 sm:mt-10 sm:gap-3 sm:grid-cols-2">
+      <motion.div variants={itemVariants} className="mt-3 grid min-w-0 gap-2 sm:mt-6 sm:grid-cols-2 sm:gap-2.5">
         <button
           type="button"
           onClick={() => onCopy("handoff", handoffText)}
-          className={`${GLASS_BUTTON} flex items-center justify-between rounded-[26px] p-3.5 text-left text-[#3f3a36] sm:p-4`}
+          className={`${GLASS_BUTTON} flex items-center justify-between gap-2 rounded-[20px] p-3 text-left text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:p-3.5`}
         >
-          <span>
-            <span className="block text-sm font-medium text-[#242230] sm:text-base">Send a handoff text</span>
-            <span className="mt-1 block text-xs text-[#756f68] sm:text-sm">
-              {copied === "handoff" ? "Copied for your support person." : "A concise update for your support circle."}
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-[#242230]">Copy update for support person</span>
+            <span className="mt-0.5 block text-[11px] leading-snug text-[#756f68] sm:text-xs sm:text-sm">
+              {copied === "handoff"
+                ? "Copied. You can paste this into a text to your support person."
+                : "Copies a short update to your clipboard — nothing is sent from Anchor."}
             </span>
           </span>
-          <Phone className="h-5 w-5 shrink-0 text-[#9b829c]" />
+          <Copy className="h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" />
         </button>
         <button
           type="button"
           onClick={onReset}
-          className={`${GLASS_BUTTON} flex items-center justify-between rounded-[26px] p-3.5 text-left text-[#3f3a36] sm:p-4`}
+          className={`${GLASS_BUTTON} flex items-center justify-between gap-2 rounded-[20px] p-3 text-left text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:p-3.5`}
         >
-          <span>
-            <span className="block text-sm font-medium text-[#242230] sm:text-base">Speak again</span>
-            <span className="mt-1 block text-xs text-[#756f68] sm:text-sm">Another fear, another path.</span>
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-[#242230]">Speak again</span>
+            <span className="mt-0.5 block text-[11px] leading-snug text-[#756f68] sm:text-xs sm:text-sm">Another fear, another path.</span>
           </span>
-          <Mic className="h-5 w-5 shrink-0 text-[#b98da0]" />
+          <Mic className="h-4 w-4 shrink-0 text-[#b98da0] sm:h-5 sm:w-5" />
         </button>
       </motion.div>
 
       {error && (
-        <div className="mt-5 sm:mt-6">
+        <div className="mt-3 sm:mt-5">
           <ErrorText message={error} />
           {!isBackupDemoMirror && (
             <button
               type="button"
               onClick={onSarahBackupDemo}
-              className={`${GLASS_BUTTON} mt-3 w-full rounded-[26px] px-6 py-3 text-sm text-[#3f3a36] sm:mt-4 sm:w-auto`}
+              className={`${GLASS_BUTTON} mt-2 w-full rounded-[20px] px-4 py-2.5 text-sm text-[#3f3a36] sm:mt-3 sm:w-auto sm:rounded-[22px]`}
             >
               Show Sarah demo result
             </button>
           )}
         </div>
       )}
-      <p className="mt-5 text-xs leading-6 text-[#756f68] sm:mt-7 sm:text-sm sm:leading-6">
-        Hi {displayName}. This is support for orientation and preparation, not emergency care or a substitute for your oncology team.
+
+      <motion.div
+        variants={itemVariants}
+        className="mt-3 rounded-[16px] border border-[#d8cec5]/80 bg-[#faf7f4]/90 px-3 py-2.5 text-[11px] leading-snug text-[#5f5a55] sm:mt-4 sm:rounded-[20px] sm:px-4 sm:py-3 sm:text-xs sm:leading-relaxed"
+      >
+        Anchor helps prepare questions and organize next steps. It does not diagnose, prescribe, choose treatment, or
+        replace your care team.
+      </motion.div>
+
+      <p className="mt-3 text-[11px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">
+        Hi {displayName}. This is support for orientation and preparation, not emergency care or a substitute for your
+        oncology team.
       </p>
     </motion.div>
+  )
+}
+
+function ResultPacketCard({
+  children,
+  icon,
+  label,
+}: {
+  children: React.ReactNode
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+      <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+      <div className="mb-1.5 flex min-w-0 items-center gap-2 text-[10px] font-semibold uppercase leading-tight tracking-wide text-[#8f7e9b] sm:text-[11px]">
+        <span className="shrink-0 text-[#9b829c]">{icon}</span>
+        <span className="min-w-0">{label}</span>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}
+
+function ResultBulletList({ items }: { items: string[] }) {
+  return (
+    <ul className="m-0 list-none space-y-1.5 p-0 sm:space-y-2">
+      {items.map((item, index) => (
+        <li
+          key={`${index}-${item.slice(0, 24)}`}
+          className="relative pl-3.5 text-[13px] leading-snug text-[#3f3a36] before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90 sm:text-sm sm:leading-relaxed"
+        >
+          {item}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function NightNoteCard({ note }: { note: NightNoteContent }) {
+  return (
+    <div className="min-w-0 overflow-hidden rounded-[16px] border border-[#8f6a5c]/35 bg-gradient-to-br from-[#2a2426] via-[#342d30] to-[#3d3538] p-3.5 shadow-[0_14px_36px_rgba(24,18,20,0.38)] sm:rounded-[20px] sm:p-4">
+      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#d4b8a8] sm:text-[11px]">Night note</p>
+      <h3 className="mt-1.5 text-base font-medium tracking-tight text-[#fdf6f0] sm:text-lg">Night Note</h3>
+      <p className="mt-1 text-[11px] leading-snug text-[#e8c4b2]/95 sm:text-xs sm:leading-relaxed">{note.subtitle}</p>
+      <p className="mt-2.5 text-[13px] leading-relaxed text-[#f2e6dc]/95 sm:mt-3 sm:text-sm">{note.body}</p>
+      <ul className="mt-2.5 space-y-1 border-t border-white/10 pt-2.5 sm:mt-3 sm:space-y-1.5 sm:pt-3">
+        {note.tinyActions.map((line, i) => (
+          <li key={i} className="text-[10px] leading-relaxed text-[#e8d5cc]/90 sm:text-[11px]">
+            <span className="mr-1.5 text-[#c9a089]">→</span>
+            {line}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -1887,14 +2067,28 @@ function ExpandableActionItem({
   const script = providedScript ?? getActionScript(action, index)
   const isPlan = variant === "plan"
   const isExample = variant === "example"
+  const stepLabel = String(index + 1).padStart(2, "0")
+
   const containerClass =
     variant === "default" || variant === "example"
-      ? `${GLASS_PANEL} rounded-[28px] p-4`
+      ? `${GLASS_PANEL} min-w-0 rounded-[22px] p-3 sm:rounded-[28px] sm:p-4`
       : variant === "compact"
-        ? "rounded-[22px] border border-white/70 bg-white/56 p-4 text-[#3f3a36]"
-        : "w-full rounded-[22px] border border-white/75 bg-white/60 p-3 text-left shadow-[0_10px_30px_rgba(116,100,91,0.08)] backdrop-blur-[20px] transition hover:-translate-y-0.5 hover:border-[#c9b8d8]/80"
-  const actionClass = isPlan ? "text-sm leading-6 text-[#3f3a36]" : "text-base leading-7 text-[#3f3a36]"
-  const numberClass = isExample ? "font-mono text-lg font-bold text-[#b98da0]" : "font-mono text-sm text-[#b98da0]"
+        ? "min-w-0 rounded-[16px] border border-white/70 bg-white/56 p-2.5 text-[#3f3a36] sm:rounded-[20px] sm:p-3"
+        : "min-w-0 w-full rounded-[18px] border border-white/75 bg-white/60 p-2.5 text-left shadow-[0_10px_30px_rgba(116,100,91,0.08)] backdrop-blur-[20px] transition hover:-translate-y-0.5 hover:border-[#c9b8d8]/80 sm:rounded-[22px] sm:p-3"
+
+  const badgeClass =
+    "flex h-7 min-w-[1.75rem] shrink-0 items-center justify-center rounded-lg border border-[#c9b8d8]/55 bg-white/85 px-1.5 text-[11px] font-semibold tabular-nums text-[#8b5f72] shadow-sm sm:h-8 sm:min-w-[2rem] sm:px-2 sm:text-xs"
+
+  const titleClass = isPlan
+    ? "text-[13px] font-medium leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed"
+    : isExample
+      ? "text-[15px] font-medium leading-snug text-[#3f3a36] sm:text-base sm:leading-relaxed"
+      : variant === "compact"
+        ? "text-[13px] font-medium leading-snug text-[#3f3a36] sm:text-sm sm:leading-snug"
+        : "text-[15px] font-medium leading-snug text-[#3f3a36] sm:text-base sm:leading-relaxed"
+
+  const focusRing =
+    "outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fffdf9]"
 
   return (
     <div className={containerClass} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
@@ -1904,29 +2098,38 @@ function ExpandableActionItem({
         onFocus={onFocus}
         onBlur={onBlur}
         aria-expanded={isOpen}
-        className="w-full text-left"
+        className={`${focusRing} w-full rounded-[12px] text-left sm:rounded-[14px]`}
       >
-        <span className={isPlan ? "mb-2 block font-mono text-xs text-[#8f7e9b]" : "flex gap-4"}>
-          <span className={isPlan ? "" : numberClass}>
-            {String(index + 1).padStart(2, "0")}
+        <div className="flex min-w-0 items-start gap-3 sm:gap-3.5">
+          <span className={badgeClass} aria-hidden>
+            {stepLabel}
           </span>
-          <span className={actionClass}>{renderActionText(action, emphasizedPrefix)}</span>
-        </span>
-        <span className="mt-3 flex items-center gap-1 font-mono text-[0.68rem] tracking-[0.16em] text-[#8f7e9b]">
-          Tap for script →
-        </span>
+          <div className="min-w-0 flex-1">
+            <p className={`m-0 ${titleClass}`}>{renderActionText(action, emphasizedPrefix)}</p>
+            <p className="mt-1.5 text-xs font-medium leading-snug text-[#756f68]">
+              {isOpen ? "Hide script" : "Show what to say"}
+            </p>
+          </div>
+        </div>
       </button>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {isOpen && (
-          <motion.p
-            initial={{ opacity: 0, height: 0, y: -4 }}
-            animate={{ opacity: 1, height: "auto", y: 0 }}
-            exit={{ opacity: 0, height: 0, y: -4 }}
-            transition={{ duration: 0.24 }}
-            className="mt-4 overflow-hidden border-t border-white/70 pt-4 text-sm leading-6 text-[#5f5a55]"
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
           >
-            {script}
-          </motion.p>
+            <div className="mt-2 rounded-xl border border-[#c9b8a8]/45 bg-[#e8dfd6] px-2.5 py-2 sm:mt-2.5 sm:px-3 sm:py-2.5">
+              <p className="m-0 text-[10px] font-medium leading-normal text-[#5c5360] sm:text-[11px]">
+                Use this if you need words for the call.
+              </p>
+              <p className="m-0 mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-[#322e2b] sm:text-[13px]">
+                {script}
+              </p>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
