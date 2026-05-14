@@ -44,6 +44,7 @@ import {
   SARAH_NIGHT_NOTE,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
+  type AdaptivePlanTaskInitialStatus,
   type NightNoteContent,
   type StoredAdaptivePlanTask,
 } from "@/lib/demo/sarah-case"
@@ -99,6 +100,14 @@ interface DemoCaseUpdate {
   revisedStep: string
 }
 
+interface ActionGuideDemoTimelineEntry {
+  id: string
+  taskId: string
+  taskTitle: string
+  badge: string
+  savedAt: string
+}
+
 interface AnchorDemoCaseV1 {
   v: 1
   phase: AppPhase
@@ -113,6 +122,7 @@ interface AnchorDemoCaseV1 {
   caseUpdates: DemoCaseUpdate[]
   completedPlanTaskIds: string[]
   adaptivePlanTasks: StoredAdaptivePlanTask[]
+  actionGuideDemoTimeline?: ActionGuideDemoTimelineEntry[]
 }
 
 function isValidPlanResult(value: unknown): value is PlanResult {
@@ -141,6 +151,18 @@ function isDemoCaseUpdate(value: unknown): value is DemoCaseUpdate {
     typeof o.needsConfirmation === "string" &&
     typeof o.askNext === "string" &&
     typeof o.revisedStep === "string"
+  )
+}
+
+function isActionGuideDemoTimelineEntry(value: unknown): value is ActionGuideDemoTimelineEntry {
+  if (!value || typeof value !== "object") return false
+  const o = value as Record<string, unknown>
+  return (
+    typeof o.id === "string" &&
+    typeof o.taskId === "string" &&
+    typeof o.taskTitle === "string" &&
+    typeof o.badge === "string" &&
+    typeof o.savedAt === "string"
   )
 }
 
@@ -432,6 +454,7 @@ export default function App() {
   const [caseInformationUpdates, setCaseInformationUpdates] = useState<DemoCaseUpdate[]>([])
   const [completedPlanTaskIds, setCompletedPlanTaskIds] = useState<string[]>([])
   const [adaptivePlanTasks, setAdaptivePlanTasks] = useState<StoredAdaptivePlanTask[]>([])
+  const [actionGuideDemoTimeline, setActionGuideDemoTimeline] = useState<ActionGuideDemoTimelineEntry[]>([])
 
   const {
     isSessionActive,
@@ -642,6 +665,9 @@ export default function App() {
       const adaptRaw = o.adaptivePlanTasks
       const adaptTasks = Array.isArray(adaptRaw) ? adaptRaw.filter(isStoredAdaptivePlanTask) : []
       setAdaptivePlanTasks(adaptTasks)
+      const tlRaw = o.actionGuideDemoTimeline
+      const tl = Array.isArray(tlRaw) ? tlRaw.filter(isActionGuideDemoTimelineEntry) : []
+      setActionGuideDemoTimeline(tl)
       setOnboarded(true)
       setPhase("results")
       setError(null)
@@ -668,12 +694,14 @@ export default function App() {
         caseUpdates: caseInformationUpdates,
         completedPlanTaskIds,
         adaptivePlanTasks,
+        actionGuideDemoTimeline,
       }
       window.localStorage.setItem(ANCHOR_DEMO_CASE_KEY, JSON.stringify(payload))
     } catch {
       /* ignore quota / serialization issues */
     }
   }, [
+    actionGuideDemoTimeline,
     adaptivePlanTasks,
     cancerType,
     caregiverName,
@@ -741,6 +769,10 @@ export default function App() {
     setAdaptivePlanTasks((prev) => [...prev, ...tasks])
   }, [])
 
+  const appendActionGuideDemoTimeline = useCallback((entry: ActionGuideDemoTimelineEntry) => {
+    setActionGuideDemoTimeline((prev) => [...prev, entry].slice(-48))
+  }, [])
+
   const markPlanTaskDone = useCallback((taskId: string) => {
     setCompletedPlanTaskIds((prev) => (prev.includes(taskId) ? prev : [...prev, taskId]))
   }, [])
@@ -763,6 +795,7 @@ export default function App() {
     setCaseInformationUpdates([])
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
+    setActionGuideDemoTimeline([])
 
     const useSarahFallbackMirror = () => {
       setMirrorResult(SARAH_MIRROR_RESULT)
@@ -832,6 +865,7 @@ export default function App() {
     setCaseInformationUpdates([])
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
+    setActionGuideDemoTimeline([])
     setPhase("results")
   }, [])
 
@@ -1009,6 +1043,7 @@ export default function App() {
     setCaseInformationUpdates([])
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
+    setActionGuideDemoTimeline([])
     setFearTimeline([])
     setJournalEntries([])
     setOneThingCount(0)
@@ -1040,6 +1075,7 @@ export default function App() {
     setCaseInformationUpdates([])
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
+    setActionGuideDemoTimeline([])
     setPhase("idle")
   }
 
@@ -1166,6 +1202,7 @@ export default function App() {
     setCaseInformationUpdates([])
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
+    setActionGuideDemoTimeline([])
     window.localStorage.removeItem(ANCHOR_DEMO_CASE_KEY)
   }
 
@@ -1339,6 +1376,7 @@ export default function App() {
                   {phase === "results" && mirrorResult && (
                     <ResultsView
                       adaptivePlanTasks={adaptivePlanTasks}
+                      appendActionGuideDemoTimeline={appendActionGuideDemoTimeline}
                       appendAdaptivePlanTasks={appendAdaptivePlanTasks}
                       appendDemoCaseUpdate={appendDemoCaseUpdate}
                       cancerType={cancerType}
@@ -1994,6 +2032,466 @@ function buildCaregiverResultPacket(mirrorResult: MirrorResult, isBackupDemoMirr
   }
 }
 
+type TaskArtifactCode = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I"
+
+interface TaskArtifactMeta {
+  code: TaskArtifactCode
+  badge: string
+}
+
+interface TaskActionGuideContent {
+  artifact: TaskArtifactMeta
+  taskTitle: string
+  whatFor: string
+  whyMatters: string
+  whenToUse: string
+  exactWords: string
+  tryingToGet: string[]
+  writeDown: string[]
+  ifUnknown: string
+  standardFooter: string
+  urgentExtraFooter: string | null
+  copyBlock: string
+  isUrgentPanel: boolean
+}
+
+const TASK_GUIDE_STANDARD_FOOTER =
+  "Anchor can help prepare NCCN-aware questions and organize next steps. It does not diagnose, prescribe, choose treatment, confirm stage, replace your care team, or send messages for you."
+
+function inferTaskArtifact(row: PlanBoardDisplayRow): TaskArtifactMeta {
+  const blob = `${row.title} ${row.detail ?? ""}`.toLowerCase()
+  const urgent =
+    row.initialStatus === "urgent" ||
+    /\b(severe|rapidly worsening|emergency services|urgent line|911|triage|anchor does not triage)\b/.test(blob)
+  if (urgent) return { code: "G", badge: "Urgent guidance" }
+  if (/\binsurance\b|\binsurer\b|\bauthorization\b|\breferrals?\b/.test(blob)) return { code: "F", badge: "Insurance script" }
+  if (/\bsecond opinion\b|\bextra opinions\b|\banother opinion\b/.test(blob)) return { code: "H", badge: "Second opinion prep" }
+  if (
+    /\bsibling\b|\bfamily update\b|\bshare updates\b|\bfamily members?\b/.test(blob) ||
+    (/\bfamily\b/.test(blob) && /\b(update|text|group chat|coordinate)\b/.test(blob))
+  ) {
+    return { code: "D", badge: "Family update" }
+  }
+  if (
+    /\brecords office\b|\bmissing records\b|\brequest(ing)?\s+records\b|\brecords request\b/.test(blob) ||
+    (/\brecords\b/.test(blob) && /\b(request|gather|bring|missing)\b/.test(blob))
+  ) {
+    return { code: "E", badge: "Records checklist" }
+  }
+  if (/\bportal\b|\bcheck-in\b|\blog ?in\b|portal messages/.test(blob)) return { code: "C", badge: "Portal draft" }
+  if (
+    /\bmmr\b|\bmsi\b|\bbioma(rker)?s?\b|\bpathology\b|\bpath report\b|\bimaging\b|\bchemo\b|\boncologist\b|\bdoctor\b|\bcare team\b.*\b(ask|confirm|whether)\b|\bquestion\b/.test(
+      blob,
+    )
+  ) {
+    return { code: "B", badge: "Doctor question" }
+  }
+  if (/\bcall(ing)?\b|\bphone\b|\bclinic line\b|\bafter-hours\b|\bhi, i'?m calling\b/.test(blob)) return { code: "A", badge: "Call script" }
+  return { code: "I", badge: "Visit prep" }
+}
+
+function planRowGuideTriggerLabel(done: boolean, code: TaskArtifactCode): string {
+  if (!done) return "Guide me"
+  if (code === "A" || code === "C" || code === "F") return "View script"
+  return "View details"
+}
+
+function buildTaskActionGuide(row: PlanBoardDisplayRow, lovedOneLabel: string): TaskActionGuideContent {
+  const artifact = inferTaskArtifact(row)
+  const blob = `${row.title} ${row.detail ?? ""}`.toLowerCase()
+  const title = row.title
+  const isUrgentPanel = artifact.code === "G"
+
+  const exampleCallScript =
+    "Hi, I'm calling for my mom. We were told she may have possible stage III colon cancer, and we have an appointment tomorrow. Before we come in, can you help us confirm what records we should bring, whether the full pathology report is finalized, and whether any imaging or biomarker testing is still pending?"
+  const exampleMmMsi = "Has MMR/MSI testing been ordered, and will the result change what we discuss next?"
+  const exampleImaging = "Which imaging results are still needed before the care team can explain the full plan?"
+  const examplePath = "Is the pathology report complete, and does the team agree on what it means for next steps?"
+  const exampleChemoNeutral =
+    "What information are you using to decide whether chemo is needed, and what is still pending? This is a question for your oncologist — not treatment advice from Anchor."
+  const exampleInsurance =
+    "Our insurer asked for records. Which documents should we upload, the deadline, and can your office help with the checklist?"
+  const exampleSibling = `Quick family update: I'm with ${lovedOneLabel}. Here's what we know from the visit today — still confirm anything time-sensitive with the care team. Who can hop on the group thread tonight?`
+  const exampleRecordsRequest =
+    "Please send the pathology summary and imaging reports we listed to the address on the form. I'll keep a copy of what I submit and follow up if anything is rejected."
+  const exampleUrgent =
+    "Given what's happening right now, should we call your clinic after-hours line, or seek urgent or emergency care? Anchor does not triage."
+  const exampleFamilySms = `Update (not medical advice): We met with the team about ${lovedOneLabel}. Key dates or tasks may shift — I'll text again when we have something confirmed.`
+
+  let whatFor = `This step lines up with: ${title}`
+  let whyMatters =
+    "Clear language lowers panic in the room, keeps the visit focused, and helps your loved one feel represented — without you having to memorize textbook oncology."
+  let whenToUse = "Use this the day before or morning of a touchpoint, or right after new results land."
+  let exactWords = exampleCallScript
+  let tryingToGet: string[] = [
+    "What is confirmed on paper today, and what is still officially pending.",
+    "What records or portal items the clinic still needs from you.",
+    "Who will review results with you and how to reach them with follow-up questions.",
+  ]
+  let writeDown: string[] = [
+    "Today's date and who you spoke with (first name is fine).",
+    "Any dates the scheduler gave you — read them back to confirm.",
+    "A short list of what you were told to bring next time.",
+  ]
+
+  if (artifact.code === "G") {
+    whatFor = `Escalation check for: ${title}`
+    whyMatters =
+      "Severe or rapidly changing symptoms can need same-day medical judgment. A short script keeps you from underplaying it on the phone."
+    whenToUse = "Use immediately when symptoms are severe, sudden, or quickly worsening — not for routine scheduling questions."
+    exactWords = exampleUrgent
+    tryingToGet = [
+      "Whether to use the after-hours clinic line or emergency services.",
+      "Which symptoms to name plainly (what started when, how fast it changed).",
+      "What instructions you received if you are sent to the ER.",
+    ]
+    writeDown = [
+      "Symptom words your loved one used, in plain language.",
+      "Time the symptom started or worsened.",
+      "Any new medicines or doses since the last visit.",
+    ]
+  } else if (artifact.code === "F") {
+    whatFor = `Insurance or authorization follow-up tied to: ${title}`
+    whyMatters = "Insurance questions are administrative but time-sensitive — a clean request reduces back-and-forth."
+    whenToUse = "When billing, authorization, or referral paperwork is blocking tests or appointments."
+    exactWords = exampleInsurance
+    tryingToGet = [
+      "Exact document names the insurer listed.",
+      "Deadlines and submission channel (portal vs fax vs mail).",
+      "Whether the clinic can upload on your behalf.",
+    ]
+    writeDown = ["Confirmation numbers.", "Screenshots or PDF filenames you uploaded.", "Name of the representative and call time."]
+  } else if (artifact.code === "D") {
+    whatFor = `Family coordination for: ${title}`
+    whyMatters = "Aligned updates reduce conflicting stories, especially when a sibling joins midstream."
+    whenToUse = "Same day as a visit, when travel plans change, or before you split note-taking roles."
+    exactWords = /\bsibling\b/.test(blob) ? exampleSibling : exampleFamilySms
+    tryingToGet = [
+      "Who owns texting the wider family versus staying in the exam room.",
+      "What is okay to repeat versus what must wait for clinician wording.",
+      "How notes will be shared after the visit.",
+    ]
+    writeDown = ["Who is the point person for the next 48 hours.", "One-paragraph factual update only — no guessing at diagnosis."]
+  } else if (artifact.code === "E") {
+    whatFor = `Records you may need to request or gather for: ${title}`
+    whyMatters = "Missing records burn visit time; a polite checklist keeps requests traceable."
+    whenToUse = "After a visit, when insurance asks for paperwork, or when imaging or pathology are referenced but you do not have copies."
+    exactWords = exampleRecordsRequest
+    tryingToGet = [
+      "Which documents exist versus which are still incomplete.",
+      "The correct fax or portal path your hospital prefers.",
+      "Whether any addendum pages are missing.",
+    ]
+    writeDown = ["Dates on each report header.", "Your internal tracking ID or receipt for the request."]
+  } else if (artifact.code === "C") {
+    whatFor = `Portal or prep language around: ${title}`
+    whyMatters = "Portal messages become part of the chart — neutral, specific notes help everyone."
+    whenToUse = "Before you send a message, request records, or ask about prep instructions."
+    exactWords = `Portal draft (edit in your own words): "We are preparing for the upcoming visit and want to confirm prep instructions and which uploaded documents you can see on our side. We are not asking for a diagnosis over the portal — only which items still look missing from your view."`
+    tryingToGet = [
+      "Confirmation the team can see your uploads.",
+      "Prep requirements and check-in time.",
+      "Whether labs must finish before the visit.",
+    ]
+    writeDown = ["Screenshot the sent message.", "Portal timestamp.", "Any auto-reply timing expectations."]
+  } else if (artifact.code === "H") {
+    whatFor = `Second-opinion preparation related to: ${title}`
+    whyMatters = "Second opinions are common — framing them calmly protects trust with your primary team."
+    whenToUse = "After you understand your team's recommendation, not as a panicked midnight shortcut."
+    exactWords = `"We are considering a second opinion to feel thorough. What records should we collect so another center can review without duplicating tests? We want to stay coordinated with you."`
+    tryingToGet = [
+      "Which disc images or pathology slides to request.",
+      "How to avoid redundant radiation or biopsies.",
+      "How to loop results back to your main oncologist.",
+    ]
+    writeDown = ["Names of centers contacted.", "Which records you already released.", "Questions you still want your home team to answer first."]
+  } else if (artifact.code === "B") {
+    whatFor = `Questions to raise with the doctor or nurse about: ${title}`
+    whyMatters =
+      "NCCN-aware preparation means asking what is confirmed, pending, and on the table — wording belongs to your clinicians."
+    whenToUse = "During the in-person or telehealth visit, or on a nurse line when results post."
+    if (/\bmmr\b|\bmsi\b|\bbioma/.test(blob)) {
+      exactWords = exampleMmMsi
+    } else if (/\bimaging\b/.test(blob)) {
+      exactWords = exampleImaging
+    } else if (/\bpath/.test(blob)) {
+      exactWords = examplePath
+    } else if (/\bchemo\b/.test(blob)) {
+      exactWords = exampleChemoNeutral
+    } else {
+      exactWords = [exampleMmMsi, `For imaging: ${exampleImaging}`, `For pathology: ${examplePath}`, `If chemo is only being discussed as a possibility: ${exampleChemoNeutral}`].join(
+        "\n\n",
+      )
+    }
+    tryingToGet = [
+      "Whether MMR/MSI or other biomarker work is still pending and who explains it.",
+      "Whether imaging is complete enough for staging discussions.",
+      "Whether pathology is finalized and what it does or does not establish yet.",
+      "If chemo was raised only as a possibility: what information the team still needs — not a yes or no from Anchor.",
+    ]
+    writeDown = [
+      "Each answer in one short phrase — do not trust your stressed memory.",
+      "Names of pending tests or expected result dates if offered.",
+      "Plain-language wording your loved one wants clarified.",
+    ]
+  } else if (artifact.code === "A") {
+    whatFor = `Phone script for scheduling or prep tied to: ${title}`
+    whyMatters = "Front desk calls go faster if you sound calm, specific, and respectful."
+    whenToUse = "Calling to confirm time, records, or prep — not for brand-new symptom triage."
+    exactWords = exampleCallScript
+    tryingToGet = ["Confirmed appointment time and location.", "Parking or portal check-in steps.", "Who can attend or join by phone."]
+    writeDown = ["Write each answer on one line.", "Read time back: \"So that is 9 a.m. on ___?\""]
+  } else {
+    whatFor = `General visit prep for: ${title}`
+    whyMatters = "A single calm paragraph keeps you from improvising under stress."
+    whenToUse = "Night before or waiting-room review."
+    exactWords = exampleCallScript
+    tryingToGet = [
+      "Clarity on what is still pending versus documented.",
+      "What to bring and who will take notes.",
+      "One worry your loved one asked you not to forget.",
+    ]
+    writeDown = ["Three questions max, large handwriting or large font on your phone."]
+  }
+
+  const ifUnknown =
+    "If they say \"we do not know yet,\" thank them, write who will follow up, and ask when a reasonable next check-in is. Uncertainty is information — it means do not force a plan in the parking lot."
+
+  const copyBlock = [
+    `${artifact.badge} · type ${artifact.code}`,
+    "",
+    `Task: ${title}`,
+    "",
+    "What this is for",
+    whatFor,
+    "",
+    "Why it matters",
+    whyMatters,
+    "",
+    "When to use it",
+    whenToUse,
+    "",
+    "Exact words to say",
+    exactWords,
+    "",
+    "What you are trying to get",
+    ...tryingToGet.map((b) => `• ${b}`),
+    "",
+    "What to write down",
+    ...writeDown.map((b) => `• ${b}`),
+    "",
+    'If they say "we do not know yet"',
+    ifUnknown,
+  ].join("\n")
+
+  return {
+    artifact,
+    taskTitle: title,
+    whatFor,
+    whyMatters,
+    whenToUse,
+    exactWords,
+    tryingToGet,
+    writeDown,
+    ifUnknown,
+    standardFooter: TASK_GUIDE_STANDARD_FOOTER,
+    urgentExtraFooter: isUrgentPanel ? PLAN_CHANGE_URGENT_SAFETY : null,
+    copyBlock,
+    isUrgentPanel,
+  }
+}
+
+function TaskActionGuideSheet({
+  done,
+  lovedOneLabel,
+  onAppendTimeline,
+  onClose,
+  onMarkDone,
+  openRow,
+}: {
+  done: boolean
+  lovedOneLabel: string
+  onAppendTimeline: (entry: ActionGuideDemoTimelineEntry) => void
+  onClose: () => void
+  onMarkDone: (taskId: string) => void
+  openRow: PlanBoardDisplayRow | null
+}) {
+  const [copyNote, setCopyNote] = useState<string | null>(null)
+  const [saveNote, setSaveNote] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!openRow) {
+      setCopyNote(null)
+      setSaveNote(null)
+    }
+  }, [openRow])
+
+  if (!openRow) return null
+
+  const row = openRow
+  const guide = buildTaskActionGuide(row, lovedOneLabel)
+
+  async function handleCopyWords() {
+    try {
+      await navigator.clipboard.writeText(guide.copyBlock)
+      setCopyNote("Copied. Anchor did not send anything.")
+    } catch {
+      setCopyNote("Could not access the clipboard from this browser.")
+    }
+    window.setTimeout(() => setCopyNote(null), 4500)
+  }
+
+  function handleSaveTimeline() {
+    const id =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `tl-${Date.now()}`
+    onAppendTimeline({
+      id,
+      taskId: row.id,
+      taskTitle: row.title.slice(0, 220),
+      badge: guide.artifact.badge,
+      savedAt: new Date().toISOString(),
+    })
+    setSaveNote("Saved to demo timeline")
+    window.setTimeout(() => setSaveNote(null), 3200)
+  }
+
+  function handleMarkDoneAndClose() {
+    onMarkDone(row.id)
+    onClose()
+  }
+
+  return (
+    <AnimatePresence>
+      <motion.button
+        key="guide-overlay"
+        type="button"
+        aria-label="Close guide"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[70] bg-[#1c1816]/55 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+      <motion.div
+        key="guide-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-guide-title"
+        initial={{ y: "104%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "104%" }}
+        transition={{ type: "spring", damping: 28, stiffness: 320 }}
+        className="fixed inset-x-0 bottom-0 z-[71] max-h-[min(82dvh,540px)] w-full max-w-full overflow-x-hidden overflow-y-auto rounded-t-[20px] border border-[#5c534d]/90 bg-gradient-to-b from-[#3f3935] via-[#35302c] to-[#2b2724] px-3 pb-6 pt-3 shadow-[0_-16px_48px_rgba(12,10,9,0.55)] sm:px-4 sm:pb-7 sm:pt-4"
+      >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-white/10 pb-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#c4a89d]">
+              {guide.artifact.badge} · {guide.artifact.code}
+            </p>
+            <h2 id="task-guide-title" className="mt-1 break-words text-[15px] font-semibold leading-snug text-[#fdf6f0] sm:text-base">
+              {guide.taskTitle}
+            </h2>
+            {done && (
+              <p className="mt-1.5 m-0 inline-block rounded-full border border-[#d8e8d8]/50 bg-[#2d3830]/90 px-2 py-0.5 text-[10px] font-medium text-[#c9e8c5]">
+                Done on your board
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-[#f0e4dc] transition hover:bg-white/10"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-2.5 space-y-2.5 text-[11px] leading-snug text-[#e8d8cf] sm:text-xs sm:leading-relaxed">
+          <section className="rounded-[12px] border border-white/10 bg-black/15 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#d4b8a8]">What this is for</p>
+            <p className="mt-1 m-0 break-words text-[#f5ebe3]">{guide.whatFor}</p>
+          </section>
+          <section className="rounded-[12px] border border-white/10 bg-black/15 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#d4b8a8]">Why it matters</p>
+            <p className="mt-1 m-0 break-words text-[#f5ebe3]">{guide.whyMatters}</p>
+          </section>
+          <section className="rounded-[12px] border border-white/10 bg-black/15 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#d4b8a8]">When to use it</p>
+            <p className="mt-1 m-0 break-words text-[#f5ebe3]">{guide.whenToUse}</p>
+          </section>
+          <section className="rounded-[12px] border border-[#8f6a5c]/35 bg-[#2a2426]/90 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#e8c4b2]">Exact words to say</p>
+            <p className="mt-1 m-0 whitespace-pre-wrap break-words text-[#fdf6f0]">{guide.exactWords}</p>
+          </section>
+          <section className="rounded-[12px] border border-white/10 bg-black/15 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#d4b8a8]">What you are trying to get</p>
+            <ul className="mt-1.5 m-0 list-none space-y-1 p-0">
+              {guide.tryingToGet.map((line, i) => (
+                <li key={i} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#c9a089]">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section className="rounded-[12px] border border-white/10 bg-black/15 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#d4b8a8]">What to write down</p>
+            <ul className="mt-1.5 m-0 list-none space-y-1 p-0">
+              {guide.writeDown.map((line, i) => (
+                <li key={i} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#c9a089]">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section className="rounded-[12px] border border-white/10 bg-black/15 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#d4b8a8]">If they say &quot;we do not know yet&quot;</p>
+            <p className="mt-1 m-0 break-words text-[#f5ebe3]">{guide.ifUnknown}</p>
+          </section>
+        </div>
+
+        <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <button
+            type="button"
+            onClick={() => void handleCopyWords()}
+            className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[14px] border border-[#c9a089]/50 bg-[#4a3f3a]/90 px-3 py-2.5 text-[12px] font-medium text-[#fdf6f0] transition hover:bg-[#5a4d46] sm:flex-none sm:px-4"
+          >
+            <Clipboard className="h-4 w-4 shrink-0 opacity-90" />
+            Copy words
+          </button>
+          {!done && (
+            <button
+              type="button"
+              onClick={handleMarkDoneAndClose}
+              className="inline-flex min-w-0 flex-1 items-center justify-center rounded-[14px] border border-[#b98da0]/55 bg-[#f5eef8]/15 px-3 py-2.5 text-[12px] font-medium text-[#f5e9f8] transition hover:bg-[#f5eef8]/25 sm:flex-none sm:px-4"
+            >
+              Mark done
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleSaveTimeline}
+            className="inline-flex min-w-0 flex-1 items-center justify-center rounded-[14px] border border-white/15 bg-white/5 px-3 py-2.5 text-[11px] font-medium text-[#e8d8cf] transition hover:bg-white/10 sm:flex-none sm:px-4"
+          >
+            Save to case timeline (demo)
+          </button>
+        </div>
+        {copyNote && <p className="mt-2 break-words text-center text-[11px] text-[#c9e8c5]">{copyNote}</p>}
+        {saveNote && <p className="mt-1 break-words text-center text-[11px] text-[#c9d4e8]">{saveNote}</p>}
+
+        {guide.urgentExtraFooter && (
+          <p className="mt-3 rounded-[12px] border border-[#c45a4a]/45 bg-[#3d2420]/95 px-2.5 py-2 text-[10px] leading-snug text-[#ffc8bc] sm:text-[11px]">
+            {guide.urgentExtraFooter}
+          </p>
+        )}
+        <p className="mt-2.5 text-[10px] leading-snug text-[#c9beb6] sm:text-[11px] sm:leading-relaxed">{guide.standardFooter}</p>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
 interface PlanBoardDisplayRow {
   id: string
   title: string
@@ -2001,6 +2499,7 @@ interface PlanBoardDisplayRow {
   regretQuote?: string
   source: "baseline" | "adaptive"
   fromUpdate?: boolean
+  initialStatus?: AdaptivePlanTaskInitialStatus
 }
 
 function baselineRowsFromPlan(planResult: PlanResult): PlanBoardDisplayRow[] {
@@ -2031,6 +2530,7 @@ function adaptiveToDisplayRow(task: StoredAdaptivePlanTask): PlanBoardDisplayRow
     regretQuote: task.regretQuote,
     source: "adaptive",
     fromUpdate: task.fromUpdate,
+    initialStatus: task.initialStatus,
   }
 }
 
@@ -2064,24 +2564,21 @@ function partitionAdaptiveRows(
 }
 
 function PlanBoardTaskRow({
-  detail,
   done,
-  fromUpdate,
-  id,
   onHoverRegret,
   onMarkDone,
-  regretQuote,
-  title,
+  onOpenGuide,
+  row,
 }: {
-  detail?: string
   done: boolean
-  fromUpdate?: boolean
-  id: string
   onHoverRegret: (value: string | null) => void
   onMarkDone?: (taskId: string) => void
-  regretQuote?: string
-  title: string
+  onOpenGuide: (taskId: string) => void
+  row: PlanBoardDisplayRow
 }) {
+  const { detail, fromUpdate, id, regretQuote, title } = row
+  const artifact = inferTaskArtifact(row)
+  const guideLabel = planRowGuideTriggerLabel(done, artifact.code)
   const borderClass = done ? "border-[#d8e8d8]/90 bg-white/50" : "border-[#e5ddd4] bg-white/70"
   return (
     <div
@@ -2093,15 +2590,24 @@ function PlanBoardTaskRow({
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
         <p className="m-0 min-w-0 flex-1 text-[12px] font-medium leading-snug text-[#3f3a36] sm:text-sm">{title}</p>
-        {!done && onMarkDone && (
+        <div className="flex max-w-[11rem] shrink-0 flex-wrap items-center justify-end gap-1 sm:max-w-none">
           <button
             type="button"
-            onClick={() => onMarkDone(id)}
-            className="shrink-0 rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-2 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+            onClick={() => onOpenGuide(id)}
+            className="rounded-full border border-[#8f7e9b]/40 bg-[#faf7f4]/95 px-2 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
           >
-            Mark done
+            {guideLabel}
           </button>
-        )}
+          {!done && onMarkDone && (
+            <button
+              type="button"
+              onClick={() => onMarkDone(id)}
+              className="rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-2 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+            >
+              Mark done
+            </button>
+          )}
+        </div>
       </div>
       {detail && <p className="mt-1.5 text-[11px] leading-snug text-[#756f68] sm:text-xs">{detail}</p>}
       {fromUpdate && !done && (
@@ -2117,12 +2623,14 @@ function PlanBoardSubsection({
   emptyHint,
   onHoverRegret,
   onMarkDone,
+  onOpenGuide,
   rows,
   title,
 }: {
   emptyHint?: string
   onHoverRegret: (value: string | null) => void
   onMarkDone: (taskId: string) => void
+  onOpenGuide: (taskId: string) => void
   rows: PlanBoardDisplayRow[]
   title: string
 }) {
@@ -2134,14 +2642,11 @@ function PlanBoardSubsection({
         {rows.map((row) => (
           <PlanBoardTaskRow
             key={row.id}
-            detail={row.detail}
             done={false}
-            fromUpdate={row.fromUpdate}
-            id={row.id}
             onHoverRegret={onHoverRegret}
             onMarkDone={onMarkDone}
-            regretQuote={row.regretQuote}
-            title={row.title}
+            onOpenGuide={onOpenGuide}
+            row={row}
           />
         ))}
       </div>
@@ -2152,9 +2657,11 @@ function PlanBoardSubsection({
 
 function PlanBoardDoneSubsection({
   onHoverRegret,
+  onOpenGuide,
   rows,
 }: {
   onHoverRegret: (value: string | null) => void
+  onOpenGuide: (taskId: string) => void
   rows: PlanBoardDisplayRow[]
 }) {
   if (!rows.length) return null
@@ -2163,16 +2670,7 @@ function PlanBoardDoneSubsection({
       <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Done</p>
       <div className="grid gap-1.5 sm:gap-2">
         {rows.map((row) => (
-          <PlanBoardTaskRow
-            key={row.id}
-            detail={row.detail}
-            done
-            fromUpdate={row.fromUpdate}
-            id={row.id}
-            onHoverRegret={onHoverRegret}
-            regretQuote={row.regretQuote}
-            title={row.title}
-          />
+          <PlanBoardTaskRow key={row.id} done onHoverRegret={onHoverRegret} onOpenGuide={onOpenGuide} row={row} />
         ))}
       </div>
     </div>
@@ -2181,19 +2679,24 @@ function PlanBoardDoneSubsection({
 
 function AdaptivePlanBoard({
   adaptivePlanTasks,
+  appendActionGuideDemoTimeline,
   completedPlanTaskIds,
   isBackupDemoMirror,
+  lovedOneLabel,
   onHoverRegret,
   onMarkDone,
   planResult,
 }: {
   adaptivePlanTasks: StoredAdaptivePlanTask[]
+  appendActionGuideDemoTimeline: (entry: ActionGuideDemoTimelineEntry) => void
   completedPlanTaskIds: string[]
   isBackupDemoMirror: boolean
+  lovedOneLabel: string
   onHoverRegret: (value: string | null) => void
   onMarkDone: (taskId: string) => void
   planResult: PlanResult | null
 }) {
+  const [guideOpenId, setGuideOpenId] = useState<string | null>(null)
   const doneSet = useMemo(() => new Set(completedPlanTaskIds), [completedPlanTaskIds])
 
   const baselineRows = useMemo(
@@ -2223,6 +2726,14 @@ function AdaptivePlanBoard({
   const activeCombined = useMemo(() => [...otherActive, ...activeBaseline], [activeBaseline, otherActive])
   const doneCombined = useMemo(() => [...doneBaseline, ...doneAdaptive], [doneAdaptive, doneBaseline])
 
+  const openGuideRow = useMemo(() => {
+    if (!guideOpenId) return null
+    const pool: PlanBoardDisplayRow[] = [...urgent, ...activeCombined, ...waiting, ...changed, ...doneCombined]
+    return pool.find((r) => r.id === guideOpenId) ?? null
+  }, [activeCombined, changed, doneCombined, guideOpenId, urgent, waiting])
+
+  const openGuideDone = Boolean(openGuideRow && doneSet.has(openGuideRow.id))
+
   const showBoard = Boolean(planResult) || adaptivePlanTasks.length > 0
   if (!showBoard) return null
 
@@ -2234,33 +2745,58 @@ function AdaptivePlanBoard({
           from new information stay on this board until you start over.
         </p>
       )}
-      <PlanBoardSubsection onHoverRegret={onHoverRegret} onMarkDone={onMarkDone} rows={urgent} title="Urgent" />
+      <PlanBoardSubsection
+        onHoverRegret={onHoverRegret}
+        onMarkDone={onMarkDone}
+        onOpenGuide={setGuideOpenId}
+        rows={urgent}
+        title="Urgent"
+      />
       <PlanBoardSubsection
         emptyHint="Baseline steps from your plan; mark done as you go."
         onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
+        onOpenGuide={setGuideOpenId}
         rows={activeCombined}
         title="Active next steps"
       />
-      <PlanBoardSubsection onHoverRegret={onHoverRegret} onMarkDone={onMarkDone} rows={waiting} title="Waiting on care team" />
       <PlanBoardSubsection
         onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
+        onOpenGuide={setGuideOpenId}
+        rows={waiting}
+        title="Waiting on care team"
+      />
+      <PlanBoardSubsection
+        onHoverRegret={onHoverRegret}
+        onMarkDone={onMarkDone}
+        onOpenGuide={setGuideOpenId}
         rows={changed}
         title="Changed because of new information"
       />
-      <PlanBoardDoneSubsection onHoverRegret={onHoverRegret} rows={doneCombined} />
+      <PlanBoardDoneSubsection onHoverRegret={onHoverRegret} onOpenGuide={setGuideOpenId} rows={doneCombined} />
       <p className="mt-3 text-[12px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">
         {isBackupDemoMirror
           ? "Sample NCCN-aware checklist based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm timing and details with your care team."
           : "NCCN-aware question prep structured around common oncology guideline workflows, based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm with your doctor or care team."}
       </p>
+      {openGuideRow && (
+        <TaskActionGuideSheet
+          done={openGuideDone}
+          lovedOneLabel={lovedOneLabel}
+          onAppendTimeline={appendActionGuideDemoTimeline}
+          onClose={() => setGuideOpenId(null)}
+          onMarkDone={onMarkDone}
+          openRow={openGuideRow}
+        />
+      )}
     </div>
   )
 }
 
 function ResultsView({
   adaptivePlanTasks,
+  appendActionGuideDemoTimeline,
   appendAdaptivePlanTasks,
   appendDemoCaseUpdate,
   cancerType,
@@ -2285,6 +2821,7 @@ function ResultsView({
   planResult,
 }: {
   adaptivePlanTasks: StoredAdaptivePlanTask[]
+  appendActionGuideDemoTimeline: (entry: ActionGuideDemoTimelineEntry) => void
   appendAdaptivePlanTasks: (tasks: StoredAdaptivePlanTask[]) => void
   appendDemoCaseUpdate: (update: DemoCaseUpdate) => void
   cancerType: CancerType
@@ -2311,6 +2848,11 @@ function ResultsView({
   const [infoPanelOpen, setInfoPanelOpen] = useState(false)
   const [infoDraft, setInfoDraft] = useState("")
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null)
+
+  const lovedOneLabel = useMemo(
+    () => RELATIONSHIPS.find((item) => item.value === lovedOne)?.label ?? "Your person",
+    [lovedOne],
+  )
 
   const packet = useMemo(
     () => buildCaregiverResultPacket(mirrorResult, isBackupDemoMirror),
@@ -2587,8 +3129,10 @@ function ResultsView({
             </p>
             <AdaptivePlanBoard
               adaptivePlanTasks={adaptivePlanTasks}
+              appendActionGuideDemoTimeline={appendActionGuideDemoTimeline}
               completedPlanTaskIds={completedPlanTaskIds}
               isBackupDemoMirror={isBackupDemoMirror}
+              lovedOneLabel={lovedOneLabel}
               onHoverRegret={onHoverRegret}
               onMarkDone={markPlanTaskDone}
               planResult={planResult}
