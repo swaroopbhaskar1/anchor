@@ -1067,28 +1067,318 @@ export const HERO_DOCUMENT_PLAN_IDS = {
   confirm: "local:hero-doc-confirm",
   pending: "local:hero-doc-pending",
   bring: "local:hero-doc-bring",
+  imaging: "local:hero-doc-imaging-decisions",
 } as const
 
+export const DOCUMENT_GUIDE_PLAN_BADGE = "Added from document guide"
+
+export const DOCUMENT_AGENT_BOUNDARY_LINE =
+  "Anchor turns documents into questions. It does not diagnose, confirm stage, choose treatment, or interpret the report as medical advice."
+
+export const DOCUMENT_SAMPLE_DISCLAIMER = "Sample only · de-identified · not a real patient record."
+
+export const DOCUMENT_PASTE_DISCLAIMER = "Use de-identified text in this prototype."
+
+/** Sample “Document Agent” — what the record may help you organize (not medical facts). */
+export const DOCUMENT_AGENT_SAMPLE_CLARIFY_BULLETS: string[] = [
+  "Diagnosis wording",
+  "What is final vs pending",
+  "Whether addenda or tests are missing",
+  "Whether staging depends on pathology, imaging, or both",
+  "What records to bring or upload",
+]
+
+export const DOCUMENT_AGENT_SAMPLE_CANNOT_CONFIRM_BULLETS: string[] = [
+  "Stage",
+  "Treatment choice",
+  "Whether chemo is needed",
+  "Whether the report is complete",
+  "Medical meaning without the care team",
+]
+
+export const DOCUMENT_AGENT_SAMPLE_CARE_TEAM_QUESTIONS: string[] = [
+  "Can you walk us through this report in plain language?",
+  "What does this report confirm?",
+  "What does it not answer yet?",
+  "Are any addenda, biomarkers, MMR/MSI, or other tests pending?",
+  "Does staging depend on imaging, pathology, or both?",
+  "What should we bring or upload before the next visit?",
+]
+
+export const DOCUMENT_AGENT_SAMPLE_MISSING_CHECKLIST: string[] = [
+  "Full pathology report",
+  "Addenda",
+  "Imaging summaries",
+  "Visit note",
+  "Medication list",
+  "Portal instructions",
+  "Care-team contact",
+]
+
+export type DocumentPasteKind = "pathology" | "imaging" | "biomarker" | "insurance" | "front_desk" | "generic"
+
+export type DocumentReportChipId =
+  | "pathology"
+  | "imaging"
+  | "biomarker"
+  | "portal"
+  | "referral_auth"
+  | "insurance_letter"
+
+export interface DocumentReportChipDef {
+  id: DocumentReportChipId
+  label: string
+  questions: string[]
+}
+
+export const DOCUMENT_REPORT_CHIP_DEFS: DocumentReportChipDef[] = [
+  {
+    id: "pathology",
+    label: "Pathology report",
+    questions: [
+      "What does this report confirm?",
+      "What is still pending?",
+      "Are there addenda?",
+      "Does this affect staging, or do we need imaging too?",
+      "Who reviews this with us?",
+    ],
+  },
+  {
+    id: "imaging",
+    label: "Imaging summary",
+    questions: [
+      "Which scans are complete?",
+      "Which results are still pending?",
+      "Does the next visit depend on these results?",
+      "Do we need image files or only summaries?",
+    ],
+  },
+  {
+    id: "biomarker",
+    label: "Biomarker / MMR / MSI",
+    questions: [
+      "Was this testing ordered?",
+      "Is it pending or final?",
+      "Who reviews it with us?",
+      "Does it affect what the care team can explain next?",
+    ],
+  },
+  {
+    id: "portal",
+    label: "Portal message",
+    questions: [
+      "What action is being requested?",
+      "Is this informational or urgent?",
+      "Who should we reply to?",
+      "What should we bring or upload?",
+    ],
+  },
+  {
+    id: "referral_auth",
+    label: "Referral / authorization",
+    questions: [
+      "Is a referral required?",
+      "Who submits it?",
+      "What information is missing?",
+      "What is the reference number?",
+    ],
+  },
+  {
+    id: "insurance_letter",
+    label: "Insurance letter",
+    questions: [
+      "What exactly is being requested or denied?",
+      "What documents are needed?",
+      "Where should they be sent?",
+      "What is the deadline?",
+      "Who can confirm receipt?",
+    ],
+  },
+]
+
+export interface DocumentPasteOutput {
+  kind: DocumentPasteKind
+  about: string
+  ask: string[]
+  notAssume: string[]
+  nextTask: string
+}
+
+const RX_INSURANCE = /\b(denied|denial|precert|pre-?cert|prior\s*auth|authorization|coverage|insurer|insurance)\b/i
+const RX_BIOMARKER = /\b(mmr|msi|biomarker|cea|kras|braf|her2|pd-?l1)\b/i
+const RX_PATH = /\b(pathology|biopsy|specimen|margin|lymph\s*nodes?|lymph\s*node|tumor\s*board)\b/i
+const RX_IMAGING = /\b(ct\b|mri|pet\b|pet-?ct|scan|imaging|radiology|ultrasound)\b/i
+const RX_FRONT = /\b(appointment|scheduler|scheduling|referral|front\s*desk|check-?in)\b/i
+
+export function classifyDocumentPasteText(raw: string): DocumentPasteKind {
+  const t = raw.trim().toLowerCase()
+  if (!t) return "generic"
+  if (RX_INSURANCE.test(t)) return "insurance"
+  if (RX_BIOMARKER.test(t)) return "biomarker"
+  if (RX_PATH.test(t)) return "pathology"
+  if (RX_IMAGING.test(t)) return "imaging"
+  if (RX_FRONT.test(t)) return "front_desk"
+  return "generic"
+}
+
+export function buildDocumentPasteOutput(kind: DocumentPasteKind): DocumentPasteOutput {
+  const baseNot = [
+    "Anchor is not confirming stage, treatment, or completeness from this snippet.",
+    "Your care team interprets the record.",
+  ]
+  switch (kind) {
+    case "pathology":
+      return {
+        kind,
+        about: "This may be about a pathology or biopsy report — wording and completeness still belong to your pathologist and oncology team.",
+        ask: [
+          "Is this report considered final, including any addenda?",
+          "What does this wording confirm today, and what is still pending?",
+          "Are biomarker or MMR/MSI results still outstanding?",
+          "Does staging depend on pathology alone, or imaging too?",
+        ],
+        notAssume: [...baseNot, "Do not assume margins, nodes, or grade tell the whole plan without your team’s review."],
+        nextTask: "Bring or upload the full pathology packet (all pages) and ask which version is on file.",
+      }
+    case "imaging":
+      return {
+        kind,
+        about: "This may be about imaging or scan results — radiology interpretation belongs to your care team.",
+        ask: [
+          "Which scans are done vs still scheduled?",
+          "Which reports are final vs preliminary?",
+          "Does the next visit depend on these results?",
+        ],
+        notAssume: [...baseNot, "Do not assume stage or treatment from a partial imaging line without clinician review."],
+        nextTask: "Gather imaging summaries (or follow your team’s instructions for discs/links) and confirm what they want before the visit.",
+      }
+    case "biomarker":
+      return {
+        kind,
+        about: "This may be about biomarker, MMR/MSI, or related testing — what is ordered and what is back is a chart question.",
+        ask: [
+          "Was this testing ordered, and is it pending or final?",
+          "Who reviews the result with us, and when?",
+          "What decisions, if any, wait on this result?",
+        ],
+        notAssume: [...baseNot, "Do not assume a biomarker line implies a specific treatment path."],
+        nextTask: "Ask for the official result location (portal vs letter) and add a reminder to your visit question list.",
+      }
+    case "insurance":
+      return {
+        kind,
+        about: "This may be about insurance, authorization, coverage, or a denial letter — administrative, not a medical interpretation.",
+        ask: [
+          "What exactly is being requested or denied?",
+          "What documents are needed, where should they go, and what is the deadline?",
+          "Is a referral or authorization required before care can move forward?",
+          "What reference or case number should we write down?",
+        ],
+        notAssume: [...baseNot, "Do not assume the denial wording means the medical plan is final — confirm with your team."],
+        nextTask: "Start the insurer’s checklist and loop your clinic if any requested item is unclear.",
+      }
+    case "front_desk":
+      return {
+        kind,
+        about: "This may be about scheduling, referrals, or front-desk logistics — confirm names, times, and requirements with the clinic.",
+        ask: [
+          "What appointment or referral action is needed next?",
+          "What records should we bring or upload before check-in?",
+          "Who should we contact if instructions change?",
+        ],
+        notAssume: [...baseNot, "Do not assume a scheduler message replaces medical instructions from your clinician."],
+        nextTask: "Save portal or call details in one place and confirm the time and location before you travel.",
+      }
+    default:
+      return {
+        kind: "generic",
+        about: "This snippet may mix topics — use it as a reminder to ask what is confirmed vs still pending.",
+        ask: [
+          "What is confirmed right now from your perspective?",
+          "What is still pending or awaiting another report?",
+          "What should we bring or upload before the next touchpoint?",
+        ],
+        notAssume: [...baseNot, "Do not assume a single phrase captures the full plan."],
+        nextTask: "Add one plain-language question to your visit list and verify it with your care team.",
+      }
+  }
+}
+
+export function buildDocumentPasteClipboardBlock(out: DocumentPasteOutput): string {
+  return [
+    "ANCHOR — DOCUMENT AGENT (PASTED TEXT · LOCAL DEMO)",
+    DOCUMENT_PASTE_DISCLAIMER,
+    DOCUMENT_AGENT_BOUNDARY_LINE,
+    "",
+    "WHAT THIS MAY BE ABOUT",
+    out.about,
+    "",
+    "WHAT TO ASK",
+    ...out.ask.map((l) => `• ${l}`),
+    "",
+    "WHAT NOT TO ASSUME",
+    ...out.notAssume.map((l) => `• ${l}`),
+    "",
+    "SUGGESTED NEXT TASK",
+    out.nextTask,
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+export function buildDocumentChipClipboardBlock(chip: DocumentReportChipDef): string {
+  return [
+    "ANCHOR — REPORT-TYPE QUESTIONS (LOCAL DEMO)",
+    DOCUMENT_AGENT_BOUNDARY_LINE,
+    "",
+    chip.label.toUpperCase(),
+    ...chip.questions.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+export function buildDocumentAgentMissingChecklistBlock(): string {
+  return [
+    "ANCHOR — MISSING PIECES CHECKLIST (LOCAL DEMO)",
+    DOCUMENT_SAMPLE_DISCLAIMER,
+    DOCUMENT_AGENT_BOUNDARY_LINE,
+    "",
+    "MISSING PIECES TO ASK ABOUT / GATHER",
+    ...DOCUMENT_AGENT_SAMPLE_MISSING_CHECKLIST.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
 export function buildHeroDocumentGuidePlanTasks(): StoredAdaptivePlanTask[] {
+  const badge = DOCUMENT_GUIDE_PLAN_BADGE
   return [
     {
       id: HERO_DOCUMENT_PLAN_IDS.confirm,
-      title: "Ask what this document confirms",
-      detail: "From document guide — care team interprets; not a diagnosis from Anchor.",
+      title: "Ask what this document confirms.",
+      detail: `${badge} — care team interprets; not a diagnosis from Anchor.`,
       initialStatus: "active",
       fromUpdate: false,
     },
     {
       id: HERO_DOCUMENT_PLAN_IDS.pending,
-      title: "Ask what is still pending",
-      detail: "Addenda, tests, or staging inputs may still be in progress — confirm with clinicians.",
+      title: "Ask what is still pending.",
+      detail: `${badge} — addenda, tests, or staging inputs may still be in progress.`,
       initialStatus: "active",
       fromUpdate: false,
     },
     {
       id: HERO_DOCUMENT_PLAN_IDS.bring,
-      title: "Bring full report and addenda",
-      detail: "Ask which version is considered final — Anchor does not verify documents.",
+      title: "Bring the full report/addenda.",
+      detail: `${badge} — ask which version is considered final; Anchor does not verify documents.`,
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+    {
+      id: HERO_DOCUMENT_PLAN_IDS.imaging,
+      title: "Ask whether imaging or other results are needed before decisions.",
+      detail: `${badge} — staging and next steps belong to your clinicians.`,
       initialStatus: "active",
       fromUpdate: false,
     },
@@ -1159,17 +1449,22 @@ export const DOCUMENT_GUIDE_WHAT_TO_BRING: string[] = [
 
 export function buildDocumentGuideClipboardBlock(): string {
   return [
-    "ANCHOR — DOCUMENT QUESTIONS (LOCAL DEMO)",
-    "Preparation only. Not a diagnosis from documents. Your care team interprets every report. Nothing sent automatically.",
+    "ANCHOR — DOCUMENT AGENT OUTPUT (SAMPLE · LOCAL DEMO)",
+    DOCUMENT_SAMPLE_DISCLAIMER,
+    DOCUMENT_AGENT_BOUNDARY_LINE,
+    "Nothing sent automatically.",
     "",
-    "WHAT THIS DOCUMENT MIGHT CLARIFY",
-    ...DOCUMENT_GUIDE_CLARIFY_BULLETS.map((l) => `• ${l}`),
+    "A · WHAT THIS DOCUMENT MAY HELP CLARIFY",
+    ...DOCUMENT_AGENT_SAMPLE_CLARIFY_BULLETS.map((l) => `• ${l}`),
     "",
-    "SAMPLE PATHOLOGY-STYLE QUESTIONS (FOR YOUR CARE TEAM)",
-    ...HERO_DOCUMENT_PATHOLOGY_QUESTIONS.map((l) => `• ${l}`),
+    "B · WHAT ANCHOR CANNOT CONFIRM",
+    ...DOCUMENT_AGENT_SAMPLE_CANNOT_CONFIRM_BULLETS.map((l) => `• ${l}`),
     "",
-    "WHAT TO BRING",
-    ...DOCUMENT_GUIDE_WHAT_TO_BRING.map((l) => `• ${l}`),
+    "C · WHAT TO ASK THE CARE TEAM",
+    ...DOCUMENT_AGENT_SAMPLE_CARE_TEAM_QUESTIONS.map((l) => `• ${l}`),
+    "",
+    "D · MISSING PIECES CHECKLIST",
+    ...DOCUMENT_AGENT_SAMPLE_MISSING_CHECKLIST.map((l) => `• ${l}`),
     "",
     "— Copied from Anchor prototype. Nothing was sent by Anchor.",
   ].join("\n")

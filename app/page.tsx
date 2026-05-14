@@ -27,7 +27,20 @@ import {
   ASK_ANCHOR_SUBTITLE,
   buildAdaptiveTasksFromChip,
   buildAdaptiveTasksFromCustomPlanNote,
+  buildDocumentAgentMissingChecklistBlock,
+  buildDocumentChipClipboardBlock,
   buildDocumentGuideClipboardBlock,
+  buildDocumentPasteClipboardBlock,
+  buildDocumentPasteOutput,
+  classifyDocumentPasteText,
+  DOCUMENT_AGENT_BOUNDARY_LINE,
+  DOCUMENT_AGENT_SAMPLE_CANNOT_CONFIRM_BULLETS,
+  DOCUMENT_AGENT_SAMPLE_CARE_TEAM_QUESTIONS,
+  DOCUMENT_AGENT_SAMPLE_CLARIFY_BULLETS,
+  DOCUMENT_AGENT_SAMPLE_MISSING_CHECKLIST,
+  DOCUMENT_PASTE_DISCLAIMER,
+  DOCUMENT_REPORT_CHIP_DEFS,
+  DOCUMENT_SAMPLE_DISCLAIMER,
   buildFamilySupportAdaptiveTask,
   buildFrontDeskBriefClipboardBlock,
   buildFrontDeskBriefFollowupTask,
@@ -54,10 +67,8 @@ import {
   COCKPIT_WHY_NOT_CHATBOT_TITLE,
   createDefaultFamilyCoordBoard,
   DEMO_INFO_UPDATE_CHIPS,
-  DOCUMENT_GUIDE_CLARIFY_BULLETS,
   DOCUMENT_GUIDE_PANEL_SUBTITLE,
   DOCUMENT_GUIDE_PANEL_TITLE,
-  DOCUMENT_GUIDE_WHAT_TO_BRING,
   FOLLOW_UP_CHIP_DEFS,
   FRONT_DESK_BRIEF_FIELD_LIST,
   FRONT_DESK_BRIEF_PREVIEW_INTRO,
@@ -86,8 +97,6 @@ import {
   HUMAN_OUTREACH_STEPS,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
-  HERO_DOCUMENT_PATHOLOGY_QUESTIONS,
-  HERO_DOCUMENT_PLAN_IDS,
   HERO_INSURANCE_PLAN_IDS,
   HERO_VISIT_PLAN_IDS,
   INSURANCE_ISSUE_CALL_SCRIPT,
@@ -160,6 +169,8 @@ import {
   type AdaptivePlanTaskInitialStatus,
   type FamilyCoordBoardRow,
   type FamilySupportRoleCardDef,
+  type DocumentPasteOutput,
+  type DocumentReportChipId,
   type FollowUpChipId,
   type LastHeroFlowUsed,
   type NightNoteContent,
@@ -189,6 +200,9 @@ type ResultCopyKind =
   | "familyClip"
   | "visitPrep"
   | "documentGuideCopy"
+  | "documentChecklistCopy"
+  | "documentPasteBlockCopy"
+  | "documentChipBlockCopy"
   | "insuranceIssueCopy"
   | "futureMapperQuestions"
   | "futureFrontDeskBrief"
@@ -4624,6 +4638,22 @@ function ResultsView({
   const [phoneModeScript, setPhoneModeScript] = useState<PhoneModeScript | null>(null)
   const [askShowAll, setAskShowAll] = useState(false)
   const [visitPrepInlineNote, setVisitPrepInlineNote] = useState<string | null>(null)
+  type DocAgentHome = "pick" | "sample" | "paste" | "chips"
+  const [docAgentHome, setDocAgentHome] = useState<DocAgentHome>("pick")
+  const [docSampleAnalyzed, setDocSampleAnalyzed] = useState(false)
+  const [docPasteField, setDocPasteField] = useState("")
+  const [docPasteOutput, setDocPasteOutput] = useState<DocumentPasteOutput | null>(null)
+  const [docChipId, setDocChipId] = useState<DocumentReportChipId | null>(null)
+
+  useEffect(() => {
+    if (todayHeroModal !== "document") {
+      setDocAgentHome("pick")
+      setDocSampleAnalyzed(false)
+      setDocPasteField("")
+      setDocPasteOutput(null)
+      setDocChipId(null)
+    }
+  }, [todayHeroModal])
 
   useEffect(() => {
     if (intakeUpdatesSignal > 0) setInfoPanelOpen(true)
@@ -4671,9 +4701,71 @@ function ResultsView({
   function handleAddHeroDocumentPlanBundle() {
     appendDedupedPlanTasks(
       buildHeroDocumentGuidePlanTasks(),
-      "Added document guide reminders to your 72-hour plan (Tools).",
-      "Document guide reminders are already on your plan.",
+      "Added document tasks to your 72-hour plan (Tools).",
+      "Those document tasks are already on your plan.",
     )
+  }
+
+  function appendDocumentAgentTimeline(taskTitle: string) {
+    const id =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `tl-${Date.now()}`
+    appendActionGuideDemoTimeline({
+      id,
+      taskId: "hero-document",
+      taskTitle,
+      badge: "Document agent",
+      savedAt: new Date().toISOString(),
+    })
+  }
+
+  function handleSaveDocumentHeroCase() {
+    appendDocumentAgentTimeline("Saved document guide notes to demo case")
+    setVisitPrepInlineNote("Saved locally to this demo case.")
+    window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
+  }
+
+  function handleDocumentAnalyzeSample() {
+    setDocSampleAnalyzed(true)
+    appendDocumentAgentTimeline("Document agent: analyzed sample pathology-style record")
+  }
+
+  function handleDocumentPasteSubmit() {
+    const trimmed = docPasteField.trim()
+    if (!trimmed) {
+      setVisitPrepInlineNote("Paste a short excerpt first.")
+      window.setTimeout(() => setVisitPrepInlineNote(null), 2400)
+      return
+    }
+    const kind = classifyDocumentPasteText(trimmed)
+    setDocPasteOutput(buildDocumentPasteOutput(kind))
+    appendDocumentAgentTimeline("Document agent: turned pasted text into question prompts")
+  }
+
+  function handleDocumentAddPasteAsNewInfo() {
+    const trimmed = docPasteField.trim()
+    if (!trimmed) return
+    const stamp =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `upd-${Date.now()}`
+    appendDemoCaseUpdate({
+      id: stamp,
+      sourceLabel: "Document agent (pasted text)",
+      ...getDemoCaseDeltaFromCustomNote(`[Document note] ${trimmed.slice(0, 320)}`),
+    })
+    appendDocumentAgentTimeline("Document agent: added pasted excerpt as new information note")
+    setVisitPrepInlineNote("Saved locally to this demo case.")
+    window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
+  }
+
+  function handleDocumentAgentBackToModes() {
+    setDocAgentHome("pick")
+    setDocSampleAnalyzed(false)
+    setDocPasteField("")
+    setDocPasteOutput(null)
+    setDocChipId(null)
   }
 
   function handleAddInsuranceFollowUpTask() {
@@ -4719,6 +4811,13 @@ function ResultsView({
 
   function openHeroModal(flow: LastHeroFlowUsed) {
     onHeroFlowUsed(flow)
+    if (flow === "document") {
+      setDocAgentHome("pick")
+      setDocSampleAnalyzed(false)
+      setDocPasteField("")
+      setDocPasteOutput(null)
+      setDocChipId(null)
+    }
     setTodayHeroModal(flow)
   }
 
@@ -4822,6 +4921,11 @@ function ResultsView({
   const packet = useMemo(
     () => buildCaregiverResultPacket(mirrorResult, isBackupDemoMirror),
     [mirrorResult, isBackupDemoMirror],
+  )
+
+  const selectedDocReportChip = useMemo(
+    () => (docChipId ? DOCUMENT_REPORT_CHIP_DEFS.find((c) => c.id === docChipId) ?? null : null),
+    [docChipId],
   )
 
   const openGuideRow = useMemo(
@@ -5272,7 +5376,8 @@ function ResultsView({
                   <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 sm:rounded-[20px] sm:p-4`}>
                     <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-sm">Understand a document</p>
                     <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                      Use a sample pathology-style record to learn what to ask, what is missing, and what the care team must confirm.
+                      Paste or use a sample. Anchor turns it into what to ask, what not to assume, what may be missing, and what to
+                      bring — not a readout of your chart.
                     </p>
                     <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
                       {["Pathology questions", "What is pending", "What to bring", "Not a diagnosis"].map((c) => (
@@ -5289,7 +5394,7 @@ function ResultsView({
                       onClick={() => openHeroModal("document")}
                       className="mt-3 w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px] sm:text-sm"
                     >
-                      Open document guide
+                      Open Document Agent
                     </button>
                   </div>
 
@@ -5682,105 +5787,412 @@ function ResultsView({
 
                   {todayHeroModal === "document" && (
                     <>
-                      <p className="mt-3 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
-                        Not a diagnosis from documents. Your care team interprets every report. Local demo memory only — nothing
-                        sent automatically.
+                      <p className="mt-3 m-0 rounded-[12px] border border-[#e5ddd4] bg-white/70 p-2 text-[10px] font-medium leading-snug text-[#3f3a35] sm:text-[11px]">
+                        {DOCUMENT_AGENT_BOUNDARY_LINE} Local demo memory only — nothing sent automatically.
                       </p>
-                      <div className="mt-4 grid gap-3">
-                        <div>
-                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">1 · What this document might clarify</p>
-                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                            {DOCUMENT_GUIDE_CLARIFY_BULLETS.map((line) => (
-                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                                {line}
-                              </li>
-                            ))}
-                          </ul>
+
+                      {docAgentHome !== "pick" && (
+                        <button
+                          type="button"
+                          onClick={handleDocumentAgentBackToModes}
+                          className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#d8cec5] bg-white/80 px-3 py-1.5 text-[11px] font-medium text-[#5f5a55] transition hover:bg-white sm:text-xs"
+                        >
+                          <ArrowLeft className="h-3.5 w-3.5 shrink-0 text-[#9b829c]" aria-hidden />
+                          Back to modes
+                        </button>
+                      )}
+
+                      {docAgentHome === "pick" && (
+                        <div className="mt-4 grid min-w-0 gap-2 sm:gap-3">
+                          <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">
+                            Pick one path. Anchor stays in the questions lane — no upload, no outbound send.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setDocAgentHome("sample")}
+                            className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 text-left transition hover:border-[#b98da0]/45 hover:bg-white/90 sm:rounded-[18px] sm:p-4`}
+                          >
+                            <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">1 · Use sample document</p>
+                            <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                              Use sample pathology-style record
+                            </p>
+                            <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">
+                              This de-identified sample shows how Anchor organizes a record into questions. Anchor does not diagnose
+                              from it.
+                            </p>
+                            <span className="mt-3 inline-block rounded-full border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-1.5 text-[11px] font-semibold text-[#4a3548]">
+                              Open sample path
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDocAgentHome("paste")}
+                            className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 text-left transition hover:border-[#b98da0]/45 hover:bg-white/90 sm:rounded-[18px] sm:p-4`}
+                          >
+                            <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">2 · Paste document text</p>
+                            <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                              Turn a short excerpt into prompts for your care team — pattern-based, on this device only.
+                            </p>
+                            <span className="mt-3 inline-block rounded-full border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-1.5 text-[11px] font-semibold text-[#4a3548]">
+                              Open paste path
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDocAgentHome("chips")}
+                            className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 text-left transition hover:border-[#b98da0]/45 hover:bg-white/90 sm:rounded-[18px] sm:p-4`}
+                          >
+                            <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">3 · What to ask about a report</p>
+                            <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                              Quick chips for common report types — copy or take to Phone Mode.
+                            </p>
+                            <span className="mt-3 inline-block rounded-full border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-1.5 text-[11px] font-semibold text-[#4a3548]">
+                              Open report chips
+                            </span>
+                          </button>
                         </div>
-                        <div>
-                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">2 · Sample pathology record (demo)</p>
-                          <dl className="mt-2 m-0 grid gap-2 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
-                            {SAMPLE_PATHOLOGY_RECORD_LINES.map((row) => (
-                              <div key={row.label} className="min-w-0 rounded-[12px] border border-[#ece4dc] bg-white/60 p-2 sm:p-2.5">
-                                <dt className="font-semibold text-[#5f5a55]">{row.label}</dt>
-                                <dd className="m-0 mt-0.5 break-words">{row.value}</dd>
+                      )}
+
+                      {docAgentHome === "sample" && (
+                        <div className="mt-4 min-w-0 space-y-3">
+                          <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 sm:p-4`}>
+                            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                              Sample pathology-style record
+                            </p>
+                            <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{DOCUMENT_SAMPLE_DISCLAIMER}</p>
+                            <dl className="mt-2 m-0 grid max-w-full gap-2 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                              {SAMPLE_PATHOLOGY_RECORD_LINES.map((row) => (
+                                <div key={row.label} className="min-w-0 rounded-[12px] border border-[#ece4dc] bg-white/60 p-2 sm:p-2.5">
+                                  <dt className="font-semibold text-[#5f5a55]">{row.label}</dt>
+                                  <dd className="m-0 mt-0.5 break-words">{row.value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                            {!docSampleAnalyzed && (
+                              <button
+                                type="button"
+                                onClick={handleDocumentAnalyzeSample}
+                                className="mt-3 w-full rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
+                              >
+                                Analyze sample
+                              </button>
+                            )}
+                          </div>
+
+                          {docSampleAnalyzed && (
+                            <>
+                              <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                                Document Agent Output
+                              </p>
+                              <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">{DOCUMENT_SAMPLE_DISCLAIMER}</p>
+                              <div className="grid min-w-0 gap-2">
+                                <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/80 p-2.5 sm:p-3">
+                                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                                    A · What this document may help clarify
+                                  </p>
+                                  <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                    {DOCUMENT_AGENT_SAMPLE_CLARIFY_BULLETS.map((line) => (
+                                      <li
+                                        key={line}
+                                        className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                      >
+                                        {line}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/80 p-2.5 sm:p-3">
+                                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                                    B · What Anchor cannot confirm
+                                  </p>
+                                  <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                    {DOCUMENT_AGENT_SAMPLE_CANNOT_CONFIRM_BULLETS.map((line) => (
+                                      <li
+                                        key={line}
+                                        className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                      >
+                                        {line}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/80 p-2.5 sm:p-3">
+                                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                                    C · What to ask the care team
+                                  </p>
+                                  <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                    {DOCUMENT_AGENT_SAMPLE_CARE_TEAM_QUESTIONS.map((line) => (
+                                      <li
+                                        key={line}
+                                        className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                      >
+                                        {line}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div className="min-w-0 rounded-[14px] border border-[#ece4dc] bg-white/80 p-2.5 sm:p-3">
+                                  <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                                    D · Missing pieces checklist
+                                  </p>
+                                  <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                    {DOCUMENT_AGENT_SAMPLE_MISSING_CHECKLIST.map((line) => (
+                                      <li
+                                        key={line}
+                                        className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                      >
+                                        {line}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
                               </div>
-                            ))}
-                          </dl>
+                              <button
+                                type="button"
+                                onClick={() => openPhoneMode(PHONE_SCRIPT_DOCUMENT)}
+                                className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-3 text-[13px] font-semibold leading-snug text-[#fdf6f0] shadow-sm sm:py-3.5"
+                              >
+                                Open Phone Mode
+                              </button>
+                              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void onCopy("documentGuideCopy", buildDocumentGuideClipboardBlock(), "Copied document questions", {
+                                      taskTitle: "Copied document questions",
+                                      badge: "Document agent",
+                                      taskId: "hero-document",
+                                    })
+                                  }
+                                  className={`${GLASS_BUTTON} flex w-full min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
+                                >
+                                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                                  Copy document questions
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void onCopy(
+                                      "documentChecklistCopy",
+                                      buildDocumentAgentMissingChecklistBlock(),
+                                      "Copied missing-records checklist",
+                                      {
+                                        taskTitle: "Copied missing-records checklist",
+                                        badge: "Document agent",
+                                        taskId: "hero-document",
+                                      },
+                                    )
+                                  }
+                                  className={`${GLASS_BUTTON} w-full min-w-0 rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
+                                >
+                                  Copy missing-records checklist
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleAddHeroDocumentPlanBundle}
+                                className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px] sm:text-sm"
+                              >
+                                Add document tasks to Plan
+                              </button>
+                              <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                                <button
+                                  type="button"
+                                  onClick={handleSaveDocumentHeroCase}
+                                  className={`${GLASS_BUTTON} w-full min-w-0 rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
+                                >
+                                  Save to case
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTodayHeroModal(null)
+                                    onOpenToolPanel("records")
+                                  }}
+                                  className={`${GLASS_BUTTON} w-full min-w-0 rounded-[14px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
+                                >
+                                  Open Records tool
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
-                        <div>
-                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">3 · Sample pathology questions</p>
-                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                            {HERO_DOCUMENT_PATHOLOGY_QUESTIONS.map((line) => (
-                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                                {line}
-                              </li>
-                            ))}
-                          </ul>
+                      )}
+
+                      {docAgentHome === "paste" && (
+                        <div className="mt-4 min-w-0 space-y-3">
+                          <p className="m-0 text-[11px] font-medium leading-snug text-[#5f5a55] sm:text-xs">{DOCUMENT_PASTE_DISCLAIMER}</p>
+                          <label className="m-0 block min-w-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                            Paste excerpt
+                            <textarea
+                              value={docPasteField}
+                              onChange={(e) => setDocPasteField(e.target.value)}
+                              rows={4}
+                              placeholder="Paste a report excerpt, portal message, denial letter, or record note. Use de-identified text for this demo."
+                              className="mt-1.5 w-full min-w-0 max-w-full resize-y rounded-[14px] border border-[#d8cec5] bg-white/90 p-2.5 text-[12px] leading-snug text-[#2a2420] placeholder:text-[#9a928a] sm:text-sm"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleDocumentPasteSubmit}
+                            className="w-full rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
+                          >
+                            Turn into questions
+                          </button>
+                          {docPasteOutput && (
+                            <div className="min-w-0 space-y-3 rounded-[16px] border border-[#e8dfd8]/90 bg-[#faf7f4]/80 p-3 sm:p-4">
+                              <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">
+                                Document Agent Output
+                              </p>
+                              <div className="min-w-0 rounded-[12px] border border-[#ece4dc] bg-white/80 p-2.5">
+                                <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">What this may be about</p>
+                                <p className="mt-1 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{docPasteOutput.about}</p>
+                              </div>
+                              <div className="min-w-0 rounded-[12px] border border-[#ece4dc] bg-white/80 p-2.5">
+                                <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">What to ask</p>
+                                <ul className="mt-1 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                  {docPasteOutput.ask.map((line) => (
+                                    <li
+                                      key={line}
+                                      className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                    >
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="min-w-0 rounded-[12px] border border-[#ece4dc] bg-white/80 p-2.5">
+                                <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">What not to assume</p>
+                                <ul className="mt-1 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                  {docPasteOutput.notAssume.map((line) => (
+                                    <li
+                                      key={line}
+                                      className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                    >
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="min-w-0 rounded-[12px] border border-[#ece4dc] bg-white/80 p-2.5">
+                                <p className="m-0 text-[10px] font-semibold text-[#8f7e9b] sm:text-[11px]">Suggested next task</p>
+                                <p className="mt-1 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{docPasteOutput.nextTask}</p>
+                              </div>
+                              <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{DOCUMENT_AGENT_BOUNDARY_LINE}</p>
+                              <button
+                                type="button"
+                                onClick={() => openPhoneMode(PHONE_SCRIPT_DOCUMENT)}
+                                className="w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold leading-snug text-[#fdf6f0] sm:py-3"
+                              >
+                                Open Phone Mode
+                              </button>
+                              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void onCopy(
+                                      "documentPasteBlockCopy",
+                                      buildDocumentPasteClipboardBlock(docPasteOutput),
+                                      "Copied pasted-text question prompts",
+                                      {
+                                        taskTitle: "Copied pasted-text question prompts",
+                                        badge: "Document agent",
+                                        taskId: "hero-document",
+                                      },
+                                    )
+                                  }
+                                  className={`${GLASS_BUTTON} flex w-full min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                                >
+                                  <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                                  Copy report-summary questions
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleDocumentAddPasteAsNewInfo}
+                                  className="w-full min-w-0 rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1"
+                                >
+                                  Add this as new information
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">4 · What to bring</p>
-                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                            {DOCUMENT_GUIDE_WHAT_TO_BRING.map((line) => (
-                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                                {line}
-                              </li>
-                            ))}
-                          </ul>
+                      )}
+
+                      {docAgentHome === "chips" && (
+                        <div className="mt-4 min-w-0 space-y-3">
+                          {!docChipId ? (
+                            <>
+                              <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">
+                                Tap a report type. Questions are for your care team — not a self-diagnosis.
+                              </p>
+                              <div className="flex min-w-0 flex-wrap gap-2">
+                                {DOCUMENT_REPORT_CHIP_DEFS.map((chip) => (
+                                  <button
+                                    key={chip.id}
+                                    type="button"
+                                    onClick={() => setDocChipId(chip.id)}
+                                    className="max-w-full shrink rounded-full border border-[#e5ddd4] bg-white/90 px-3 py-1.5 text-left text-[11px] font-medium leading-snug text-[#3f3a35] transition hover:border-[#b98da0]/60 sm:text-xs"
+                                  >
+                                    {chip.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          ) : selectedDocReportChip ? (
+                                <div className="min-w-0 space-y-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setDocChipId(null)}
+                                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#d8cec5] bg-white/80 px-3 py-1.5 text-[11px] font-medium text-[#5f5a55] sm:text-xs"
+                                  >
+                                    <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                    All report types
+                                  </button>
+                                  <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{selectedDocReportChip.label}</p>
+                                  <ul className="m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                                    {selectedDocReportChip.questions.map((q) => (
+                                      <li
+                                        key={q}
+                                        className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90"
+                                      >
+                                        {q}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                  <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{DOCUMENT_AGENT_BOUNDARY_LINE}</p>
+                                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void onCopy(
+                                          "documentChipBlockCopy",
+                                          buildDocumentChipClipboardBlock(selectedDocReportChip),
+                                          `Copied ${selectedDocReportChip.label} questions`,
+                                          {
+                                            taskTitle: `Copied ${selectedDocReportChip.label} questions`,
+                                            badge: "Document agent",
+                                            taskId: "hero-document",
+                                          },
+                                        )
+                                      }
+                                      className={`${GLASS_BUTTON} flex w-full min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[12px] font-medium sm:flex-1`}
+                                    >
+                                      <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" aria-hidden />
+                                      Copy report-summary questions
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openPhoneMode(PHONE_SCRIPT_DOCUMENT)}
+                                      className="w-full min-w-0 rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-2.5 text-[12px] font-semibold leading-snug text-[#fdf6f0] sm:flex-1"
+                                    >
+                                      Open Phone Mode
+                                    </button>
+                                  </div>
+                                </div>
+                          ) : null}
                         </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => openPhoneMode(PHONE_SCRIPT_DOCUMENT)}
-                        className="mt-3 w-full rounded-[14px] border-2 border-[#2a2420] bg-[#2a2420] px-3 py-3 text-[13px] font-semibold leading-snug text-[#fdf6f0] shadow-sm sm:py-3.5"
-                      >
-                        Phone Mode — read line by line
-                      </button>
-                      <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void onCopy("documentGuideCopy", buildDocumentGuideClipboardBlock(), "Copied document questions", {
-                              taskTitle: "Copied document questions",
-                              badge: "Hero flow",
-                              taskId: "hero-document",
-                            })
-                          }
-                          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
-                        >
-                          <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
-                          Copy document questions
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const def = RECORDS_MISSING_CHECKLIST_DEFS.find((d) => d.id === "path-final-copy")
-                            if (def) handleAddRecordsChecklistItem(def)
-                          }}
-                          className="w-full rounded-[16px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:rounded-[18px] sm:text-sm"
-                        >
-                          Add missing-records task to plan
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTodayHeroModal(null)
-                            onOpenToolPanel("records")
-                          }}
-                          className={`${GLASS_BUTTON} w-full rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
-                        >
-                          Open Records tool
-                        </button>
-                      </div>
-                      <div className="mt-3">
-                        <button
-                          type="button"
-                          onClick={handleAddHeroDocumentPlanBundle}
-                          className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2 text-[11px] font-medium text-[#3f3a36] sm:text-xs`}
-                        >
-                          Add document-guide reminders to plan (optional)
-                        </button>
-                      </div>
+                      )}
                     </>
                   )}
 
@@ -5871,6 +6283,9 @@ function ResultsView({
 
                   {(copied === "visitPrep" ||
                     copied === "documentGuideCopy" ||
+                    copied === "documentChecklistCopy" ||
+                    copied === "documentPasteBlockCopy" ||
+                    copied === "documentChipBlockCopy" ||
                     copied === "insuranceIssueCopy" ||
                     copied === "phoneModeLine" ||
                     copied === "phoneModeFull") && (
