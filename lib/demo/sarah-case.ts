@@ -199,3 +199,100 @@ export const SARAH_FALLBACK_PLAN_RESULT: SarahPlanResultShape = {
     },
   ],
 }
+
+/** Quick-add chips for the local “I have new information” demo panel (no API). */
+export const DEMO_INFO_UPDATE_CHIPS = [
+  { id: "appt-moved", label: "Appointment moved to tomorrow at 9" },
+  { id: "mmr-pending", label: "MMR/MSI pending" },
+  { id: "imaging-incomplete", label: "Imaging not complete yet" },
+  { id: "path-final", label: "Pathology report is final" },
+  { id: "chemo-mentioned", label: "Care team mentioned possible chemo" },
+  { id: "sibling-arrival", label: "Sibling is flying in tomorrow" },
+  { id: "severe-symptoms", label: "Patient has new severe symptoms" },
+  { id: "insurance-records", label: "Insurance asked for records" },
+] as const
+
+export type DemoInfoChipId = (typeof DEMO_INFO_UPDATE_CHIPS)[number]["id"]
+
+export interface DemoCaseDeltaCopy {
+  newInformation: string
+  mayAffect: string
+  needsConfirmation: string
+  askNext: string
+  revisedStep: string
+}
+
+const DEMO_CHIP_NARRATIVES: Record<string, DemoCaseDeltaCopy> = {
+  "appt-moved": {
+    newInformation: "The next visit or appointment timing may have shifted — confirm the exact date and time with your care team.",
+    mayAffect: "Which records to bring and whether tests can finish before that visit.",
+    needsConfirmation: "The official schedule in the portal or scheduler, any prep instructions, and whether the visit should move if results are not back yet.",
+    askNext: "What is the confirmed appointment time, location, and check-in process?",
+    revisedStep: "Save the updated time in one place and refresh your top three NCCN-aware questions for that visit.",
+  },
+  "mmr-pending": {
+    newInformation: "MMR/MSI testing may still be pending — Anchor does not see your chart; confirm with your care team.",
+    mayAffect: "The care team may need this result before explaining some options — wording and timing belong to your clinicians.",
+    needsConfirmation: "Whether the test was ordered, when results are expected, and who will review them with you.",
+    askNext: "Has MMR/MSI testing been ordered, and will the result change what we discuss next?",
+    revisedStep: "Add this question to tomorrow’s list — still NCCN-aware prep; your care team decides what applies.",
+  },
+  "imaging-incomplete": {
+    newInformation: "Imaging may still be incomplete — confirm what is scheduled and what is back.",
+    mayAffect: "Stage and next-step discussions may stay limited until imaging is finished — interpretation belongs to your care team.",
+    needsConfirmation: "Which scans are needed, when they are scheduled, and whether the appointment should still happen before results return.",
+    askNext: "Which imaging results are still needed before the care team can explain the full plan?",
+    revisedStep: "Bring current records and ask what is pending — not set in stone; update again when imaging lands.",
+  },
+  "path-final": {
+    newInformation: "You heard the pathology report may be final — confirm completeness with your care team rather than assuming every addendum is in.",
+    mayAffect: "How specific the team can be about staging and next discussion topics at the next touchpoint.",
+    needsConfirmation: "Whether all pathology components and any addendum reports are done and reviewed.",
+    askNext: "Is the pathology report complete, and does the team agree on what it means for next steps?",
+    revisedStep: "Bring portal or printed copies of the final report to the visit and keep questions in plain language.",
+  },
+  "chemo-mentioned": {
+    newInformation: "Chemotherapy was mentioned as a possible topic — not a confirmed plan from Anchor and not a treatment recommendation.",
+    mayAffect: "It may help to ask what information your care team still needs before any treatment path is discussed.",
+    needsConfirmation: "Whether chemo is on the table, why it was raised, and what alternatives or timing questions your oncologist wants you to understand.",
+    askNext: "What information are you using to decide whether chemo is needed, and what is still pending?",
+    revisedStep: "Write this as a neutral question for the oncologist — NCCN-aware prep; the care team chooses the path.",
+  },
+  "sibling-arrival": {
+    newInformation: "Another family member may join soon — that can help with notes and questions.",
+    mayAffect: "Who speaks for the patient and how updates are shared with the rest of the family.",
+    needsConfirmation: "Visitor policies and who can attend in person or on the call.",
+    askNext: "How can we add a family member to the portal or appointment communications?",
+    revisedStep: "Decide who takes notes and who asks the top three questions — still based on what Anchor knows right now; confirm details with the team.",
+  },
+  "severe-symptoms": {
+    newInformation: "There may be a new urgent symptom — this may need immediate medical guidance, not routine 72-hour planning.",
+    mayAffect: "Whether to use the clinic after-hours line, on-call instructions, or emergency services instead of waiting on Anchor.",
+    needsConfirmation: "Severity, timing, and whether the care team or emergency services should be contacted now.",
+    askNext: "Given this symptom, should we call the clinic after-hours line or seek urgent or emergency care?",
+    revisedStep: "If symptoms are severe or rapidly worsening, contact the care team’s urgent line or emergency services — Anchor does not triage.",
+  },
+  "insurance-records": {
+    newInformation: "Your insurer may be asking for records — this is administrative and not a treatment decision from Anchor.",
+    mayAffect: "Timing of authorizations or referrals your care team may need to support.",
+    needsConfirmation: "Which documents the insurer listed, the deadline to submit them, and whether your clinic has a preferred process.",
+    askNext: "Which records should we upload, and can your office help with the insurer’s checklist?",
+    revisedStep: "Gather the requested documents, keep a copy of what you send, and loop your care team in if anything is unclear.",
+  },
+}
+
+export function getDemoCaseDeltaFromChip(chipId: string): DemoCaseDeltaCopy | null {
+  return DEMO_CHIP_NARRATIVES[chipId] ?? null
+}
+
+export function getDemoCaseDeltaFromCustomNote(note: string): DemoCaseDeltaCopy {
+  const safe = note.trim().slice(0, 400)
+  return {
+    newInformation: safe.length > 0 ? safe : "You added a short note for this case.",
+    mayAffect:
+      "This may shift which questions matter most at the next visit — NCCN-aware prep still stays with your care team, not set in stone.",
+    needsConfirmation: "How this detail fits what is already documented and what your doctor considers still pending.",
+    askNext: "Given this update, what should we confirm at the next visit and what records do you need from us?",
+    revisedStep: "Add this language to your question list and verify it with your care team — Anchor does not confirm stage or treatment.",
+  }
+}

@@ -24,6 +24,7 @@ import useWebRTCAudioSession from "@/hooks/use-webrtc"
 import { tools } from "@/lib/tools"
 import {
   CARE_TEAM_ALIGNED_INTRO,
+  DEMO_INFO_UPDATE_CHIPS,
   GENERIC_CARE_TEAM_CONTEXT_BULLETS,
   GENERIC_NIGHT_NOTE,
   PLAN_CHANGE_FACTORS_BULLETS,
@@ -39,6 +40,8 @@ import {
   SARAH_NEEDS_CONFIRMATION_BULLETS,
   SARAH_NOT_TONIGHT_BULLETS,
   SARAH_NIGHT_NOTE,
+  getDemoCaseDeltaFromChip,
+  getDemoCaseDeltaFromCustomNote,
   type NightNoteContent,
 } from "@/lib/demo/sarah-case"
 import { getAccount, getDatabases, ID, Query, DB_ID, COLLECTIONS } from "@/lib/appwrite"
@@ -79,6 +82,61 @@ interface PlanResult {
   tonight: PlanAction[]
   tomorrow: PlanAction[]
   next48: PlanAction[]
+}
+
+const ANCHOR_DEMO_CASE_KEY = "anchor-demo-case-v1"
+
+interface DemoCaseUpdate {
+  id: string
+  sourceLabel: string
+  newInformation: string
+  mayAffect: string
+  needsConfirmation: string
+  askNext: string
+  revisedStep: string
+}
+
+interface AnchorDemoCaseV1 {
+  v: 1
+  phase: AppPhase
+  caregiverName: string
+  relationship: RelationshipValue | null
+  cancerType: CancerType
+  mirrorResult: MirrorResult
+  planResult: PlanResult | null
+  isBackupDemoMirror: boolean
+  showExampleOutput: boolean
+  lastTranscriptSnippet?: string
+  caseUpdates: DemoCaseUpdate[]
+}
+
+function isValidPlanResult(value: unknown): value is PlanResult {
+  if (!value || typeof value !== "object") return false
+  const o = value as Record<string, unknown>
+  if (!Array.isArray(o.tonight) || !Array.isArray(o.tomorrow) || !Array.isArray(o.next48)) return false
+  const ok = (arr: unknown[]) =>
+    arr.every(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        typeof (item as PlanAction).text === "string" &&
+        typeof (item as PlanAction).regretQuote === "string",
+    )
+  return ok(o.tonight as unknown[]) && ok(o.tomorrow as unknown[]) && ok(o.next48 as unknown[])
+}
+
+function isDemoCaseUpdate(value: unknown): value is DemoCaseUpdate {
+  if (!value || typeof value !== "object") return false
+  const o = value as Record<string, unknown>
+  return (
+    typeof o.id === "string" &&
+    typeof o.sourceLabel === "string" &&
+    typeof o.newInformation === "string" &&
+    typeof o.mayAffect === "string" &&
+    typeof o.needsConfirmation === "string" &&
+    typeof o.askNext === "string" &&
+    typeof o.revisedStep === "string"
+  )
 }
 
 interface FearMemory {
@@ -353,7 +411,10 @@ export default function App() {
   const [breathStep, setBreathStep] = useState(0)
   const [breathCycles, setBreathCycles] = useState(0)
   const wasActiveRef = useRef(false)
+  const voiceFollowUpRef = useRef(false)
   const breathStepRef = useRef(0)
+
+  const [caseInformationUpdates, setCaseInformationUpdates] = useState<DemoCaseUpdate[]>([])
 
   const {
     isSessionActive,
@@ -528,6 +589,80 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!hydrated) return
+    const raw = window.localStorage.getItem(ANCHOR_DEMO_CASE_KEY)
+    if (!raw) return
+    try {
+      const data = JSON.parse(raw) as unknown
+      if (!data || typeof data !== "object") return
+      const o = data as Record<string, unknown>
+      if (o.v !== 1 || o.phase !== "results" || !isValidMirrorResult(o.mirrorResult)) return
+      const planRaw = o.planResult
+      const planResultParsed = planRaw == null ? null : isValidPlanResult(planRaw) ? planRaw : null
+      const cancerRaw = o.cancerType
+      const relRaw = o.relationship
+      const nameRaw = o.caregiverName
+      const cancerStr = typeof cancerRaw === "string" ? cancerRaw : null
+      if (!isCancerType(cancerStr)) return
+      const relStr = typeof relRaw === "string" ? relRaw : null
+      if (relStr != null && relStr !== "" && !isRelationship(relStr)) return
+
+      const updatesRaw = o.caseUpdates
+      const caseUpdates = Array.isArray(updatesRaw) ? updatesRaw.filter(isDemoCaseUpdate) : []
+
+      setCaregiverName(typeof nameRaw === "string" ? nameRaw : "")
+      if (isRelationship(relStr)) setRelationship(relStr)
+      else setRelationship(null)
+      setCancerType(cancerStr)
+      setMirrorResult(o.mirrorResult as MirrorResult)
+      setPlanResult(planResultParsed)
+      setIsBackupDemoMirror(Boolean(o.isBackupDemoMirror))
+      setShowExampleOutput(Boolean(o.showExampleOutput))
+      setCaseInformationUpdates(caseUpdates)
+      setOnboarded(true)
+      setPhase("results")
+      setError(null)
+    } catch {
+      /* ignore corrupt demo snapshot */
+    }
+  }, [hydrated])
+
+  useEffect(() => {
+    if (!hydrated) return
+    if (phase !== "results" || !mirrorResult) return
+    try {
+      const payload: AnchorDemoCaseV1 = {
+        v: 1,
+        phase,
+        caregiverName: caregiverName.trim(),
+        relationship,
+        cancerType,
+        mirrorResult,
+        planResult,
+        isBackupDemoMirror,
+        showExampleOutput,
+        lastTranscriptSnippet: latestUserLine?.slice(0, 500),
+        caseUpdates: caseInformationUpdates,
+      }
+      window.localStorage.setItem(ANCHOR_DEMO_CASE_KEY, JSON.stringify(payload))
+    } catch {
+      /* ignore quota / serialization issues */
+    }
+  }, [
+    cancerType,
+    caregiverName,
+    caseInformationUpdates,
+    hydrated,
+    isBackupDemoMirror,
+    latestUserLine,
+    mirrorResult,
+    phase,
+    planResult,
+    relationship,
+    showExampleOutput,
+  ])
+
+  useEffect(() => {
     if (!hydrated || !onboarded) return
     window.localStorage.setItem(STORAGE_KEYS.cancerType, cancerType)
   }, [cancerType, hydrated, onboarded])
@@ -570,11 +705,26 @@ export default function App() {
     })
   }, [])
 
+  const appendDemoCaseUpdate = useCallback((update: DemoCaseUpdate) => {
+    setCaseInformationUpdates((prev) => [...prev, update])
+  }, [])
+
+  const beginVoiceFollowUp = useCallback(() => {
+    voiceFollowUpRef.current = true
+    setCopied(null)
+    if (!isSessionActive) {
+      handleStartStopClick()
+    } else {
+      setPhase("recording")
+    }
+  }, [handleStartStopClick, isSessionActive])
+
   const processRant = useCallback(async (transcript: string) => {
     setPhase("processing")
     setError(null)
     setPlanResult(null)
     setIsBackupDemoMirror(false)
+    setCaseInformationUpdates([])
 
     const useSarahFallbackMirror = () => {
       setMirrorResult(SARAH_MIRROR_RESULT)
@@ -641,6 +791,7 @@ export default function App() {
     setIsBackupDemoMirror(true)
     setPlanResult(null)
     setError(null)
+    setCaseInformationUpdates([])
     setPhase("results")
   }, [])
 
@@ -648,6 +799,25 @@ export default function App() {
     if (wasActiveRef.current && !isSessionActive) {
       const transcript = transcriptRef.current
       transcriptRef.current = ""
+
+      if (voiceFollowUpRef.current) {
+        voiceFollowUpRef.current = false
+        const trimmed = transcript.trim()
+        if (trimmed.length > 5) {
+          const delta = getDemoCaseDeltaFromCustomNote(trimmed)
+          const id =
+            typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+              ? globalThis.crypto.randomUUID()
+              : `voice-${Date.now()}`
+          appendDemoCaseUpdate({
+            id,
+            sourceLabel: "Voice note",
+            ...delta,
+          })
+        }
+        setPhase("results")
+        return
+      }
 
       if (transcript.length > 20) {
         processRant(transcript)
@@ -658,7 +828,7 @@ export default function App() {
 
     wasActiveRef.current = isSessionActive
     if (isSessionActive) setPhase("recording")
-  }, [isSessionActive, processRant, transcriptRef])
+  }, [appendDemoCaseUpdate, isSessionActive, processRant, transcriptRef])
 
   async function requestPlan() {
     if (!mirrorResult) return
@@ -784,6 +954,7 @@ export default function App() {
 
   function startOver() {
     Object.values(STORAGE_KEYS).forEach((key) => window.localStorage.removeItem(key))
+    window.localStorage.removeItem(ANCHOR_DEMO_CASE_KEY)
     setCaregiverName("")
     setRelationship(null)
     setCancerType("colon")
@@ -794,6 +965,7 @@ export default function App() {
     setError(null)
     setShowExampleOutput(false)
     setIsBackupDemoMirror(false)
+    setCaseInformationUpdates([])
     setFearTimeline([])
     setJournalEntries([])
     setOneThingCount(0)
@@ -822,6 +994,7 @@ export default function App() {
     setCopied(null)
     setShowExampleOutput(false)
     setIsBackupDemoMirror(false)
+    setCaseInformationUpdates([])
     setPhase("idle")
   }
 
@@ -945,6 +1118,8 @@ export default function App() {
     setPhase("idle")
     setShowExampleOutput(true)
     setIsBackupDemoMirror(false)
+    setCaseInformationUpdates([])
+    window.localStorage.removeItem(ANCHOR_DEMO_CASE_KEY)
   }
 
   function resetMagicLink() {
@@ -1069,13 +1244,18 @@ export default function App() {
                     Save across devices →
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={startOver}
-                  className="text-left text-xs text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#242230] sm:text-sm"
-                >
-                  {showExampleOutput ? "Exit demo · Start over →" : `Not ${displayName}? Start over`}
-                </button>
+                <div className="flex flex-col items-end gap-0.5">
+                  <button
+                    type="button"
+                    onClick={startOver}
+                    className="text-left text-xs text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-4 transition hover:text-[#242230] sm:text-sm"
+                  >
+                    {showExampleOutput ? "Exit demo · Start over →" : `Not ${displayName}? Start over`}
+                  </button>
+                  <span className="max-w-[14rem] text-right text-[10px] leading-snug text-[#a09a93] sm:max-w-xs sm:text-[11px]">
+                    Start over clears this demo case.
+                  </span>
+                </div>
               </div>
             </header>
 
@@ -1111,7 +1291,9 @@ export default function App() {
 
                   {phase === "results" && mirrorResult && (
                     <ResultsView
+                      appendDemoCaseUpdate={appendDemoCaseUpdate}
                       cancerType={cancerType}
+                      caseInformationUpdates={caseInformationUpdates}
                       copied={copied}
                       displayName={displayName}
                       error={error}
@@ -1122,10 +1304,10 @@ export default function App() {
                       lovedOne={lovedOne}
                       mirrorResult={mirrorResult}
                       noteText={noteText}
+                      onAddByVoice={beginVoiceFollowUp}
                       onCopy={copyText}
                       onHoverRegret={setHoveredRegret}
                       onPlan={requestPlan}
-                      onReset={resetVoice}
                       onSarahBackupDemo={showSarahBackupDemo}
                       planResult={planResult}
                     />
@@ -1762,7 +1944,9 @@ function buildCaregiverResultPacket(mirrorResult: MirrorResult, isBackupDemoMirr
 }
 
 function ResultsView({
+  appendDemoCaseUpdate,
   cancerType,
+  caseInformationUpdates,
   copied,
   displayName,
   error,
@@ -1773,14 +1957,16 @@ function ResultsView({
   lovedOne,
   mirrorResult,
   noteText,
+  onAddByVoice,
   onCopy,
   onHoverRegret,
   onPlan,
-  onReset,
   onSarahBackupDemo,
   planResult,
 }: {
+  appendDemoCaseUpdate: (update: DemoCaseUpdate) => void
   cancerType: CancerType
+  caseInformationUpdates: DemoCaseUpdate[]
   copied: "note" | "handoff" | null
   displayName: string
   error: string | null
@@ -1791,17 +1977,51 @@ function ResultsView({
   lovedOne: string
   mirrorResult: MirrorResult
   noteText: string
+  onAddByVoice: () => void
   onCopy: (kind: "note" | "handoff", value: string) => void
   onHoverRegret: (value: string | null) => void
   onPlan: () => void
-  onReset: () => void
   onSarahBackupDemo: () => void
   planResult: PlanResult | null
 }) {
+  const [infoPanelOpen, setInfoPanelOpen] = useState(false)
+  const [infoDraft, setInfoDraft] = useState("")
+  const [selectedChipId, setSelectedChipId] = useState<string | null>(null)
+
   const packet = useMemo(
     () => buildCaregiverResultPacket(mirrorResult, isBackupDemoMirror),
     [mirrorResult, isBackupDemoMirror],
   )
+
+  function newDemoUpdateId() {
+    return typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+      ? globalThis.crypto.randomUUID()
+      : `upd-${Date.now()}`
+  }
+
+  function applyInfoUpdate() {
+    const trimmed = infoDraft.trim()
+    if (!selectedChipId && !trimmed) return
+    const chip = DEMO_INFO_UPDATE_CHIPS.find((c) => c.id === selectedChipId)
+    let delta =
+      selectedChipId && getDemoCaseDeltaFromChip(selectedChipId)
+        ? getDemoCaseDeltaFromChip(selectedChipId)!
+        : getDemoCaseDeltaFromCustomNote(trimmed || "Detail added")
+    if (selectedChipId && trimmed) {
+      delta = {
+        ...delta,
+        newInformation: `${delta.newInformation} You also noted: ${trimmed.slice(0, 200)}`,
+      }
+    }
+    appendDemoCaseUpdate({
+      id: newDemoUpdateId(),
+      sourceLabel: chip?.label ?? "Your note",
+      ...delta,
+    })
+    setInfoDraft("")
+    setSelectedChipId(null)
+    setInfoPanelOpen(false)
+  }
 
   return (
     <motion.div
@@ -1897,20 +2117,68 @@ function ResultsView({
             If new information comes in, Anchor should update the plan. Update this when pathology, imaging, appointment
             timing, or care-team instructions change.
           </p>
-          <div className="mb-2.5 flex min-w-0 flex-col gap-1 sm:mb-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+          <p className="mb-1.5 text-[11px] leading-snug text-[#8f7e9b] sm:mb-2 sm:text-xs sm:leading-relaxed">
+            Anchor keeps this case active locally for the demo — you do not need to restart after every new detail.
+          </p>
+          <div className="mb-2 flex min-w-0 flex-col gap-1.5 sm:mb-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
             <button
               type="button"
-              disabled
-              aria-disabled="true"
-              className="w-fit cursor-not-allowed rounded-full border border-dashed border-[#c9b8d8] bg-white/50 px-3 py-1.5 text-left text-[11px] font-medium text-[#6f6280] opacity-85 sm:text-xs"
-              title="Preview only in this demo"
+              onClick={() => setInfoPanelOpen((o) => !o)}
+              className="w-fit rounded-full border border-[#b98da0]/50 bg-white/75 px-3 py-1.5 text-left text-[11px] font-medium text-[#5c4a62] shadow-sm transition hover:border-[#b98da0] hover:bg-white sm:text-xs"
             >
-              I have new information
+              {infoPanelOpen ? "Close update panel" : "I have new information"}
             </button>
-            <p className="m-0 min-w-0 text-[10px] leading-snug text-[#8f7e9b] sm:text-[11px]">
-              Coming next: update the plan when new details arrive.
-            </p>
           </div>
+          <AnimatePresence initial={false}>
+            {infoPanelOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.22 }}
+                className="mb-3 overflow-hidden rounded-[14px] border border-[#d8cec5]/90 bg-[#fdfaf7] p-2.5 sm:mb-3.5 sm:rounded-[16px] sm:p-3"
+              >
+                <p className="m-0 text-[12px] font-medium text-[#3f3a36] sm:text-sm">I have new information</p>
+                <p className="mt-1 text-[11px] leading-snug text-[#756f68] sm:text-xs">
+                  Add one detail. Anchor will show what changes and what still needs confirmation — NCCN-aware prep, not
+                  set in stone.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {DEMO_INFO_UPDATE_CHIPS.map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setSelectedChipId((cur) => (cur === chip.id ? null : chip.id))}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                        selectedChipId === chip.id
+                          ? "border-[#b98da0] bg-[#f0e6f4] text-[#4a3548]"
+                          : "border-[#e5ddd4] bg-white/90 text-[#5f5a55] hover:border-[#c9b8d8]"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+                <label className="mt-2 block">
+                  <span className="sr-only">Additional detail</span>
+                  <input
+                    type="text"
+                    value={infoDraft}
+                    onChange={(e) => setInfoDraft(e.target.value)}
+                    placeholder="Example: The oncologist said imaging is still pending."
+                    className="w-full rounded-[12px] border border-[#e5ddd4] bg-white px-2.5 py-2 text-[12px] text-[#3f3a36] outline-none placeholder:text-[#a09a93] focus:border-[#b98da0]/70 sm:rounded-[14px] sm:py-2.5 sm:text-sm"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={applyInfoUpdate}
+                  className="mt-2 w-full rounded-[14px] border border-white/80 bg-[#b7a6c9] py-2 text-[12px] font-medium text-white shadow-sm transition hover:opacity-95 sm:mt-2.5 sm:rounded-[16px] sm:text-sm"
+                >
+                  Update this plan
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <p className="mb-2 text-[11px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-xs sm:leading-relaxed">
             A compact checklist you can verify with your care team — generate it here when you are ready.
           </p>
@@ -1935,6 +2203,48 @@ function ResultsView({
           </div>
         </ResultPacketCard>
       </motion.div>
+
+      {caseInformationUpdates.length > 0 && (
+        <motion.div variants={itemVariants} className="mt-2 sm:mt-3">
+          <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">What changed</p>
+            <div className="grid gap-2.5 sm:gap-3">
+              {caseInformationUpdates.map((u) => (
+                <div key={u.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2.5 sm:rounded-[14px] sm:p-3">
+                  <p className="text-[10px] font-medium text-[#9b829c] sm:text-[11px]">{u.sourceLabel}</p>
+                  <ul className="mt-1.5 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
+                    <li>
+                      <span className="font-medium text-[#5f5a55]">1. New information added · </span>
+                      {u.newInformation}
+                    </li>
+                    <li>
+                      <span className="font-medium text-[#5f5a55]">2. What this may affect · </span>
+                      {u.mayAffect}
+                    </li>
+                    <li>
+                      <span className="font-medium text-[#5f5a55]">3. What still needs confirmation · </span>
+                      {u.needsConfirmation}
+                    </li>
+                    <li>
+                      <span className="font-medium text-[#5f5a55]">4. What to ask next · </span>
+                      {u.askNext}
+                    </li>
+                    <li>
+                      <span className="font-medium text-[#5f5a55]">5. Revised next step · </span>
+                      {u.revisedStep}
+                    </li>
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2.5 border-t border-[#ece4dc] pt-2 text-[10px] leading-snug text-[#756f68] sm:text-[11px] sm:leading-relaxed">
+              Based on what Anchor knows right now — not set in stone. Anchor can help prepare NCCN-aware questions and
+              organize next steps. It does not diagnose, prescribe, choose treatment, confirm stage, or replace your care
+              team.
+            </p>
+          </div>
+        </motion.div>
+      )}
 
       <AnimatePresence>
         {planResult && (
@@ -1992,12 +2302,14 @@ function ResultsView({
         </button>
         <button
           type="button"
-          onClick={onReset}
+          onClick={onAddByVoice}
           className={`${GLASS_BUTTON} flex items-center justify-between gap-2 rounded-[20px] p-3 text-left text-[#3f3a36] outline-none focus-visible:ring-2 focus-visible:ring-[#b98da0]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fdfbf8] sm:rounded-[22px] sm:p-3.5`}
         >
           <span className="min-w-0">
-            <span className="block text-sm font-medium text-[#242230]">Speak again</span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-[#756f68] sm:text-xs sm:text-sm">Another fear, another path.</span>
+            <span className="block text-sm font-medium text-[#242230]">Add by voice</span>
+            <span className="mt-0.5 block text-[11px] leading-snug text-[#756f68] sm:text-xs sm:text-sm">
+              Add another detail to this same case — your last result stays until you start over.
+            </span>
           </span>
           <Mic className="h-4 w-4 shrink-0 text-[#b98da0] sm:h-5 sm:w-5" />
         </button>
