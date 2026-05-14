@@ -7,7 +7,7 @@ export interface SarahMirrorResult {
 }
 
 export const SARAH_DEMO_CONCERN =
-  "I feel like I'm missing everything. My mom may have stage III colon cancer, and I don't even know what questions to ask tomorrow."
+  "I feel like I'm missing everything. My mom may have stage III colon cancer, and I don't even know what questions to ask at the next visit."
 
 /** Memory tab — soft demo framing (Prompt 8.5). */
 export const MEMORY_PROTO_BADGE = "Demo case · sample only"
@@ -44,7 +44,7 @@ export function buildMemoryHoldingNarrative(input: {
 }): string {
   const { caregiverName, lovedOneLabel, cancerLine, isSarahDemo } = input
   if (isSarahDemo) {
-    return `${caregiverName}, Anchor is holding onto the worry you voiced about tomorrow’s visit and supporting ${lovedOneLabel} through possible ${cancerLine} workup — not as a diagnosis, but as a place to park questions, tasks, and what still needs confirmation until your care team explains the plan.`
+    return `${caregiverName}, Anchor is holding onto the worry you voiced about the next visit or call and supporting ${lovedOneLabel} through possible ${cancerLine} workup — not as a diagnosis, but as a place to park questions, tasks, and what still needs confirmation until your care team explains the plan.`
   }
   return `${caregiverName}, Anchor is holding onto who ${lovedOneLabel} is to you, the concern you shared, and ${cancerLine} — so you can listen for what is confirmed, what is pending, and what to ask next without re-explaining the whole story each time you open this tab.`
 }
@@ -88,7 +88,7 @@ export const PLAN_CHANGE_URGENT_SAFETY =
 export const SARAH_KNOW_NOW_BULLETS = [
   "The sample concern mentions possible stage III colon cancer — that wording is not confirmed by Anchor and must be verified with pathology and your care team.",
   "There may be a recent colon cancer diagnosis or active workup — ask what is documented versus still being finalized.",
-  "Tomorrow's appointment is the next practical place to clarify what is confirmed, what is pending, and what decisions are actually on the table.",
+  "In this sample, the next visit is the most useful place to clarify what is confirmed and pending — your real schedule may differ; confirm dates with your care team.",
   "In demo or backup mode, this is a sample, de-identified case — not a real medical record.",
 ]
 
@@ -97,7 +97,7 @@ export const SARAH_NEEDS_CONFIRMATION_BULLETS = [
   "Whether imaging is complete and what it may suggest (interpretation belongs to your clinicians).",
   "Whether pathology is finalized and matches what you were told in plain language.",
   "Whether biomarker or MMR/MSI testing is pending or already done.",
-  "What decisions, if any, are expected at tomorrow's visit.",
+  "What decisions, if any, are expected at the next visit or call.",
 ]
 
 export const SARAH_NOT_TONIGHT_BULLETS = [
@@ -140,9 +140,9 @@ export const GENERIC_NIGHT_NOTE: NightNoteContent = {
 export const SARAH_DEMO_MIRROR_RESULT: SarahMirrorResult = {
   fearQuote: SARAH_DEMO_CONCERN,
   fearSummary:
-    "Worried about missing something important before tomorrow's appointment while supporting mom during a possible stage III colon cancer workup",
+    "Worried about missing something important before the next visit or call while supporting mom during a possible stage III colon cancer workup",
   mirror:
-    "You are worried you may miss something important before tomorrow's appointment, and you are trying to support your mom while feeling overwhelmed.",
+    "You are worried you may miss something important before the next visit or call, and you are trying to support your mom while feeling overwhelmed.",
   ground: [
     `What we know right now: ${SARAH_KNOW_NOW_BULLETS.slice(0, 3).join(" ")} ${SARAH_KNOW_NOW_BULLETS[3]}`,
     "",
@@ -153,8 +153,8 @@ export const SARAH_DEMO_MIRROR_RESULT: SarahMirrorResult = {
     "Anchor helps families prepare questions and organize next steps. It does not diagnose, prescribe, choose treatment, or replace your care team.",
   ].join("\n"),
   actions: [
-    "Write down the exact questions you want to ask tomorrow — keep the list short and plain language so you can read it under stress.",
-    "Gather reports, portal messages, pathology notes, imaging summaries, and your mom's medication list in one place to bring or reference tomorrow.",
+    "Write down the exact questions you want for the next visit — keep the list short and plain language so you can read it under stress.",
+    "Gather reports, portal messages, pathology notes, imaging summaries, and your mom's medication list in one place to bring or reference.",
     "Ask your care team what is confirmed, what is still pending, and what decisions are actually needed next — then confirm follow-up contacts.",
   ],
 }
@@ -167,7 +167,7 @@ export const SARAH_DEMO_ACTION_PREFIXES = [
 
 export const SARAH_DEMO_ACTION_SCRIPTS = [
   "Open one note and write three headings: \"Confirmed,\" \"Still unclear,\" and \"Questions for the next visit.\" Under each, add bullets as you remember them — you can fix details after you speak with your care team.",
-  "Hi, I'm calling for my mom. We were told she may have possible stage III colon cancer, and we have an appointment tomorrow. Before we come in, can you help us confirm what records we should bring, whether the full pathology report is finalized, and whether any imaging or biomarker testing is still pending?",
+  "Hi, I'm calling for my mom. We were told she may have possible stage III colon cancer, and we have a visit coming up. Before we come in, can you help us confirm what records we should bring, whether the full pathology report is finalized, and whether any imaging or biomarker testing is still pending?",
   [
     "What is confirmed right now, and what is still uncertain?",
     "Is the stage confirmed or still being worked up?",
@@ -198,7 +198,7 @@ export interface SarahPlanResultShape {
 export const SARAH_FALLBACK_PLAN_RESULT: SarahPlanResultShape = {
   tonight: [
     {
-      text: "Save documents in one folder, decide who will attend tomorrow's visit, and keep login details handy.",
+      text: "Save documents in one folder, decide who will attend the next visit, and keep login details handy.",
       regretQuote: "Looking back, I wish we had not scrambled in the waiting room over who was supposed to speak for Mom.",
     },
     {
@@ -275,7 +275,7 @@ const DEMO_CHIP_NARRATIVES: Record<string, DemoCaseDeltaCopy> = {
     mayAffect: "The care team may need this result before explaining some options — wording and timing belong to your clinicians.",
     needsConfirmation: "Whether the test was ordered, when results are expected, and who will review them with you.",
     askNext: "Has MMR/MSI testing been ordered, and will the result change what we discuss next?",
-    revisedStep: "Add this question to tomorrow’s list — still NCCN-aware prep; your care team decides what applies.",
+    revisedStep: "Add this question to your visit list — still NCCN-aware prep; your care team decides what applies.",
   },
   "imaging-incomplete": {
     newInformation: "Imaging may still be incomplete — confirm what is scheduled and what is back.",
@@ -685,7 +685,7 @@ export function buildAdaptiveTasksFromCustomPlanNote(note: string): StoredAdapti
   return [
     {
       id: adaptiveId("custom", stamp, "0"),
-      title: "Add this detail to tomorrow’s question list and ask the care team what it changes for timing, tests, or follow-up.",
+      title: "Add this detail to your next-visit question list and ask the care team what it changes for timing, tests, or follow-up.",
       detail: safe ? `You noted: ${safe.slice(0, 140)}${safe.length > 140 ? "…" : ""}` : undefined,
       initialStatus: "active",
       fromUpdate: true,
@@ -949,25 +949,41 @@ export function buildGuidedVisitPrepTask(): StoredAdaptivePlanTask {
   }
 }
 
-export const COCKPIT_WHY_NOT_CHATBOT_TITLE = "Why this is different from a chatbot"
+export const COCKPIT_WHY_NOT_CHATBOT_TITLE = "Why Anchor is not just another answer box"
 
 export const COCKPIT_WHY_NOT_CHATBOT_BODY =
-  "Anchor does not just answer once. It keeps the case open, updates the plan when details change, turns tasks into exact words, and saves what happened locally in this demo so the caregiver does not restart from zero."
+  "Chatbots answer a question. Anchor keeps the caregiving thread: concern → what is known → what is pending → exact words → living plan → saved updates."
 
-export const VISIT_GUIDE_TITLE = "Guide the visit"
+export const VISIT_PREP_PANEL_TITLE = "Prepare for the next visit or call"
 
-export const VISIT_GUIDE_PURPOSE = "Use this to get clear answers, not perfect notes."
+export const VISIT_PREP_PANEL_SUBTITLE = "Use this to get clear answers, not perfect notes."
+
+/** @deprecated Use VISIT_PREP_PANEL_TITLE — kept for gradual migration */
+export const VISIT_GUIDE_TITLE = VISIT_PREP_PANEL_TITLE
+
+/** @deprecated Use VISIT_PREP_PANEL_SUBTITLE */
+export const VISIT_GUIDE_PURPOSE = VISIT_PREP_PANEL_SUBTITLE
 
 export const VISIT_GUIDE_OPEN_LINE =
-  "Before we get into details, can we start by confirming what is known, what is pending, and what decisions actually need to be made next?"
+  "Can we begin by confirming what is known, what is still pending, and what decisions actually need to be made next?"
 
-export const VISIT_GUIDE_LISTEN_FOR: string[] = [
-  "What is confirmed",
-  "What is pending",
-  "What decision is next",
-  "Who to contact after",
-  "What to watch for before the next visit",
+export const VISIT_PREP_TOP_QUESTIONS: string[] = [
+  "What is confirmed right now?",
+  "What is still pending?",
+  "Which records or results should we bring or upload?",
+  "What decision, if any, is expected next?",
+  "Who should we contact after the visit?",
 ]
+
+export const VISIT_PREP_WHAT_TO_BRING: string[] = [
+  "Pathology or report notes if available",
+  "Imaging summaries if available",
+  "Medication list",
+  "Portal messages or appointment details",
+  "Top 3 family questions",
+]
+
+export const VISIT_GUIDE_LISTEN_FOR: string[] = [...VISIT_PREP_TOP_QUESTIONS]
 
 export const VISIT_GUIDE_IF_CONFUSED: string[] = [
   "Can you say that in plain language?",
@@ -978,9 +994,9 @@ export const VISIT_GUIDE_IF_CONFUSED: string[] = [
 export const VISIT_GUIDE_END_LINE = "Can we repeat back what we heard to make sure we understood correctly?"
 
 export const VISIT_GUIDE_AFTER_VISIT: string[] = [
-  "Add new information in Anchor.",
-  "Update the plan.",
-  "Save the top 3 answers.",
+  "Add what changed into Anchor",
+  "Update the 72-hour plan",
+  "Save the top 3 answers",
 ]
 
 export const VISIT_GUIDE_VISIT_NOTES_HINT =
@@ -988,16 +1004,19 @@ export const VISIT_GUIDE_VISIT_NOTES_HINT =
 
 export function buildVisitGuideClipboardBlock(): string {
   return [
-    "ANCHOR — VISIT GUIDE (LOCAL DEMO)",
-    "Preparation only. Your care team confirms medical decisions. Not diagnosis, treatment recommendation, or stage confirmation.",
+    "ANCHOR — VISIT PREP SCRIPT (LOCAL DEMO)",
+    "NCCN-aware preparation only. Your care team decides what applies. Not diagnosis, treatment recommendation, stage confirmation, or emergency assessment. Nothing sent automatically.",
     "",
-    "OPEN WITH",
+    "START WITH THIS",
     VISIT_GUIDE_OPEN_LINE,
     "",
-    "LISTEN FOR",
-    ...VISIT_GUIDE_LISTEN_FOR.map((l) => `• ${l}`),
+    "TOP QUESTIONS",
+    ...VISIT_PREP_TOP_QUESTIONS.map((l) => `• ${l}`),
     "",
-    "IF CONFUSED",
+    "WHAT TO BRING",
+    ...VISIT_PREP_WHAT_TO_BRING.map((l) => `• ${l}`),
+    "",
+    "IF CONFUSED, SAY",
     ...VISIT_GUIDE_IF_CONFUSED.map((l) => `• ${l}`),
     "",
     "END WITH",
@@ -1009,3 +1028,234 @@ export function buildVisitGuideClipboardBlock(): string {
     "— Copied from Anchor prototype. Nothing was sent by Anchor.",
   ].join("\n")
 }
+
+export type LastHeroFlowUsed = "visit" | "document" | "insurance"
+
+export const HERO_VISIT_PLAN_IDS = {
+  opener: "local:hero-visit-opener",
+  records: "local:hero-visit-bring-records",
+  after: "local:hero-visit-after-update",
+} as const
+
+export function buildHeroVisitPrepPlanTasks(): StoredAdaptivePlanTask[] {
+  return [
+    {
+      id: HERO_VISIT_PLAN_IDS.opener,
+      title: "Use visit opener",
+      detail: "From Today visit prep — say it in your own words; not sent from Anchor.",
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+    {
+      id: HERO_VISIT_PLAN_IDS.records,
+      title: "Bring current records",
+      detail: "Pathology notes, imaging summaries, med list, portal threads — your team confirms what they need.",
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+    {
+      id: HERO_VISIT_PLAN_IDS.after,
+      title: "After visit: add what changed",
+      detail: "Update Anchor and the 72-hour plan when you know more — local demo memory only.",
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+  ]
+}
+
+export const HERO_DOCUMENT_PLAN_IDS = {
+  confirm: "local:hero-doc-confirm",
+  pending: "local:hero-doc-pending",
+  bring: "local:hero-doc-bring",
+} as const
+
+export function buildHeroDocumentGuidePlanTasks(): StoredAdaptivePlanTask[] {
+  return [
+    {
+      id: HERO_DOCUMENT_PLAN_IDS.confirm,
+      title: "Ask what this document confirms",
+      detail: "From document guide — care team interprets; not a diagnosis from Anchor.",
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+    {
+      id: HERO_DOCUMENT_PLAN_IDS.pending,
+      title: "Ask what is still pending",
+      detail: "Addenda, tests, or staging inputs may still be in progress — confirm with clinicians.",
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+    {
+      id: HERO_DOCUMENT_PLAN_IDS.bring,
+      title: "Bring full report and addenda",
+      detail: "Ask which version is considered final — Anchor does not verify documents.",
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+  ]
+}
+
+export const HERO_INSURANCE_PLAN_IDS = {
+  call: "local:hero-ins-call",
+  ref: "local:hero-ins-reference",
+  follow: "local:hero-ins-followup",
+} as const
+
+export function buildHeroInsuranceIssuePlanTasks(): StoredAdaptivePlanTask[] {
+  return [
+    {
+      id: HERO_INSURANCE_PLAN_IDS.call,
+      title: "Call insurer or records office",
+      detail: "You place the call — Anchor prepares words only; nothing is dialed or sent from Anchor.",
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+    {
+      id: HERO_INSURANCE_PLAN_IDS.ref,
+      title: "Write down reference number",
+      detail: "Capture deadline, reference/case number, and who to follow up with.",
+      initialStatus: "active",
+      fromUpdate: false,
+    },
+    {
+      id: HERO_INSURANCE_PLAN_IDS.follow,
+      title: "Follow up on records or authorization status",
+      detail: "Administrative follow-up — your care team confirms medical details.",
+      initialStatus: "waiting",
+      fromUpdate: false,
+    },
+  ]
+}
+
+export const DOCUMENT_GUIDE_PANEL_TITLE = "Understand a document"
+
+export const DOCUMENT_GUIDE_PANEL_SUBTITLE =
+  "Anchor helps you turn a record into questions. It does not diagnose from documents."
+
+export const DOCUMENT_GUIDE_CLARIFY_BULLETS: string[] = [
+  "Diagnosis wording",
+  "Final vs pending results",
+  "Imaging or pathology status",
+  "Tests to ask about",
+  "Records to bring",
+]
+
+export const HERO_DOCUMENT_PATHOLOGY_QUESTIONS: string[] = [
+  "Can you walk us through this in plain language?",
+  "What does this confirm?",
+  "What does it not answer yet?",
+  "Are any addenda or tests still pending?",
+  "Does staging depend on imaging, pathology, or both?",
+  "Is MMR/MSI or biomarker testing ordered, pending, or final?",
+]
+
+export const DOCUMENT_GUIDE_WHAT_TO_BRING: string[] = [
+  "Full report",
+  "Addenda",
+  "Imaging summaries",
+  "Visit notes",
+  "Medication list",
+]
+
+export function buildDocumentGuideClipboardBlock(): string {
+  return [
+    "ANCHOR — DOCUMENT QUESTIONS (LOCAL DEMO)",
+    "Preparation only. Not a diagnosis from documents. Your care team interprets every report. Nothing sent automatically.",
+    "",
+    "WHAT THIS DOCUMENT MIGHT CLARIFY",
+    ...DOCUMENT_GUIDE_CLARIFY_BULLETS.map((l) => `• ${l}`),
+    "",
+    "SAMPLE PATHOLOGY-STYLE QUESTIONS (FOR YOUR CARE TEAM)",
+    ...HERO_DOCUMENT_PATHOLOGY_QUESTIONS.map((l) => `• ${l}`),
+    "",
+    "WHAT TO BRING",
+    ...DOCUMENT_GUIDE_WHAT_TO_BRING.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+export const INSURANCE_ISSUE_PANEL_TITLE = "Handle an insurance or records issue"
+
+export const INSURANCE_ISSUE_PANEL_SUBTITLE =
+  "Anchor prepares the words. You review and decide what to send or say."
+
+export const INSURANCE_ISSUE_CALL_SCRIPT =
+  "Hi, I'm calling about records or authorization for my family member's cancer care. Can you tell me exactly what documents are needed, where they should be sent, whether there is a deadline, and whether there is a reference number?"
+
+export const INSURANCE_ISSUE_WHAT_TO_GET: string[] = [
+  "Exact record names",
+  "Where to send them",
+  "Deadline",
+  "Reference or case number",
+  "Who to follow up with",
+  "Whether referral or authorization is required",
+]
+
+export const INSURANCE_ISSUE_IF_UNKNOWN_LINE =
+  "Who would know, when should I call back, and what can I do today to keep the appointment or review from being delayed?"
+
+export const INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE = "Follow up on records/insurance status"
+
+export function buildInsuranceIssueClipboardBlock(): string {
+  return [
+    "ANCHOR — INSURANCE / RECORDS CALL SCRIPT (LOCAL DEMO)",
+    "Administrative prep only. Not treatment advice. You place any calls — Anchor does not dial, email, or text. Nothing sent automatically.",
+    "",
+    "CALL SCRIPT",
+    INSURANCE_ISSUE_CALL_SCRIPT,
+    "",
+    "WHAT TO GET",
+    ...INSURANCE_ISSUE_WHAT_TO_GET.map((l) => `• ${l}`),
+    "",
+    "IF THEY SAY THEY DO NOT KNOW",
+    INSURANCE_ISSUE_IF_UNKNOWN_LINE,
+    "",
+    "FOLLOW-UP TASK (FOR YOUR OWN CHECKLIST)",
+    INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE,
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}
+
+export interface WordsToSayScriptDef {
+  id: "visit_opener" | "clinic_call" | "portal_message" | "family_update" | "insurance_call"
+  label: string
+  script: string
+  /** Stable id for optional plan row linkage */
+  guideRowId?: string
+}
+
+export const WORDS_TO_SAY_SCRIPT_DEFS: WordsToSayScriptDef[] = [
+  {
+    id: "visit_opener",
+    label: "Visit opener",
+    script: VISIT_GUIDE_OPEN_LINE,
+  },
+  {
+    id: "clinic_call",
+    label: "Clinic call",
+    script:
+      "Hi, I'm calling about an upcoming oncology visit. Can you help us confirm the appointment time, what records to bring or upload, and any prep instructions in the portal?",
+    guideRowId: "demo-quick-clinic",
+  },
+  {
+    id: "portal_message",
+    label: "Portal message",
+    script:
+      "Hello — we are preparing for the next visit. Can you confirm what is already on file, what results are still pending, and whether we should upload any documents before we arrive? We are not asking for medical advice in the portal — just clarity on what is complete vs pending.",
+  },
+  {
+    id: "family_update",
+    label: "Family update",
+    script:
+      "Quick update: we are still confirming details with the care team. Some results may still be pending. We will share more after we hear from the doctors — no need to assume a treatment plan yet.",
+    guideRowId: "demo-quick-family",
+  },
+  {
+    id: "insurance_call",
+    label: "Insurance/records call",
+    script: INSURANCE_ISSUE_CALL_SCRIPT,
+    guideRowId: "demo-quick-insurance",
+  },
+]

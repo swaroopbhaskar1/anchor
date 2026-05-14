@@ -24,35 +24,64 @@ import {
 import useWebRTCAudioSession from "@/hooks/use-webrtc"
 import { tools } from "@/lib/tools"
 import {
+  ASK_ANCHOR_SUBTITLE,
   buildAdaptiveTasksFromChip,
   buildAdaptiveTasksFromCustomPlanNote,
+  buildDocumentGuideClipboardBlock,
+  buildFamilySupportAdaptiveTask,
+  buildHeroDocumentGuidePlanTasks,
+  buildHeroInsuranceIssuePlanTasks,
+  buildHeroVisitPrepPlanTasks,
+  buildInsuranceIssueClipboardBlock,
+  buildMemoryHoldingNarrative,
+  buildRecordsChecklistAdaptiveTask,
+  buildRecordsQuickAdaptiveTask,
+  buildVisitGuideClipboardBlock,
   CARE_TEAM_ALIGNED_INTRO,
+  COCKPIT_LOCAL_CONSENT_LINE,
+  COCKPIT_WHY_NOT_CHATBOT_BODY,
+  COCKPIT_WHY_NOT_CHATBOT_TITLE,
+  createDefaultFamilyCoordBoard,
   DEMO_INFO_UPDATE_CHIPS,
+  DOCUMENT_GUIDE_CLARIFY_BULLETS,
+  DOCUMENT_GUIDE_PANEL_SUBTITLE,
+  DOCUMENT_GUIDE_PANEL_TITLE,
+  DOCUMENT_GUIDE_WHAT_TO_BRING,
+  FOLLOW_UP_CHIP_DEFS,
+  FAMILY_AVOID_PRESSURE_LINES,
+  FAMILY_EXPLAIN_CARDS,
+  FAMILY_HELPS_LINES,
+  FAMILY_MORE_HELP_ROLE_CARDS,
+  FAMILY_PRIMARY_ASK_CARDS,
+  FAMILY_PROTO_BADGE,
+  FAMILY_SAFETY_FOOTER,
+  FAMILY_TAB_SUBTITLE,
+  FAMILY_UPDATE_DRAFT_CALM,
+  FAMILY_UPDATE_DRAFT_DETAIL,
+  FAMILY_UPDATE_DRAFT_HELP,
   GENERIC_CARE_TEAM_CONTEXT_BULLETS,
   GENERIC_NIGHT_NOTE,
-  PLAN_CHANGE_FACTORS_BULLETS,
-  PLAN_CHANGE_URGENT_SAFETY,
-  SARAH_CARE_TEAM_CONTEXT_BULLETS,
-  SARAH_DEMO_ACTION_PREFIXES,
-  SARAH_DEMO_ACTION_SCRIPTS,
-  SARAH_DEMO_CONCERN,
-  SARAH_DEMO_MIRROR_RESULT,
-  SARAH_DEMO_ORIENTATION_LINES,
-  SARAH_FALLBACK_PLAN_RESULT,
-  MEMORY_ANCHOR_ORGANIZED_LINE,
+  getDemoCaseDeltaFromChip,
+  getDemoCaseDeltaFromCustomNote,
+  HERO_DOCUMENT_PATHOLOGY_QUESTIONS,
+  HERO_DOCUMENT_PLAN_IDS,
+  HERO_INSURANCE_PLAN_IDS,
+  HERO_VISIT_PLAN_IDS,
+  INSURANCE_ISSUE_CALL_SCRIPT,
+  INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE,
+  INSURANCE_ISSUE_IF_UNKNOWN_LINE,
+  INSURANCE_ISSUE_PANEL_SUBTITLE,
+  INSURANCE_ISSUE_PANEL_TITLE,
+  INSURANCE_ISSUE_WHAT_TO_GET,
   MEMORY_CARE_TIMELINE_INTRO,
-  MEMORY_EMPTY_QUESTIONS_ASKED,
   MEMORY_EMPTY_CASE_UPDATES,
+  MEMORY_EMPTY_QUESTIONS_ASKED,
   MEMORY_EMPTY_TASKS_DONE,
   MEMORY_EMPTY_TIMELINE_ARTIFACTS,
   MEMORY_PROTO_BADGE,
-  buildMemoryHoldingNarrative,
-  SARAH_KNOW_NOW_BULLETS,
-  SARAH_NEEDS_CONFIRMATION_BULLETS,
-  SARAH_NOT_TONIGHT_BULLETS,
-  SARAH_NIGHT_NOTE,
-  ASK_ANCHOR_SUBTITLE,
-  FOLLOW_UP_CHIP_DEFS,
+  normalizeFollowUpChipKind,
+  PLAN_CHANGE_FACTORS_BULLETS,
+  PLAN_CHANGE_URGENT_SAFETY,
   RECORDS_DOCUMENT_STACK_DEFS,
   RECORDS_MISSING_CHECKLIST_DEFS,
   RECORDS_PROTO_BADGE,
@@ -65,45 +94,36 @@ import {
   recordsDocStackStatusLabel,
   SAMPLE_PATHOLOGY_QUESTIONS,
   SAMPLE_PATHOLOGY_RECORD_LINES,
-  buildRecordsChecklistAdaptiveTask,
-  buildRecordsQuickAdaptiveTask,
-  buildFamilySupportAdaptiveTask,
-  buildGuidedVisitPrepTask,
-  buildVisitGuideClipboardBlock,
-  createDefaultFamilyCoordBoard,
-  FAMILY_AVOID_PRESSURE_LINES,
-  FAMILY_EXPLAIN_CARDS,
-  FAMILY_HELPS_LINES,
-  FAMILY_MORE_HELP_ROLE_CARDS,
-  FAMILY_PRIMARY_ASK_CARDS,
-  FAMILY_PROTO_BADGE,
-  FAMILY_SAFETY_FOOTER,
-  FAMILY_TAB_SUBTITLE,
-  FAMILY_UPDATE_DRAFT_CALM,
-  FAMILY_UPDATE_DRAFT_DETAIL,
-  FAMILY_UPDATE_DRAFT_HELP,
-  COCKPIT_LOCAL_CONSENT_LINE,
-  COCKPIT_WHY_NOT_CHATBOT_BODY,
-  COCKPIT_WHY_NOT_CHATBOT_TITLE,
-  GUIDED_VISIT_PREP_TASK_ID,
+  SARAH_CARE_TEAM_CONTEXT_BULLETS,
+  SARAH_DEMO_ACTION_PREFIXES,
+  SARAH_DEMO_ACTION_SCRIPTS,
+  SARAH_DEMO_CONCERN,
+  SARAH_DEMO_MIRROR_RESULT,
+  SARAH_DEMO_ORIENTATION_LINES,
+  SARAH_FALLBACK_PLAN_RESULT,
+  SARAH_KNOW_NOW_BULLETS,
+  SARAH_NEEDS_CONFIRMATION_BULLETS,
+  SARAH_NOT_TONIGHT_BULLETS,
+  SARAH_NIGHT_NOTE,
   VISIT_GUIDE_AFTER_VISIT,
   VISIT_GUIDE_END_LINE,
   VISIT_GUIDE_IF_CONFUSED,
-  VISIT_GUIDE_LISTEN_FOR,
   VISIT_GUIDE_OPEN_LINE,
-  VISIT_GUIDE_PURPOSE,
-  VISIT_GUIDE_TITLE,
   VISIT_GUIDE_VISIT_NOTES_HINT,
-  getDemoCaseDeltaFromChip,
-  getDemoCaseDeltaFromCustomNote,
-  normalizeFollowUpChipKind,
+  VISIT_PREP_PANEL_SUBTITLE,
+  VISIT_PREP_PANEL_TITLE,
+  VISIT_PREP_TOP_QUESTIONS,
+  VISIT_PREP_WHAT_TO_BRING,
+  WORDS_TO_SAY_SCRIPT_DEFS,
   type AdaptivePlanTaskInitialStatus,
-  type FollowUpChipId,
-  type NightNoteContent,
   type FamilyCoordBoardRow,
   type FamilySupportRoleCardDef,
+  type FollowUpChipId,
+  type LastHeroFlowUsed,
+  type NightNoteContent,
   type RecordsChecklistItemDef,
   type StoredAdaptivePlanTask,
+  type WordsToSayScriptDef,
 } from "@/lib/demo/sarah-case"
 import { getAccount, getDatabases, ID, Query, DB_ID, COLLECTIONS } from "@/lib/appwrite"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
@@ -124,6 +144,8 @@ type ResultCopyKind =
   | "recordsOnePager"
   | "familyClip"
   | "visitPrep"
+  | "documentGuideCopy"
+  | "insuranceIssueCopy"
 
 interface CopyTimelineMeta {
   taskTitle: string
@@ -222,6 +244,8 @@ interface AnchorDemoCaseV1 {
   activeResultTab?: string
   followUpResponses?: FollowUpResponseItem[]
   familyCoordBoard?: FamilyCoordBoardRow[]
+  /** Which hero caregiver flow was used last — drives Today “recommended next” copy. */
+  lastHeroFlowUsed?: LastHeroFlowUsed | null
 }
 
 function isValidPlanResult(value: unknown): value is PlanResult {
@@ -267,6 +291,10 @@ function isActionGuideDemoTimelineEntry(value: unknown): value is ActionGuideDem
 
 function isWorkspaceTab(value: unknown): value is WorkspaceTab {
   return value === "today" || value === "tools" || value === "saved"
+}
+
+function isLastHeroFlowUsed(value: unknown): value is LastHeroFlowUsed {
+  return value === "visit" || value === "document" || value === "insurance"
 }
 
 function isToolPanelId(value: unknown): value is ToolPanelId {
@@ -641,6 +669,8 @@ export default function App() {
   const [followUpResponses, setFollowUpResponses] = useState<FollowUpResponseItem[]>([])
   const [familyCoordBoard, setFamilyCoordBoard] = useState<FamilyCoordBoardRow[]>(() => createDefaultFamilyCoordBoard())
   const [resultsTranscriptEcho, setResultsTranscriptEcho] = useState("")
+  const [lastHeroFlowUsed, setLastHeroFlowUsed] = useState<LastHeroFlowUsed | null>(null)
+  const [intakeUpdatesSignal, setIntakeUpdatesSignal] = useState(0)
 
   const {
     isSessionActive,
@@ -870,6 +900,10 @@ export default function App() {
       setFollowUpResponses(followUps)
       const famRaw = o.familyCoordBoard
       setFamilyCoordBoard(normalizeFamilyCoordBoard(famRaw))
+      const heroRaw = o.lastHeroFlowUsed
+      setLastHeroFlowUsed(
+        heroRaw === null || heroRaw === undefined ? null : isLastHeroFlowUsed(heroRaw) ? heroRaw : null,
+      )
       const snip = o.lastTranscriptSnippet
       setResultsTranscriptEcho(typeof snip === "string" ? snip.slice(0, 500) : "")
       setOnboarded(true)
@@ -912,6 +946,7 @@ export default function App() {
         toolPanel: workspaceTab === "tools" ? toolPanel : null,
         followUpResponses,
         familyCoordBoard,
+        lastHeroFlowUsed,
       }
       window.localStorage.setItem(ANCHOR_DEMO_CASE_KEY, JSON.stringify(payload))
     } catch {
@@ -930,6 +965,7 @@ export default function App() {
     followUpResponses,
     hydrated,
     isBackupDemoMirror,
+    lastHeroFlowUsed,
     latestUserLine,
     mirrorResult,
     phase,
@@ -1048,6 +1084,12 @@ export default function App() {
     }
   }, [handleStartStopClick, isSessionActive])
 
+  const openUpdatesTextVoiceIntake = useCallback(() => {
+    setWorkspaceTab("tools")
+    setToolPanel("updates")
+    setIntakeUpdatesSignal((n) => n + 1)
+  }, [])
+
   const processRant = useCallback(async (transcript: string) => {
     setPhase("processing")
     setError(null)
@@ -1061,6 +1103,7 @@ export default function App() {
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
+    setLastHeroFlowUsed(null)
 
     const useSarahFallbackMirror = (echoFromUser?: string) => {
       setMirrorResult(SARAH_MIRROR_RESULT)
@@ -1135,6 +1178,7 @@ export default function App() {
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
+    setLastHeroFlowUsed(null)
     setWorkspaceTab("today")
     setToolPanel(null)
     setResultsTranscriptEcho(SARAH_DEMO_CONCERN)
@@ -1338,6 +1382,8 @@ export default function App() {
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
     setFamilyCoordBoard(createDefaultFamilyCoordBoard())
+    setLastHeroFlowUsed(null)
+    setIntakeUpdatesSignal(0)
     setWorkspaceTab("today")
     setToolPanel(null)
     setResultsTranscriptEcho("")
@@ -1375,6 +1421,8 @@ export default function App() {
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
     setFamilyCoordBoard(createDefaultFamilyCoordBoard())
+    setLastHeroFlowUsed(null)
+    setIntakeUpdatesSignal(0)
     setWorkspaceTab("today")
     setToolPanel(null)
     setResultsTranscriptEcho("")
@@ -1694,8 +1742,10 @@ export default function App() {
                       familyCoordBoard={familyCoordBoard}
                       followUpResponses={followUpResponses}
                       handoffText={handoffText}
+                      intakeUpdatesSignal={intakeUpdatesSignal}
                       isBackupDemoMirror={isBackupDemoMirror}
                       isPlanning={isPlanning}
+                      lastHeroFlowUsed={lastHeroFlowUsed}
                       lovedOne={lovedOne}
                       markPlanTaskDone={markPlanTaskDone}
                       mirrorResult={mirrorResult}
@@ -1703,10 +1753,12 @@ export default function App() {
                       onAddByVoice={beginVoiceFollowUp}
                       onAskFollowUpSubmit={submitAskFollowUp}
                       onCopy={copyText}
+                      onHeroFlowUsed={setLastHeroFlowUsed}
                       onOpenToolPanel={(panel) => {
                         setWorkspaceTab("tools")
                         setToolPanel(panel)
                       }}
+                      onOpenUpdatesIntake={openUpdatesTextVoiceIntake}
                       onPlan={requestPlan}
                       onSarahBackupDemo={showSarahBackupDemo}
                       onStartOver={startOver}
@@ -4017,12 +4069,16 @@ function ResultsView({
   isPlanning,
   lovedOne,
   markPlanTaskDone,
+  intakeUpdatesSignal,
+  lastHeroFlowUsed,
   mirrorResult,
   noteText,
   onAddByVoice,
   onAskFollowUpSubmit,
   onCopy,
+  onHeroFlowUsed,
   onOpenToolPanel,
+  onOpenUpdatesIntake,
   onPlan,
   onSarahBackupDemo,
   onStartOver,
@@ -4047,8 +4103,10 @@ function ResultsView({
   familyCoordBoard: FamilyCoordBoardRow[]
   followUpResponses: FollowUpResponseItem[]
   handoffText: string
+  intakeUpdatesSignal: number
   isBackupDemoMirror: boolean
   isPlanning: boolean
+  lastHeroFlowUsed: LastHeroFlowUsed | null
   lovedOne: string
   markPlanTaskDone: (taskId: string) => void
   mirrorResult: MirrorResult
@@ -4056,7 +4114,9 @@ function ResultsView({
   onAddByVoice: () => void
   onAskFollowUpSubmit: (chipId: FollowUpChipId | null, customText: string) => CreateFollowUpResult
   onCopy: (kind: ResultCopyKind, value: string, timelineTitle?: string, timelineMeta?: CopyTimelineMeta) => void
+  onHeroFlowUsed: (flow: LastHeroFlowUsed) => void
   onOpenToolPanel: (panel: ToolPanelId | null) => void
+  onOpenUpdatesIntake: () => void
   onPlan: () => void
   onSarahBackupDemo: () => void
   onStartOver: () => void
@@ -4081,9 +4141,14 @@ function ResultsView({
   const recordsDocStackRef = useRef<HTMLDivElement | null>(null)
   const recordsMissingRef = useRef<HTMLDivElement | null>(null)
   const [memoryTimelineExpanded, setMemoryTimelineExpanded] = useState(false)
-  const [guidedPrepOpen, setGuidedPrepOpen] = useState(false)
+  const [todayHeroModal, setTodayHeroModal] = useState<LastHeroFlowUsed | null>(null)
+  const [wordsSayModal, setWordsSayModal] = useState<WordsToSayScriptDef | null>(null)
   const [askShowAll, setAskShowAll] = useState(false)
   const [visitPrepInlineNote, setVisitPrepInlineNote] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (intakeUpdatesSignal > 0) setInfoPanelOpen(true)
+  }, [intakeUpdatesSignal])
 
   function scrollToRecordsSection(ref: React.RefObject<HTMLDivElement | null>) {
     window.requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
@@ -4103,15 +4168,65 @@ function ResultsView({
     })
   }
 
-  function handleAddGuidedVisitPrepTask() {
-    if (adaptivePlanTasks.some((t) => t.id === GUIDED_VISIT_PREP_TASK_ID)) {
-      setVisitPrepInlineNote("Visit prep is already on your plan.")
-      window.setTimeout(() => setVisitPrepInlineNote(null), 2800)
+  function appendDedupedPlanTasks(tasks: StoredAdaptivePlanTask[], okMessage: string, dupMessage: string) {
+    const existing = new Set(adaptivePlanTasks.map((t) => t.id))
+    const next = tasks.filter((t) => !existing.has(t.id))
+    if (!next.length) {
+      setVisitPrepInlineNote(dupMessage)
+      window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
       return
     }
-    appendAdaptivePlanTasks([buildGuidedVisitPrepTask()])
-    setVisitPrepInlineNote("Added to your 72-hour plan (Tools).")
-    window.setTimeout(() => setVisitPrepInlineNote(null), 2800)
+    appendAdaptivePlanTasks(next)
+    setVisitPrepInlineNote(okMessage)
+    window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
+  }
+
+  function handleAddHeroVisitPlanBundle() {
+    appendDedupedPlanTasks(
+      buildHeroVisitPrepPlanTasks(),
+      "Added visit prep reminders to your 72-hour plan (Tools).",
+      "Visit prep reminders are already on your plan.",
+    )
+  }
+
+  function handleAddHeroDocumentPlanBundle() {
+    appendDedupedPlanTasks(
+      buildHeroDocumentGuidePlanTasks(),
+      "Added document guide reminders to your 72-hour plan (Tools).",
+      "Document guide reminders are already on your plan.",
+    )
+  }
+
+  function handleAddInsuranceFollowUpTask() {
+    const solo: StoredAdaptivePlanTask = {
+      id: HERO_INSURANCE_PLAN_IDS.follow,
+      title: INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE,
+      detail: "From insurance/records hero flow — you follow up; nothing sent from Anchor.",
+      initialStatus: "waiting",
+      fromUpdate: false,
+    }
+    appendDedupedPlanTasks([solo], "Added follow-up task to your 72-hour plan (Tools).", "That follow-up is already on your plan.")
+  }
+
+  function handleSaveInsuranceHeroTimeline() {
+    const id =
+      typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `tl-${Date.now()}`
+    appendActionGuideDemoTimeline({
+      id,
+      taskId: "hero-insurance",
+      taskTitle: "Saved insurance/records prep notes to demo timeline",
+      badge: "Hero flow",
+      savedAt: new Date().toISOString(),
+    })
+    setVisitPrepInlineNote("Saved to Saved → scripts and timeline (local demo).")
+    window.setTimeout(() => setVisitPrepInlineNote(null), 3200)
+  }
+
+  function openHeroModal(flow: LastHeroFlowUsed) {
+    onHeroFlowUsed(flow)
+    setTodayHeroModal(flow)
   }
 
   function familyRoleTaskAlreadyPresent(roleKey: string): boolean {
@@ -4232,6 +4347,19 @@ function ResultsView({
   )
 
   const boardCountsLine = useMemo(() => formatAdaptiveBoardCountsLine(boardCounts), [boardCounts])
+
+  const heroRecommendedLine = useMemo(() => {
+    switch (lastHeroFlowUsed) {
+      case "visit":
+        return "After the visit, add what changed."
+      case "document":
+        return "Bring these questions to the care team."
+      case "insurance":
+        return "Follow up on records or authorization status."
+      default:
+        return "Tell Anchor what happened, or choose the battle in front of you."
+    }
+  }, [lastHeroFlowUsed])
 
   const askResponsesNewestFirst = useMemo(() => [...followUpResponses].reverse(), [followUpResponses])
 
@@ -4511,83 +4639,133 @@ function ResultsView({
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
               <div className="min-w-0">
                 <p className="m-0 text-[17px] font-semibold leading-snug text-[#3f3a35] sm:text-xl">
-                  {isSarahVoiceCase
-                    ? "Sarah's next 72 hours"
-                    : `${displayName !== "there" ? displayName : lovedOneLabel}'s next 72 hours`}
+                  {isSarahVoiceCase ? "Sarah's Anchor" : `Anchor for ${displayName !== "there" ? displayName : lovedOneLabel}`}
                 </p>
                 <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  NCCN-aware prep · care team decides · stored locally for this demo
+                  NCCN-aware prep · care team decides · saved locally for this demo
+                </p>
+                <p className="mt-2 m-0 text-[12px] leading-snug text-[#5f5a55] sm:text-sm sm:leading-relaxed">
+                  Start with the problem in front of you. Anchor turns it into exact words, a short plan, and a saved thread.
                 </p>
               </div>
 
               <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_LOCAL_CONSENT_LINE}</p>
 
+              {isSarahVoiceCase && (
+                <p className="m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">
+                  In this sample, the next visit is the most useful place to clarify what is confirmed and pending — confirm real
+                  dates and instructions with your care team.
+                </p>
+              )}
+
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e5ddd4]/90 p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Recommended now</p>
-                <p className="mt-2 m-0 text-[15px] font-semibold leading-snug text-[#3f3a35] sm:text-base">Prepare for tomorrow&apos;s appointment</p>
-                <p className="mt-2 m-0 text-[12px] leading-snug text-[#5f5a55] sm:text-sm sm:leading-relaxed">
-                  Start with the next conversation: what is confirmed, what is pending, what records to bring, and what questions
-                  you are afraid you will forget.
-                </p>
-                <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={() => setGuidedPrepOpen(true)}
-                    className="w-full rounded-[16px] border border-[#b98da0]/80 bg-[#b7a6c9] px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:flex-1 sm:rounded-[18px] sm:text-sm"
-                  >
-                    Start guided prep
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenToolPanel("updates")
-                    }}
-                    className={`${GLASS_BUTTON} w-full rounded-[16px] px-4 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
-                  >
-                    Add new information
-                  </button>
-                </div>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Recommended next</p>
+                <p className="mt-2 m-0 text-[13px] font-medium leading-snug text-[#3f3a35] sm:text-sm">{heroRecommendedLine}</p>
+              </div>
+
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={onOpenUpdatesIntake}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-[16px] border border-[#b98da0]/80 bg-[#b7a6c9] px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:flex-1 sm:rounded-[18px] sm:text-sm"
+                >
+                  <Mic className="h-4 w-4 shrink-0" aria-hidden />
+                  <PenLine className="h-4 w-4 shrink-0" aria-hidden />
+                  Add by voice/text
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenToolPanel("updates")}
+                  className={`${GLASS_BUTTON} w-full rounded-[16px] px-4 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                >
+                  Open update panel
+                </button>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What matters now</p>
-                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                  <li className="relative pl-3.5 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                    Confirm what is known versus still pending with your care team.
-                  </li>
-                  <li className="relative pl-3.5 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                    Bring the records you already have so the visit stays concrete.
-                  </li>
-                  <li className="relative pl-3.5 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                    Ask what decisions, if any, are expected next — not diagnosis or treatment choice from Anchor.
-                  </li>
-                </ul>
-              </div>
-
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Next best action</p>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Demo concern / current concern</p>
                 <p className="mt-2 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
-                  Open guided prep, then add anything new under Tools → Update the plan so the checklist stays honest.
+                  {isSarahVoiceCase
+                    ? SARAH_DEMO_CONCERN
+                    : voiceConcernResolved.trim() || mirrorResult.fearQuote.trim() || "Nothing captured yet — add a detail when you are ready."}
                 </p>
               </div>
 
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Top 3 questions</p>
-                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                  <li>What is confirmed right now?</li>
-                  <li>What is still pending?</li>
-                  <li>What decision actually needs to be made next?</li>
-                </ul>
-              </div>
+              <div className="min-w-0">
+                <p className="m-0 text-[15px] font-semibold leading-snug text-[#3f3a35] sm:text-base">What do you need to win right now?</p>
+                <div className="mt-3 grid min-w-0 gap-3 sm:gap-4">
+                  <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 sm:rounded-[20px] sm:p-4`}>
+                    <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-sm">Prepare for a visit</p>
+                    <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      Get the top questions, what to bring, exact words to open the visit, and what to update after.
+                    </p>
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                      {["Top questions", "What to bring", "Exact words", "After-visit update", "72-hour plan"].map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex max-w-full shrink-0 rounded-full border border-[#e5ddd4] bg-white/85 px-2 py-0.5 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openHeroModal("visit")}
+                      className="mt-3 w-full rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
+                    >
+                      Start visit prep
+                    </button>
+                  </div>
 
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What to bring</p>
-                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                  <li>Pathology or report notes you already have</li>
-                  <li>Imaging summaries if available</li>
-                  <li>Medication list</li>
-                  <li>Portal messages or appointment details</li>
-                </ul>
+                  <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 sm:rounded-[20px] sm:p-4`}>
+                    <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-sm">Understand a document</p>
+                    <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      Use a sample pathology-style record to learn what to ask, what is missing, and what the care team must confirm.
+                    </p>
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                      {["Pathology questions", "What is pending", "What to bring", "Not a diagnosis"].map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex max-w-full shrink-0 rounded-full border border-[#e5ddd4] bg-white/85 px-2 py-0.5 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openHeroModal("document")}
+                      className="mt-3 w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px] sm:text-sm"
+                    >
+                      Open document guide
+                    </button>
+                  </div>
+
+                  <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 sm:rounded-[20px] sm:p-4`}>
+                    <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-sm">Handle an insurance / records issue</p>
+                    <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      Prepare a call script, records checklist, and follow-up task without sending anything automatically.
+                    </p>
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                      {["Call script", "Records request", "Insurance questions", "Follow-up task"].map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex max-w-full shrink-0 rounded-full border border-[#e5ddd4] bg-white/85 px-2 py-0.5 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openHeroModal("insurance")}
+                      className="mt-3 w-full rounded-[14px] border border-[#b98da0]/45 bg-white/90 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] shadow-sm transition hover:bg-white sm:rounded-[16px] sm:text-sm"
+                    >
+                      Open issue guide
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
@@ -4669,37 +4847,37 @@ function ResultsView({
                   [
                     {
                       title: "Ask Anchor",
-                      body: "Ask a case-aware follow-up in plain language.",
+                      body: "Case-aware follow-up prep in plain language.",
                       panel: "ask" as const,
                     },
                     {
-                      title: "Update the plan",
-                      body: "Add new information and see what changed.",
-                      panel: "updates" as const,
-                    },
-                    {
                       title: "72-hour plan",
-                      body: "Track active, waiting, changed, and done tasks.",
+                      body: "The glue between visit prep, documents, and admin tasks.",
                       panel: "plan" as const,
                     },
                     {
-                      title: "Get exact words",
-                      body: "Open call scripts, doctor questions, portal drafts, and family updates.",
+                      title: "Words to say",
+                      body: "Visit opener, clinic call, portal, family, insurance — copy only.",
                       panel: "actions" as const,
                     },
                     {
+                      title: "Updates",
+                      body: "Add new information and refresh what changed.",
+                      panel: "updates" as const,
+                    },
+                    {
                       title: "Records",
-                      body: "Know what to bring, what is missing, and what to ask.",
+                      body: "Bring these, what is missing, sample pathology questions.",
                       panel: "records" as const,
                     },
                     {
                       title: "Family support",
-                      body: "Ask for one concrete thing without explaining everything again.",
+                      body: "What helps vs pressure — copy one concrete ask.",
                       panel: "family" as const,
                     },
                     {
-                      title: "Memory",
-                      body: "Review what Anchor saved locally for this demo.",
+                      title: "Saved case",
+                      body: "Case thread, tracking, scripts, handoff — local demo memory.",
                       panel: null,
                     },
                   ] as const
@@ -4722,20 +4900,16 @@ function ResultsView({
                 ))}
               </div>
               <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_LOCAL_CONSENT_LINE}</p>
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{COCKPIT_WHY_NOT_CHATBOT_TITLE}</p>
-                <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_WHY_NOT_CHATBOT_BODY}</p>
-              </div>
             </motion.div>
           )}
 
           <AnimatePresence>
-            {guidedPrepOpen && (
+            {todayHeroModal && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setGuidedPrepOpen(false)}
+                onClick={() => setTodayHeroModal(null)}
                 className="fixed inset-0 z-[60] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
                 role="presentation"
               >
@@ -4745,95 +4919,308 @@ function ResultsView({
                   exit={{ y: 32, opacity: 0 }}
                   transition={{ type: "spring", stiffness: 420, damping: 32 }}
                   onClick={(e) => e.stopPropagation()}
-                  className={`${GLASS_PANEL} max-h-[min(92vh,640px)] w-full max-w-lg overflow-y-auto rounded-[20px] p-4 shadow-[0_24px_80px_rgba(36,34,48,0.18)] sm:rounded-[24px] sm:p-5`}
+                  className={`${GLASS_PANEL} max-h-[min(92vh,680px)] w-full max-w-lg overflow-y-auto rounded-[20px] p-4 shadow-[0_24px_80px_rgba(36,34,48,0.18)] sm:rounded-[24px] sm:p-5`}
                   role="dialog"
                   aria-modal="true"
-                  aria-label={VISIT_GUIDE_TITLE}
+                  aria-label={
+                    todayHeroModal === "visit"
+                      ? VISIT_PREP_PANEL_TITLE
+                      : todayHeroModal === "document"
+                        ? DOCUMENT_GUIDE_PANEL_TITLE
+                        : INSURANCE_ISSUE_PANEL_TITLE
+                  }
                 >
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="m-0 text-[15px] font-semibold text-[#3f3a35] sm:text-base">{VISIT_GUIDE_TITLE}</p>
-                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{VISIT_GUIDE_PURPOSE}</p>
+                      <p className="m-0 text-[15px] font-semibold text-[#3f3a35] sm:text-base">
+                        {todayHeroModal === "visit"
+                          ? VISIT_PREP_PANEL_TITLE
+                          : todayHeroModal === "document"
+                            ? DOCUMENT_GUIDE_PANEL_TITLE
+                            : INSURANCE_ISSUE_PANEL_TITLE}
+                      </p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                        {todayHeroModal === "visit"
+                          ? VISIT_PREP_PANEL_SUBTITLE
+                          : todayHeroModal === "document"
+                            ? DOCUMENT_GUIDE_PANEL_SUBTITLE
+                            : INSURANCE_ISSUE_PANEL_SUBTITLE}
+                      </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setGuidedPrepOpen(false)}
+                      onClick={() => setTodayHeroModal(null)}
                       className="shrink-0 rounded-full border border-[#e5ddd4] bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
                     >
                       Close
                     </button>
                   </div>
 
-                  <div className="mt-4 grid gap-3">
-                    <div>
-                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">1 · Open with this</p>
-                      <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{VISIT_GUIDE_OPEN_LINE}</p>
-                    </div>
-                    <div>
-                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">2 · Listen for</p>
-                      <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                        {VISIT_GUIDE_LISTEN_FOR.map((line) => (
-                          <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                            {line}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">3 · Ask if confused</p>
-                      <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                        {VISIT_GUIDE_IF_CONFUSED.map((line) => (
-                          <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                            {line}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">4 · End with</p>
-                      <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{VISIT_GUIDE_END_LINE}</p>
-                    </div>
-                    <div>
-                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">5 · After the visit</p>
-                      <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                        {VISIT_GUIDE_AFTER_VISIT.map((line) => (
-                          <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
-                            {line}
-                          </li>
-                        ))}
-                      </ul>
-                      <p className="mt-2 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{VISIT_GUIDE_VISIT_NOTES_HINT}</p>
-                    </div>
-                  </div>
+                  {todayHeroModal === "visit" && (
+                    <>
+                      <p className="mt-3 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
+                        NCCN-aware prep — your care team decides. Not diagnosis, treatment recommendation, stage confirmation, or
+                        emergency triage. Nothing sent automatically.
+                      </p>
+                      <div className="mt-4 grid gap-3">
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">1 · Start with this</p>
+                          <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{VISIT_GUIDE_OPEN_LINE}</p>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">2 · Top questions</p>
+                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                            {VISIT_PREP_TOP_QUESTIONS.map((line) => (
+                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">3 · What to bring</p>
+                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                            {VISIT_PREP_WHAT_TO_BRING.map((line) => (
+                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">4 · If confused, say</p>
+                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                            {VISIT_GUIDE_IF_CONFUSED.map((line) => (
+                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">5 · After the visit</p>
+                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                            {VISIT_GUIDE_AFTER_VISIT.map((line) => (
+                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="mt-2 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{VISIT_GUIDE_VISIT_NOTES_HINT}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void onCopy("visitPrep", buildVisitGuideClipboardBlock(), "Copied visit prep script", {
+                              taskTitle: "Copied visit prep script",
+                              badge: "Hero flow",
+                              taskId: "hero-visit",
+                            })
+                          }
+                          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                        >
+                          <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
+                          Copy visit script
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddHeroVisitPlanBundle}
+                          className="w-full rounded-[16px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:rounded-[18px] sm:text-sm"
+                        >
+                          Add visit-prep tasks to plan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTodayHeroModal(null)
+                            onOpenToolPanel("plan")
+                          }}
+                          className={`${GLASS_BUTTON} w-full rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                        >
+                          Open 72-hour plan
+                        </button>
+                      </div>
+                    </>
+                  )}
 
-                  <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => void onCopy("visitPrep", buildVisitGuideClipboardBlock())}
-                      className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
-                    >
-                      <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
-                      Copy visit questions
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddGuidedVisitPrepTask}
-                      className="w-full rounded-[16px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:rounded-[18px] sm:text-sm"
-                    >
-                      Add visit-prep task to plan
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setGuidedPrepOpen(false)
-                        onOpenToolPanel("plan")
-                      }}
-                      className={`${GLASS_BUTTON} w-full rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
-                    >
-                      Open full plan
-                    </button>
-                  </div>
-                  {copied === "visitPrep" && (
+                  {todayHeroModal === "document" && (
+                    <>
+                      <p className="mt-3 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
+                        Not a diagnosis from documents. Your care team interprets every report. Local demo memory only — nothing
+                        sent automatically.
+                      </p>
+                      <div className="mt-4 grid gap-3">
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">1 · What this document might clarify</p>
+                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                            {DOCUMENT_GUIDE_CLARIFY_BULLETS.map((line) => (
+                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">2 · Sample pathology record (demo)</p>
+                          <dl className="mt-2 m-0 grid gap-2 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                            {SAMPLE_PATHOLOGY_RECORD_LINES.map((row) => (
+                              <div key={row.label} className="min-w-0 rounded-[12px] border border-[#ece4dc] bg-white/60 p-2 sm:p-2.5">
+                                <dt className="font-semibold text-[#5f5a55]">{row.label}</dt>
+                                <dd className="m-0 mt-0.5 break-words">{row.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">3 · Sample pathology questions</p>
+                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                            {HERO_DOCUMENT_PATHOLOGY_QUESTIONS.map((line) => (
+                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">4 · What to bring</p>
+                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                            {DOCUMENT_GUIDE_WHAT_TO_BRING.map((line) => (
+                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void onCopy("documentGuideCopy", buildDocumentGuideClipboardBlock(), "Copied document questions", {
+                              taskTitle: "Copied document questions",
+                              badge: "Hero flow",
+                              taskId: "hero-document",
+                            })
+                          }
+                          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                        >
+                          <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
+                          Copy document questions
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const def = RECORDS_MISSING_CHECKLIST_DEFS.find((d) => d.id === "path-final-copy")
+                            if (def) handleAddRecordsChecklistItem(def)
+                          }}
+                          className="w-full rounded-[16px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:rounded-[18px] sm:text-sm"
+                        >
+                          Add missing-records task to plan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTodayHeroModal(null)
+                            onOpenToolPanel("records")
+                          }}
+                          className={`${GLASS_BUTTON} w-full rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                        >
+                          Open Records tool
+                        </button>
+                      </div>
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={handleAddHeroDocumentPlanBundle}
+                          className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2 text-[11px] font-medium text-[#3f3a36] sm:text-xs`}
+                        >
+                          Add document-guide reminders to plan (optional)
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {todayHeroModal === "insurance" && (
+                    <>
+                      <p className="mt-3 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
+                        Administrative prep only. Anchor does not dial, email, or text. You place any calls yourself. Nothing sent
+                        automatically.
+                      </p>
+                      <div className="mt-4 grid gap-3">
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">1 · Call script</p>
+                          <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{INSURANCE_ISSUE_CALL_SCRIPT}</p>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">2 · What to get</p>
+                          <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                            {INSURANCE_ISSUE_WHAT_TO_GET.map((line) => (
+                              <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">3 · If they say they do not know</p>
+                          <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{INSURANCE_ISSUE_IF_UNKNOWN_LINE}</p>
+                        </div>
+                        <div>
+                          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">4 · Follow-up task</p>
+                          <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{INSURANCE_ISSUE_FOLLOW_UP_TASK_TITLE}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void onCopy("insuranceIssueCopy", buildInsuranceIssueClipboardBlock(), "Copied insurance/records script", {
+                              taskTitle: "Copied insurance/records script",
+                              badge: "Hero flow",
+                              taskId: "hero-insurance",
+                            })
+                          }
+                          className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                        >
+                          <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
+                          Copy call script
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddInsuranceFollowUpTask}
+                          className="w-full rounded-[16px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:rounded-[18px] sm:text-sm"
+                        >
+                          Add follow-up task to plan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveInsuranceHeroTimeline}
+                          className={`${GLASS_BUTTON} w-full rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                        >
+                          Save to case timeline
+                        </button>
+                      </div>
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            appendDedupedPlanTasks(
+                              buildHeroInsuranceIssuePlanTasks(),
+                              "Added insurance/records prep reminders to your plan.",
+                              "Those reminders are already on your plan.",
+                            )
+                          }
+                          className={`${GLASS_BUTTON} w-full rounded-[14px] px-3 py-2 text-[11px] font-medium text-[#3f3a36] sm:text-xs`}
+                        >
+                          Add full insurance/records prep bundle to plan (optional)
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {(copied === "visitPrep" || copied === "documentGuideCopy" || copied === "insuranceIssueCopy") && (
                     <p className="mt-3 m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
                       Copied. Anchor did not send anything.
                     </p>
@@ -4843,6 +5230,78 @@ function ResultsView({
                       {visitPrepInlineNote}
                     </p>
                   )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {wordsSayModal && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setWordsSayModal(null)}
+                className="fixed inset-0 z-[60] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
+                role="presentation"
+              >
+                <motion.div
+                  initial={{ y: 48, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 32, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`${GLASS_PANEL} max-h-[min(80vh,520px)] w-full max-w-lg overflow-y-auto rounded-[20px] p-4 shadow-[0_24px_80px_rgba(36,34,48,0.18)] sm:rounded-[24px] sm:p-5`}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={wordsSayModal.label}
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <p className="m-0 text-[15px] font-semibold text-[#3f3a35] sm:text-base">{wordsSayModal.label}</p>
+                    <button
+                      type="button"
+                      onClick={() => setWordsSayModal(null)}
+                      className="shrink-0 rounded-full border border-[#e5ddd4] bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <p className="mt-3 m-0 text-[12px] leading-relaxed text-[#3f3a36] sm:text-sm">{wordsSayModal.script}</p>
+                  <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row">
+                    {wordsSayModal.guideRowId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const gid = wordsSayModal.guideRowId
+                          setWordsSayModal(null)
+                          onOpenToolPanel("plan")
+                          window.setTimeout(() => {
+                            if (gid) setGuideOpenId(gid)
+                          }, 0)
+                        }}
+                        className={`${GLASS_BUTTON} w-full rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1`}
+                      >
+                        Open in plan Guide me
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void onCopy("handoff", wordsSayModal.script, `Copied: ${wordsSayModal.label}`, {
+                          taskTitle: `Copied: ${wordsSayModal.label}`,
+                          badge: "Words to say",
+                          taskId: "words-say",
+                        })
+                      }
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-[16px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2.5 text-[12px] font-semibold text-white sm:flex-1"
+                    >
+                      <Copy className="h-4 w-4 shrink-0" />
+                      Copy words
+                    </button>
+                  </div>
+                  <p className="mt-2 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
+                    Preparation only — not sent from Anchor. Your care team confirms medical details.
+                  </p>
                 </motion.div>
               </motion.div>
             )}
@@ -5079,39 +5538,44 @@ function ResultsView({
           {workspaceTab === "tools" && toolPanel === "actions" && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
               <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
-              <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
-                Open any task in Tools → 72-hour plan and tap Guide me for exact words. These quick cards open the same guided sheet.
-              </p>
-              <div>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">THREE NEXT STEPS</p>
-                <div className="grid min-w-0 gap-1.5 sm:gap-2">
-                  {mirrorResult.actions.slice(0, 3).map((action, index) => (
-                    <motion.div
-                      key={`${action}-${index}`}
-                      initial={{ opacity: 0, x: -12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.12 + index * 0.08, duration: 0.45 }}
-                    >
-                      <ExpandableActionItem action={action} index={index} variant="compact" />
-                    </motion.div>
-                  ))}
-                </div>
+              <div className="min-w-0">
+                <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-base">Words to say</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">
+                  Short scripts you copy yourself — not the full 72-hour task list. Nothing is sent from Anchor.
+                </p>
               </div>
-              <div>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Quick scripts (demo)</p>
-                <div className="grid min-w-0 gap-2 sm:grid-cols-2 sm:gap-2.5">
-                  {DEMO_QUICK_GUIDE_ROWS.map((row) => (
-                    <button
-                      key={row.id}
-                      type="button"
-                      onClick={() => setGuideOpenId(row.id)}
-                      className={`${GLASS_BUTTON} rounded-[16px] p-3 text-left text-[#3f3a36] sm:rounded-[20px] sm:p-3.5`}
-                    >
-                      <span className="block text-[12px] font-medium leading-snug sm:text-sm">{row.title}</span>
-                      <span className="mt-1 block text-[10px] font-medium text-[#9b829c] sm:text-[11px]">Guide me · same sheet as Plan</span>
-                    </button>
-                  ))}
-                </div>
+              <div className="grid min-w-0 gap-2 sm:grid-cols-1 sm:gap-2.5">
+                {WORDS_TO_SAY_SCRIPT_DEFS.map((row) => (
+                  <div
+                    key={row.id}
+                    className={`${GLASS_PANEL} flex min-w-0 flex-col gap-2 rounded-[16px] border border-[#e8dfd8]/90 p-3 sm:rounded-[20px] sm:p-3.5`}
+                  >
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a36] sm:text-sm">{row.label}</p>
+                    <div className="flex min-w-0 flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWordsSayModal(row)}
+                        className={`${GLASS_BUTTON} rounded-full px-3 py-1.5 text-[11px] font-medium text-[#3f3a36] sm:text-xs`}
+                      >
+                        Open script
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void onCopy("handoff", row.script, `Copied: ${row.label}`, {
+                            taskTitle: `Copied: ${row.label}`,
+                            badge: "Words to say",
+                            taskId: "words-say",
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-full border border-[#b98da0]/45 bg-[#f5eef8]/90 px-3 py-1.5 text-[11px] font-medium text-[#4a3548] transition hover:bg-white sm:text-xs"
+                      >
+                        <Copy className="h-3.5 w-3.5 shrink-0" />
+                        Copy words
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
               <button
                 type="button"
@@ -5309,6 +5773,36 @@ function ResultsView({
                 </div>
               </div>
 
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Bring · missing · questions</p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                  <li className="relative pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                    <span className="font-semibold text-[#5f5a55]">Bring these · </span>
+                    Pathology notes, imaging summaries, med list, portal thread.
+                  </li>
+                  <li className="relative pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                    <span className="font-semibold text-[#5f5a55]">What is missing · </span>
+                    Ask what is still pending versus final before the next touchpoint.
+                  </li>
+                  <li className="relative pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                    <span className="font-semibold text-[#5f5a55]">Sample pathology questions · </span>
+                    Use the guided flow on Today → Understand a document for the short list.
+                  </li>
+                  <li className="relative pl-3 text-[#756f68] before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                    <span className="font-semibold text-[#5f5a55]">Later / if needed · </span>
+                    Second opinion packet and transfer hygiene stay folded at the bottom of this tab.
+                  </li>
+                </ul>
+              </div>
+
+              <details className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-3.5`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  Full visit packet, stacks, missing list, and sample pathology
+                  <span className="mt-1 block text-[10px] font-normal leading-snug text-[#756f68] sm:text-[11px]">
+                    Open when you want the longer checklist — Today keeps the hero flow lighter.
+                  </span>
+                </summary>
+                <div className="mt-3 grid min-w-0 gap-3 border-t border-[#ece4dc]/90 pt-3">
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-3.5`}>
                 <div className="mb-2 flex min-w-0 items-start gap-2">
                   <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" aria-hidden />
@@ -5463,6 +5957,8 @@ function ResultsView({
                   )}
                 </AnimatePresence>
               </div>
+                </div>
+              </details>
 
               <details className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
@@ -5771,9 +6267,14 @@ function ResultsView({
                 </div>
               </div>
 
-              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Support tasks</p>
-                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+              <details className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#3f3a36] sm:text-xs [&::-webkit-details-marker]:hidden">
+                  Optional support board
+                  <span className="mt-0.5 block text-[10px] font-normal leading-snug text-[#756f68] sm:text-[11px]">
+                    Three gentle columns if you want a lightweight task split — not required for the hero flows.
+                  </span>
+                </summary>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
                   Three gentle columns — you still choose who does what in real life. Persists with this local case.
                 </p>
                 <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-3">
@@ -5835,7 +6336,7 @@ function ResultsView({
                     </ul>
                   </div>
                 </div>
-              </div>
+              </details>
 
               <div className="rounded-[14px] border border-[#e5ddd4] bg-[#faf7f4]/90 px-3 py-2.5 text-[10px] leading-snug text-[#5f5a55] sm:rounded-[16px] sm:px-3.5 sm:py-3 sm:text-[11px] sm:leading-relaxed">
                 <p className="m-0 font-semibold text-[#3f3a36]">Boundaries</p>
@@ -5868,12 +6369,11 @@ function ResultsView({
                     {MEMORY_PROTO_BADGE}
                   </span>
                 </div>
-                <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{MEMORY_ANCHOR_ORGANIZED_LINE}</p>
                 <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_LOCAL_CONSENT_LINE}</p>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What Anchor is holding onto</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Case thread</p>
                 <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{memoryHoldingNarrative}</p>
                 <ul className="mt-2 m-0 list-none space-y-1 p-0 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px] sm:leading-relaxed">
                   <li>
@@ -5990,7 +6490,7 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Tasks completed</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Progress</p>
                 {completedPlanTaskIds.length === 0 ? (
                   <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">{MEMORY_EMPTY_TASKS_DONE}</p>
                 ) : (
@@ -6006,7 +6506,7 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Plan at a glance</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Tracking</p>
                 <p className="m-0 text-[12px] font-medium leading-snug text-[#3f3a36] sm:text-sm">{boardCountsLine}</p>
                 <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
                   Counts match the same buckets as your 72-hour plan in Tools.{" "}
@@ -6019,7 +6519,7 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Scripts and artifacts</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Saved scripts and artifacts</p>
                 {actionGuideDemoTimeline.length === 0 ? (
                   <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">{MEMORY_EMPTY_TIMELINE_ARTIFACTS}</p>
                 ) : (
@@ -6037,7 +6537,7 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Appointment handoff</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Handoff</p>
                 <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
                   Compact bullets you can paste for a family member or clinic admin — not sent by Anchor. Your care team still
                   confirms decisions. Not diagnosis or treatment recommendation language.
@@ -6105,7 +6605,7 @@ function ResultsView({
                 <div className="mb-2 flex min-w-0 items-start gap-2">
                   <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[#9b829c] sm:h-5 sm:w-5" />
                   <div className="min-w-0 flex-1">
-                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Care timeline</p>
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Timeline (collapsed when long)</p>
                     <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{MEMORY_CARE_TIMELINE_INTRO}</p>
                   </div>
                 </div>
@@ -6134,9 +6634,14 @@ function ResultsView({
                 )}
               </div>
 
-              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Later · Support snapshot</p>
-                <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#3f3a36] sm:text-xs [&::-webkit-details-marker]:hidden">
+                  Family support snapshot (optional)
+                  <span className="mt-0.5 block text-[10px] font-normal leading-snug text-[#756f68] sm:text-[11px]">
+                    Same data as Tools → Family — folded here to reduce repetition.
+                  </span>
+                </summary>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
                   From family support in Tools — local only, not sent. Open there to move cards or copy drafts.
                 </p>
                 <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
@@ -6164,7 +6669,7 @@ function ResultsView({
                 >
                   Open family support
                 </button>
-              </div>
+              </details>
 
               <ResultPacketCard icon={<HeartHandshake className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What Anchor heard (mirror)">
                 <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{mirrorResult.mirror}</p>
