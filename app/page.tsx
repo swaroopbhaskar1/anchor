@@ -177,6 +177,7 @@ import {
   TRUST_DEMO_STORAGE_CATEGORIES,
   TRUST_DEMO_STORAGE_NOTE,
   TRUST_DID_NOT_USE_BULLETS,
+  TRUST_FIRST_SCREEN_USED_SUMMARY,
   TRUST_HERO_PLAN_CONNECT_BULLETS,
   TRUST_HERO_PLAN_CONNECT_TITLE,
   TRUST_HOW_ANSWERED_STEPS,
@@ -1255,6 +1256,9 @@ export default function App() {
     setWorkspaceTab("today")
     setToolPanel(null)
     scheduleResultsCockpitScroll()
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" })
+    })
   }, [scheduleResultsCockpitScroll])
 
   const processRant = useCallback(async (transcript: string) => {
@@ -1441,7 +1445,7 @@ export default function App() {
       if (isBackupDemoMirror) {
         applySarahPlanFallback()
       } else {
-        setError("The 72-hour plan did not land. Try once more when you are ready.")
+        setError("Anchor had trouble building the live plan. You can try again, or use the backup demo to keep walking through.")
       }
     } finally {
       setIsPlanning(false)
@@ -1468,7 +1472,7 @@ export default function App() {
     } catch (err) {
       console.error(err)
       setUploadState("error")
-      setError("The pathology upload could not be read yet. You can still speak, or paste a few lines below.")
+      setError("Anchor had trouble reading the upload. You can still speak, or paste a few lines below.")
     } finally {
       event.target.value = ""
     }
@@ -3494,7 +3498,7 @@ function TaskActionGuideSheet({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[70] bg-[#1c1816]/55 backdrop-blur-[2px]"
+        className="fixed inset-0 z-[76] bg-[#1c1816]/55 backdrop-blur-[2px]"
         onClick={onClose}
       />
       <motion.div
@@ -3506,7 +3510,7 @@ function TaskActionGuideSheet({
         animate={{ y: 0 }}
         exit={{ y: "104%" }}
         transition={{ type: "spring", damping: 28, stiffness: 320 }}
-        className="fixed inset-x-0 bottom-0 z-[71] max-h-[min(82dvh,540px)] w-full max-w-full overflow-x-hidden overflow-y-auto rounded-t-[20px] border border-[#5c534d]/90 bg-gradient-to-b from-[#3f3935] via-[#35302c] to-[#2b2724] px-3 pb-6 pt-3 shadow-[0_-16px_48px_rgba(12,10,9,0.55)] sm:px-4 sm:pb-7 sm:pt-4"
+        className="fixed inset-x-0 bottom-0 z-[77] max-h-[min(82dvh,540px)] w-full max-w-full overflow-x-hidden overflow-y-auto rounded-t-[20px] border border-[#5c534d]/90 bg-gradient-to-b from-[#3f3935] via-[#35302c] to-[#2b2724] px-3 pb-6 pt-3 shadow-[0_-16px_48px_rgba(12,10,9,0.55)] sm:px-4 sm:pb-7 sm:pt-4"
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-white/10 pb-2.5">
@@ -4704,7 +4708,7 @@ const PITCH_GUIDE_STEPS: readonly {
       "Anchor does not diagnose from a report. It turns a report into questions, missing pieces, and care-team confirmation points.",
     whatToSay:
       "The product is safer because it says what the document cannot confirm.",
-    primaryCta: "Open Document Agent",
+    primaryCta: "Open document guide",
   },
   {
     title: "Fight the admin battle",
@@ -4712,7 +4716,7 @@ const PITCH_GUIDE_STEPS: readonly {
       "Anchor turns denial, prior authorization, or missing-records confusion into a script, draft, checklist, and follow-up task.",
     whatToSay:
       "This is where Anchor becomes operational. It helps with the friction that delays care.",
-    primaryCta: "Open Insurance Agent",
+    primaryCta: "Insurance & records help",
   },
   {
     title: "Anchor remembers the thread",
@@ -4733,9 +4737,9 @@ const PITCH_GUIDE_STEPS: readonly {
   {
     title: "Close the loop",
     judgeNotice:
-      "Anchor is not a cancer chatbot. It is a caregiver workflow: concern → questions → script → plan → outcome → saved case.",
+      "Anchor is not trying to be an autonomous doctor. It is a caregiver operating system: concern → questions → exact words → 72-hour plan → saved case.",
     whatToSay:
-      "The goal is not autonomous medicine. The goal is to make the caregiver less alone, more prepared, and safer in the questions they ask.",
+      "The goal is not to replace the care team. The goal is to make the caregiver safer, clearer, and less alone before they reach the care team.",
     primaryCta: "Finish demo",
   },
 ]
@@ -4855,6 +4859,8 @@ function ResultsView({
   const [insDenialOut, setInsDenialOut] = useState<InsuranceDenialAgentOutput | null>(null)
 
   const [pitchModeOpen, setPitchModeOpen] = useState(false)
+  const [pitchMinimized, setPitchMinimized] = useState(false)
+  const pitchModeOpenRef = useRef(false)
   const [pitchStepIndex, setPitchStepIndex] = useState(0)
   const [pitchStep5InlineTip, setPitchStep5InlineTip] = useState<string | null>(null)
   const [highlightedDemoTarget, setHighlightedDemoTarget] = useState<PitchHighlightTarget | null>(null)
@@ -4877,6 +4883,10 @@ function ResultsView({
     const t = window.setTimeout(() => setHighlightedDemoTarget(null), 2000)
     return () => window.clearTimeout(t)
   }, [highlightedDemoTarget])
+
+  useEffect(() => {
+    pitchModeOpenRef.current = pitchModeOpen
+  }, [pitchModeOpen])
 
   useEffect(() => {
     if (todayHeroModal !== "document") {
@@ -5091,6 +5101,7 @@ function ResultsView({
   }
 
   const openPhoneMode = useCallback((s: PhoneModeScript) => {
+    if (pitchModeOpenRef.current) setPitchMinimized(true)
     setTodayHeroModal(null)
     setFuturePreviewModal(null)
     setWordsSayModal(null)
@@ -5133,7 +5144,7 @@ function ResultsView({
             setPitchStep5InlineTip(null)
             setPhoneReviewPhaseNudge((n) => n + 1)
           } else {
-            setPitchStep5InlineTip("Inside Phone Mode, use Save outcome after the call.")
+            setPitchStep5InlineTip("In Phone Mode, advance lines, then use Save outcome after the call. Nothing sends from Anchor.")
           }
           break
         case 5:
@@ -5167,6 +5178,7 @@ function ResultsView({
           break
         case 10:
           setPitchModeOpen(false)
+          setPitchMinimized(false)
           break
         default:
           break
@@ -5696,7 +5708,10 @@ function ResultsView({
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setPitchModeOpen(true)}
+                  onClick={() => {
+                    setPitchMinimized(false)
+                    setPitchModeOpen(true)
+                  }}
                   className="inline-flex max-w-full items-center justify-center rounded-full border border-[#b98da0]/70 bg-[#f5eef8]/95 px-3 py-1.5 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
                 >
                   Guide me through the demo
@@ -5728,7 +5743,10 @@ function ResultsView({
                 {isSarahVoiceCase && (
                   <button
                     type="button"
-                    onClick={() => setPitchModeOpen(true)}
+                    onClick={() => {
+                      setPitchMinimized(false)
+                      setPitchModeOpen(true)
+                    }}
                     className="mt-2 w-fit max-w-full break-words text-left text-[10px] font-medium text-[#8f7e9b] underline decoration-[#c9b8d8]/50 underline-offset-2 hover:text-[#5c4a62] sm:text-[11px]"
                   >
                     Guided demo path (optional)
@@ -5833,7 +5851,7 @@ function ResultsView({
                       onClick={() => openHeroModal("document")}
                       className="mt-3 w-full rounded-[14px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px] sm:text-sm"
                     >
-                      Open Document Agent
+                      Open document guide
                     </button>
                   </div>
 
@@ -5857,7 +5875,7 @@ function ResultsView({
                       onClick={() => openHeroModal("insurance")}
                       className="mt-3 w-full rounded-[14px] border border-[#b98da0]/45 bg-white/90 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] shadow-sm transition hover:bg-white sm:rounded-[16px] sm:text-sm"
                     >
-                      Open Insurance Agent
+                      Insurance & records help
                     </button>
                   </div>
                 </div>
@@ -6105,7 +6123,7 @@ function ResultsView({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setTodayHeroModal(null)}
-                className="fixed inset-0 z-[60] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
+                className="fixed inset-0 z-[74] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
                 role="presentation"
               >
                 <motion.div
@@ -7128,7 +7146,7 @@ function ResultsView({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setWordsSayModal(null)}
-                className="fixed inset-0 z-[60] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
+                className="fixed inset-0 z-[74] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
                 role="presentation"
               >
                 <motion.div
@@ -7207,7 +7225,7 @@ function ResultsView({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setFuturePreviewModal(null)}
-                className="fixed inset-0 z-[60] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
+                className="fixed inset-0 z-[74] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
                 role="presentation"
               >
                 <motion.div
@@ -8526,14 +8544,16 @@ function ResultsView({
               }`}
             >
               <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
-              <div className="min-w-0 max-w-full">
-                <p className="m-0 text-[16px] font-semibold text-[#3f3a35] sm:text-lg">{TRUST_PANEL_TITLE}</p>
-                <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{TRUST_PANEL_SUBTITLE}</p>
-                <span className="mt-2 inline-flex max-w-full rounded-full border border-[#c9b8d8]/90 bg-white/85 px-2.5 py-1 text-[10px] font-semibold leading-snug text-[#6f6280] sm:text-[11px]">
+              <div className="flex min-w-0 max-w-full flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="min-w-0 max-w-full flex-1">
+                  <p className="m-0 text-[16px] font-semibold leading-snug text-[#3f3a35] sm:text-lg">{TRUST_PANEL_TITLE}</p>
+                  <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{TRUST_PANEL_SUBTITLE}</p>
+                </div>
+                <span className="inline-flex w-fit max-w-full shrink-0 self-start rounded-full border border-[#c9b8d8]/90 bg-white/85 px-2.5 py-1 text-[10px] font-semibold leading-snug text-[#6f6280] sm:text-[11px]">
                   {TRUST_PANEL_BADGE}
                 </span>
               </div>
-              <div className="rounded-[14px] border border-[#2a2420]/90 bg-[#2a2420] px-3 py-2.5 text-[11px] leading-snug text-[#fdf6f0] sm:text-xs sm:leading-relaxed">
+              <div className="rounded-[14px] border border-[#e8dfd8] bg-[#faf7f4]/95 px-3 py-2 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">
                 {TRUST_NOT_MEDICAL_LINE}
               </div>
 
@@ -8549,36 +8569,47 @@ function ResultsView({
                     </li>
                   ))}
                 </ol>
-                <p className="mt-3 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{TRUST_NOT_CHATBOT_SUMMARY}</p>
+                <details className="mt-3 rounded-[12px] border border-[#ece4dc] bg-white/75 px-2.5 py-2 sm:px-3">
+                  <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#4a3548] sm:text-xs [&::-webkit-details-marker]:hidden">
+                    Why this is not a generic chatbot
+                  </summary>
+                  <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{TRUST_NOT_CHATBOT_SUMMARY}</p>
+                </details>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">What Anchor used</p>
-                <div className="mt-2 grid min-w-0 gap-2">
-                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
-                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_CASE_TITLE}</p>
-                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_CASE_BODY}</p>
-                    <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{TRUST_SOURCE_CARD_CASE_NOTE}</p>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">{TRUST_FIRST_SCREEN_USED_SUMMARY}</p>
+                <details className="mt-3 rounded-[12px] border border-[#ece4dc] bg-white/75 p-2.5 sm:p-3">
+                  <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#4a3548] sm:text-xs [&::-webkit-details-marker]:hidden">
+                    See each source lane (details)
+                  </summary>
+                  <div className="mt-2 grid min-w-0 gap-2">
+                    <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_CASE_TITLE}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_CASE_BODY}</p>
+                      <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{TRUST_SOURCE_CARD_CASE_NOTE}</p>
+                    </div>
+                    <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_CLINICAL_TITLE}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_CLINICAL_BODY}</p>
+                      <p className="mt-1.5 m-0 text-[10px] font-semibold leading-snug text-[#6f5a55] sm:text-[11px]">{TRUST_SOURCE_CARD_CLINICAL_BOUNDARY}</p>
+                    </div>
+                    <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_WISDOM_TITLE}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_WISDOM_BODY}</p>
+                      <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{TRUST_SOURCE_CARD_WISDOM_SEPARATION}</p>
+                    </div>
+                    <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_RECORDS_TITLE}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_RECORDS_BODY}</p>
+                    </div>
+                    <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_MODEL_TITLE}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_MODEL_BODY}</p>
+                    </div>
                   </div>
-                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
-                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_CLINICAL_TITLE}</p>
-                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_CLINICAL_BODY}</p>
-                    <p className="mt-1.5 m-0 text-[10px] font-semibold leading-snug text-[#6f5a55] sm:text-[11px]">{TRUST_SOURCE_CARD_CLINICAL_BOUNDARY}</p>
-                  </div>
-                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
-                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_WISDOM_TITLE}</p>
-                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_WISDOM_BODY}</p>
-                    <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{TRUST_SOURCE_CARD_WISDOM_SEPARATION}</p>
-                  </div>
-                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
-                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_RECORDS_TITLE}</p>
-                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_RECORDS_BODY}</p>
-                  </div>
-                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
-                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_MODEL_TITLE}</p>
-                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_MODEL_BODY}</p>
-                  </div>
-                </div>
+                </details>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
@@ -8830,6 +8861,7 @@ function ResultsView({
                   type="button"
                   onClick={() => {
                     setPitchStepIndex(9)
+                    setPitchMinimized(false)
                     setPitchModeOpen(true)
                   }}
                   className="mt-2 w-full rounded-[12px] border border-[#b98da0]/55 bg-white/90 px-3 py-2 text-left text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
@@ -9237,137 +9269,182 @@ function ResultsView({
       {pitchModeOpen && (() => {
         const safeIdx = Math.min(Math.max(pitchStepIndex, 0), PITCH_GUIDE_STEPS.length - 1)
         const step = PITCH_GUIDE_STEPS[safeIdx]!
+        const showFullPitchPanel = !pitchMinimized && !phoneModeOpen
+        const dismissPitchGuide = () => {
+          setPitchModeOpen(false)
+          setPitchMinimized(false)
+        }
         return (
           <>
-            <button
-              type="button"
-              aria-label="Close demo guide"
-              className="fixed inset-0 z-[69] bg-[#1c1614]/20 sm:hidden"
-              onClick={() => setPitchModeOpen(false)}
-            />
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="pitch-guide-title"
-              className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[min(52vh,28rem)] min-h-0 min-w-0 flex-col rounded-t-[18px] border border-[#e5ddd4] bg-[#fdfbf8] shadow-[0_-8px_40px_rgba(30,24,20,0.12)] sm:bottom-5 sm:left-auto sm:right-5 sm:top-auto sm:max-h-[min(78vh,32rem)] sm:w-[min(100vw-1rem,22.5rem)] sm:rounded-[20px]"
-            >
-              <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[#ebe3dc] px-3 py-2.5 sm:px-4 sm:py-3">
-                <div className="min-w-0 flex-1 pr-1">
-                  <p id="pitch-guide-title" className="m-0 text-[12px] font-semibold leading-snug text-[#2a2420] sm:text-sm">
-                    Anchor demo path
-                  </p>
-                  <p className="mt-1 m-0 text-[10px] leading-snug text-[#756f68] sm:text-[11px]">
-                    Follow the story: from one messy caregiver concern to scripts, tasks, saved context, and safety boundaries.
-                  </p>
-                  <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
-                    <span className="inline-flex max-w-full shrink rounded-full border border-[#c9b8d8]/90 bg-white/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#6f6280] sm:text-[10px]">
-                      Demo guide · navigation only
-                    </span>
-                    <span className="shrink-0 text-[10px] text-[#756f68] sm:text-[11px]">
-                      Step {safeIdx + 1} of {PITCH_GUIDE_STEP_COUNT}
-                    </span>
-                  </div>
-                </div>
+            {showFullPitchPanel && (
+              <>
                 <button
                   type="button"
-                  onClick={() => setPitchModeOpen(false)}
-                  className="shrink-0 rounded-full border border-[#d8cec5] bg-white px-2.5 py-1 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
+                  aria-label="Close demo guide"
+                  className="fixed inset-0 z-[62] bg-[#1c1614]/20 sm:hidden"
+                  onClick={dismissPitchGuide}
+                />
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="pitch-guide-title"
+                  className="fixed inset-x-0 bottom-0 z-[63] flex max-h-[min(38vh,19rem)] min-h-0 min-w-0 flex-col rounded-t-[18px] border border-[#e5ddd4] bg-[#fdfbf8] shadow-[0_-8px_40px_rgba(30,24,20,0.12)] min-[700px]:max-h-[min(44vh,22rem)] sm:bottom-5 sm:left-auto sm:right-5 sm:top-auto sm:max-h-[min(72vh,30rem)] sm:w-[min(100vw-1rem,22.5rem)] sm:rounded-[20px]"
                 >
-                  Close
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-2.5">
-                <div className="mb-2 h-1.5 w-full min-w-0 overflow-hidden rounded-full bg-[#ece4dc]">
-                  <div
-                    className="h-full max-w-full rounded-full bg-[#b98da0] transition-[width] duration-300"
-                    style={{ width: `${((safeIdx + 1) / PITCH_GUIDE_STEP_COUNT) * 100}%` }}
-                  />
-                </div>
-                <p className="m-0 text-[10px] leading-snug text-[#6f6280] sm:text-[11px]">
-                  This guide only navigates the demo. It does not change medical facts, contact anyone, or send anything.
-                </p>
-                <p className="mt-3 m-0 break-words text-[14px] font-semibold leading-snug text-[#2a2420] sm:text-[15px]">{step.title}</p>
-                <p className="mt-2 m-0 break-words text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
-                  <span className="font-semibold text-[#5f5a55]">Judge should notice · </span>
-                  {step.judgeNotice}
-                </p>
-                {safeIdx === 10 && (
-                  <div className="mt-3 rounded-[14px] border border-[#d8cec5] bg-[#faf7f4]/90 p-2.5 sm:p-3">
-                    <p className="m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
-                      Anchor turns the first 72 hours from panic into a guided workflow. It does not replace doctors. It helps
-                      families prepare for them.
+                  <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[#ebe3dc] px-2.5 py-2 sm:px-4 sm:py-3">
+                    <div className="min-w-0 flex-1 pr-1">
+                      <p id="pitch-guide-title" className="m-0 text-[12px] font-semibold leading-snug text-[#2a2420] sm:text-sm">
+                        Anchor demo path
+                      </p>
+                      <p className="mt-0.5 m-0 text-[10px] leading-snug text-[#756f68] sm:text-[11px]">
+                        Step {safeIdx + 1} of {PITCH_GUIDE_STEP_COUNT} ·{" "}
+                        <span className="font-medium text-[#6f6280]">Demo guide · navigation only</span>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={dismissPitchGuide}
+                      className="shrink-0 rounded-full border border-[#d8cec5] bg-white px-2.5 py-1.5 text-[10px] font-semibold text-[#5f5a55] sm:text-[11px]"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2.5 pb-2.5 pt-2 sm:px-4 sm:pb-4 sm:pt-2.5">
+                    <div className="mb-2 h-1.5 w-full min-w-0 overflow-hidden rounded-full bg-[#ece4dc]">
+                      <div
+                        className="h-full max-w-full rounded-full bg-[#b98da0] transition-[width] duration-300"
+                        style={{ width: `${((safeIdx + 1) / PITCH_GUIDE_STEP_COUNT) * 100}%` }}
+                      />
+                    </div>
+                    <p className="m-0 break-words text-[14px] font-semibold leading-snug text-[#2a2420] sm:text-[15px]">{step.title}</p>
+                    <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#6f6280] sm:text-[11px]">
+                      This guide only navigates the demo. It does not change medical facts, contact anyone, or send anything.
+                    </p>
+                    <p className="mt-2 m-0 break-words text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                      <span className="font-semibold text-[#5f5a55]">Judge should notice · </span>
+                      {step.judgeNotice}
+                    </p>
+                    {safeIdx === 10 && (
+                      <div className="mt-3 space-y-2 rounded-[14px] border border-[#d8cec5] bg-[#faf7f4]/90 p-2.5 sm:p-3">
+                        <p className="m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                          Anchor is not trying to be an autonomous doctor. It is a caregiver operating system: concern →
+                          questions → exact words → 72-hour plan → saved case.
+                        </p>
+                        <p className="m-0 text-[10px] leading-snug text-[#756f68] sm:text-[11px] sm:leading-relaxed">
+                          The goal is not to replace the care team. The goal is to make the caregiver safer, clearer, and less
+                          alone before they reach the care team.
+                        </p>
+                      </div>
+                    )}
+                    {safeIdx === 4 && pitchStep5InlineTip && (
+                      <p className="mt-2 m-0 text-[10px] leading-snug text-[#8b6914] sm:text-[11px]" role="status">
+                        {pitchStep5InlineTip}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => runPitchPrimaryAction(safeIdx)}
+                      className="mt-3 w-full min-w-0 rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-3 text-[13px] font-semibold leading-snug text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
+                    >
+                      {step.primaryCta}
+                    </button>
+                    <details className="mt-2 rounded-[12px] border border-[#ece4dc] bg-white/80 px-2.5 py-2 sm:px-3">
+                      <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#4a3548] sm:text-xs [&::-webkit-details-marker]:hidden">
+                        What to say
+                      </summary>
+                      <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px] sm:leading-relaxed">{step.whatToSay}</p>
+                    </details>
+                    <details className="mt-2 rounded-[12px] border border-[#ece4dc] bg-white/80 px-2.5 py-2 sm:px-3">
+                      <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#4a3548] sm:text-xs [&::-webkit-details-marker]:hidden">
+                        Full demo checklist
+                      </summary>
+                      <ol className="mt-2 m-0 list-decimal space-y-1 pl-4 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">
+                        {PITCH_GUIDE_STEPS.map((s, i) => (
+                          <li key={s.title} className={i === safeIdx ? "font-semibold text-[#3f3a35]" : ""}>
+                            {s.title}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                    <details className="mt-2 rounded-[12px] border border-[#ece4dc] bg-white/80 px-2.5 py-2 sm:px-3">
+                      <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#4a3548] sm:text-xs [&::-webkit-details-marker]:hidden">
+                        90-second presenter checklist
+                      </summary>
+                      <ol className="mt-2 m-0 list-decimal space-y-1 pl-4 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">
+                        <li>Sarah concern</li>
+                        <li>Hero battles</li>
+                        <li>Visit prep</li>
+                        <li>Phone Mode</li>
+                        <li>72-hour plan</li>
+                        <li>Document guide</li>
+                        <li>Insurance & records</li>
+                        <li>Saved case</li>
+                        <li>How Anchor works</li>
+                      </ol>
+                    </details>
+                    <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        disabled={safeIdx <= 0}
+                        onClick={() => setPitchStepIndex((i) => Math.max(0, i - 1))}
+                        className="min-w-0 w-full rounded-[12px] border border-[#d8cec5] bg-white px-2 py-2.5 text-[11px] font-medium text-[#3f3a35] disabled:cursor-not-allowed disabled:opacity-40 sm:flex-1 sm:px-3 sm:text-xs"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        disabled={safeIdx >= PITCH_GUIDE_STEPS.length - 1}
+                        onClick={() => setPitchStepIndex((i) => Math.min(PITCH_GUIDE_STEPS.length - 1, i + 1))}
+                        className="min-w-0 w-full rounded-[12px] border border-[#8a5f72] bg-[#f5eef8]/95 px-2 py-2.5 text-[11px] font-semibold text-[#4a3548] disabled:cursor-not-allowed disabled:opacity-40 sm:flex-1 sm:px-3 sm:text-xs"
+                      >
+                        Next
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={dismissPitchGuide}
+                      className="mt-2 w-full rounded-[12px] border border-[#d8cec5] bg-white/90 py-2.5 text-[11px] font-medium text-[#5f5a55] sm:text-xs"
+                    >
+                      Close guide
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPitchStepIndex(0)
+                      }}
+                      className="mt-2 w-full text-left text-[10px] font-medium text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-2 sm:text-[11px]"
+                    >
+                      Reset demo path
+                    </button>
+                    <p className="m-0 mt-1 text-[9px] leading-snug text-[#9b9290] sm:text-[10px]">
+                      Reset demo path does not clear the case.
                     </p>
                   </div>
-                )}
-                {safeIdx === 4 && pitchStep5InlineTip && (
-                  <p className="mt-2 m-0 text-[10px] leading-snug text-[#8b6914] sm:text-[11px]" role="status">
-                    {pitchStep5InlineTip}
+                </div>
+              </>
+            )}
+            {pitchMinimized && !phoneModeOpen && (
+              <div className="fixed bottom-3 left-2 right-2 z-[73] min-w-0 sm:bottom-5 sm:left-auto sm:right-5 sm:max-w-sm">
+                <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-[#e5ddd4] bg-[#fdfbf8]/98 px-3 py-2.5 shadow-[0_6px_24px_rgba(30,24,20,0.14)] backdrop-blur-sm">
+                  <p className="min-w-0 flex-1 text-[11px] font-medium leading-snug text-[#3f3a35]">
+                    Demo guide paused · Step {safeIdx + 1} of {PITCH_GUIDE_STEP_COUNT}
                   </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => runPitchPrimaryAction(safeIdx)}
-                  className="mt-3 w-full min-w-0 rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-3 text-[13px] font-semibold leading-snug text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
-                >
-                  {step.primaryCta}
-                </button>
-                <details className="mt-2 rounded-[12px] border border-[#ece4dc] bg-white/80 px-2.5 py-2 sm:px-3">
-                  <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#4a3548] sm:text-xs [&::-webkit-details-marker]:hidden">
-                    What to say
-                  </summary>
-                  <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px] sm:leading-relaxed">{step.whatToSay}</p>
-                </details>
-                <details className="mt-2 rounded-[12px] border border-[#ece4dc] bg-white/80 px-2.5 py-2 sm:px-3">
-                  <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#4a3548] sm:text-xs [&::-webkit-details-marker]:hidden">
-                    Full demo checklist
-                  </summary>
-                  <ol className="mt-2 m-0 list-decimal space-y-1 pl-4 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">
-                    {PITCH_GUIDE_STEPS.map((s, i) => (
-                      <li key={s.title} className={i === safeIdx ? "font-semibold text-[#3f3a35]" : ""}>
-                        {s.title}
-                      </li>
-                    ))}
-                  </ol>
-                </details>
-                <div className="mt-3 flex min-w-0 flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={safeIdx <= 0}
-                    onClick={() => setPitchStepIndex((i) => Math.max(0, i - 1))}
-                    className="min-w-0 flex-1 rounded-[12px] border border-[#d8cec5] bg-white px-2 py-2 text-[11px] font-medium text-[#3f3a35] disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none sm:px-3 sm:text-xs"
+                    onClick={() => setPitchMinimized(false)}
+                    className="shrink-0 rounded-full border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-1.5 text-[10px] font-semibold text-white sm:text-[11px]"
                   >
-                    Previous
+                    Continue
                   </button>
                   <button
                     type="button"
-                    disabled={safeIdx >= PITCH_GUIDE_STEPS.length - 1}
-                    onClick={() => setPitchStepIndex((i) => Math.min(PITCH_GUIDE_STEPS.length - 1, i + 1))}
-                    className="min-w-0 flex-1 rounded-[12px] border border-[#8a5f72] bg-[#f5eef8]/95 px-2 py-2 text-[11px] font-semibold text-[#4a3548] disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none sm:px-3 sm:text-xs"
+                    onClick={dismissPitchGuide}
+                    className="shrink-0 text-[10px] font-medium text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-2 sm:text-[11px]"
                   >
-                    Next
+                    Dismiss
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPitchModeOpen(false)}
-                  className="mt-2 w-full rounded-[12px] border border-[#d8cec5] bg-white/90 py-2 text-[11px] font-medium text-[#5f5a55] sm:text-xs"
-                >
-                  Close guide
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPitchStepIndex(0)
-                  }}
-                  className="mt-2 w-full text-left text-[10px] font-medium text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-2 sm:text-[11px]"
-                >
-                  Reset demo path
-                </button>
-                <p className="m-0 mt-1 text-[9px] leading-snug text-[#9b9290] sm:text-[10px]">
-                  Reset demo path does not clear the case.
-                </p>
               </div>
-            </div>
+            )}
           </>
         )
       })()}
@@ -9392,8 +9469,7 @@ function ResultsView({
         className="mt-3 rounded-[16px] border border-[#d8cec5]/80 bg-[#faf7f4]/90 px-3 py-2.5 text-[11px] leading-snug text-[#5f5a55] sm:mt-4 sm:rounded-[20px] sm:px-4 sm:py-3 sm:text-xs sm:leading-relaxed"
       >
         <p className="m-0">
-          Anchor can help prepare NCCN-aware questions and organize next steps. It does not diagnose, prescribe, choose
-          treatment, confirm stage, or replace your care team.
+          NCCN-aware preparation — your care team decides what applies. For boundaries and storage, open How Anchor works.
         </p>
         {memoryTimelineLowRisk && (
           <button
@@ -9857,7 +9933,7 @@ function ClearMyHeadScreen({ cancerType }: { cancerType: CancerType }) {
       setResult((await response.json()) as MirrorResult)
     } catch (err) {
       console.error(err)
-      setError("Anchor could not untangle that thought yet. Try again in a moment.")
+      setError("Anchor had trouble with that thought. You can try again in a moment.")
     } finally {
       setIsThinking(false)
     }
