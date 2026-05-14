@@ -438,17 +438,37 @@ export function buildAdaptiveTasksFromCustomPlanNote(note: string): StoredAdapti
 export const ASK_ANCHOR_SUBTITLE =
   "Case-aware follow-up prep on this device — questions and plain-language explanations to take to your care team. Nothing is sent from Anchor."
 
-/** Ask tab quick chips (id + label). */
+/** Ask tab quick chips (stable id + label). Clicks must key off `id`, not label text. */
 export const FOLLOW_UP_CHIP_DEFS = [
-  { id: "explain-simply", label: "Explain this simply" },
-  { id: "ask-tomorrow", label: "What should I ask tomorrow?" },
-  { id: "term-mean", label: "What does this term mean?" },
-  { id: "phone-words", label: "What should I say on the phone?" },
-  { id: "what-changed", label: "What changed after the new information?" },
-  { id: "urgent-vs-wait", label: "What is urgent and what can wait?" },
-  { id: "summarize-family", label: "Summarize this for my family" },
-  { id: "write-down", label: "What should I write down?" },
-  { id: "not-decide-yet", label: "What should I not decide yet?" },
+  { id: "explain_simple", label: "Explain this simply" },
+  { id: "ask_tomorrow", label: "What should I ask tomorrow?" },
+  { id: "term_meaning", label: "What does this term mean?" },
+  { id: "phone_script", label: "What should I say on the phone?" },
+  { id: "what_changed", label: "What changed after the new information?" },
+  { id: "urgent_vs_wait", label: "What is urgent and what can wait?" },
+  { id: "family_summary", label: "Summarize this for my family" },
+  { id: "write_down", label: "What should I write down?" },
+  { id: "not_decide_yet", label: "What should I not decide yet?" },
 ] as const
 
 export type FollowUpChipId = (typeof FOLLOW_UP_CHIP_DEFS)[number]["id"]
+
+/** Persisted snapshots before Prompt 5.1 used hyphen ids — map when restoring. */
+export const LEGACY_FOLLOW_UP_CHIP_ID_MAP: Record<string, FollowUpChipId> = {
+  "explain-simply": "explain_simple",
+  "ask-tomorrow": "ask_tomorrow",
+  "term-mean": "term_meaning",
+  "phone-words": "phone_script",
+  "what-changed": "what_changed",
+  "urgent-vs-wait": "urgent_vs_wait",
+  "summarize-family": "family_summary",
+  "write-down": "write_down",
+  "not-decide-yet": "not_decide_yet",
+}
+
+export function normalizeFollowUpChipKind(kind: string): FollowUpChipId | "custom" | null {
+  if (kind === "custom") return "custom"
+  if (FOLLOW_UP_CHIP_DEFS.some((c) => c.id === kind)) return kind as FollowUpChipId
+  const mapped = LEGACY_FOLLOW_UP_CHIP_ID_MAP[kind]
+  return mapped ?? null
+}

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { ChangeEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   ArrowLeft,
@@ -46,6 +46,7 @@ import {
   FOLLOW_UP_CHIP_DEFS,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
+  normalizeFollowUpChipKind,
   type AdaptivePlanTaskInitialStatus,
   type FollowUpChipId,
   type NightNoteContent,
@@ -200,15 +201,16 @@ function isResultWorkspaceTab(value: unknown): value is ResultWorkspaceTab {
 }
 
 function isFollowUpResponseKind(value: unknown): value is FollowUpResponseKind {
-  if (value === "custom") return true
-  return FOLLOW_UP_CHIP_DEFS.some((c) => c.id === value)
+  if (typeof value !== "string") return false
+  return normalizeFollowUpChipKind(value) !== null
 }
 
 function isFollowUpResponseItem(value: unknown): value is FollowUpResponseItem {
   if (!value || typeof value !== "object") return false
   const o = value as Record<string, unknown>
   if (typeof o.id !== "string" || typeof o.timestamp !== "string") return false
-  if (!isFollowUpResponseKind(o.kind)) return false
+  const normalizedKind = typeof o.kind === "string" ? normalizeFollowUpChipKind(o.kind) : null
+  if (!normalizedKind) return false
   if (typeof o.questionLabel !== "string" || typeof o.title !== "string" || typeof o.answer !== "string") return false
   if (typeof o.safetyFooter !== "string") return false
   if (o.caregiverMeaning != null && typeof o.caregiverMeaning !== "string") return false
@@ -689,7 +691,7 @@ export default function App() {
     void init()
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!hydrated) return
     const raw = window.localStorage.getItem(ANCHOR_DEMO_CASE_KEY)
     if (!raw) return
@@ -708,7 +710,8 @@ export default function App() {
       const relStr = typeof relRaw === "string" ? relRaw : null
       if (relStr != null && relStr !== "" && !isRelationship(relStr)) return
 
-      const updatesRaw = o.caseUpdates
+      const rec = o as Record<string, unknown>
+      const updatesRaw = rec.caseUpdates ?? rec.caseInformationUpdates
       const caseUpdates = Array.isArray(updatesRaw) ? updatesRaw.filter(isDemoCaseUpdate) : []
 
       setCaregiverName(typeof nameRaw === "string" ? nameRaw : "")
@@ -733,7 +736,14 @@ export default function App() {
       if (isResultWorkspaceTab(tabRaw)) setActiveResultTab(tabRaw)
       else setActiveResultTab("overview")
       const fuRaw = o.followUpResponses
-      const followUps = Array.isArray(fuRaw) ? fuRaw.filter(isFollowUpResponseItem) : []
+      const followUpsRaw = Array.isArray(fuRaw) ? fuRaw.filter(isFollowUpResponseItem) : []
+      const followUps: FollowUpResponseItem[] = followUpsRaw
+        .map((it) => {
+          const nk = normalizeFollowUpChipKind(it.kind)
+          if (!nk) return null
+          return nk === it.kind ? it : { ...it, kind: nk }
+        })
+        .filter((x): x is FollowUpResponseItem => x != null)
       setFollowUpResponses(followUps)
       const snip = o.lastTranscriptSnippet
       setResultsTranscriptEcho(typeof snip === "string" ? snip.slice(0, 500) : "")
@@ -759,7 +769,16 @@ export default function App() {
         planResult,
         isBackupDemoMirror,
         showExampleOutput,
-        lastTranscriptSnippet: latestUserLine?.slice(0, 500),
+        lastTranscriptSnippet: (() => {
+          const line = latestUserLine?.trim()
+          if (line) return line.slice(0, 500)
+          const echo = resultsTranscriptEcho.trim()
+          if (echo) return echo.slice(0, 500)
+          if (isBackupDemoMirror || mirrorResult.fearQuote.trim() === SARAH_DEMO_CONCERN.trim()) {
+            return SARAH_DEMO_CONCERN
+          }
+          return mirrorResult.fearQuote.trim().slice(0, 500)
+        })(),
         caseUpdates: caseInformationUpdates,
         completedPlanTaskIds,
         adaptivePlanTasks,
@@ -787,6 +806,7 @@ export default function App() {
     phase,
     planResult,
     relationship,
+    resultsTranscriptEcho,
     showExampleOutput,
   ])
 
@@ -912,9 +932,11 @@ export default function App() {
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
 
-    const useSarahFallbackMirror = () => {
+    const useSarahFallbackMirror = (echoFromUser?: string) => {
       setMirrorResult(SARAH_MIRROR_RESULT)
       setIsBackupDemoMirror(true)
+      const echo = (echoFromUser?.trim() || SARAH_DEMO_CONCERN).slice(0, 500)
+      setResultsTranscriptEcho(echo)
       setPhase("results")
     }
 
@@ -940,12 +962,12 @@ export default function App() {
         ])
       } catch (networkErr) {
         console.error(networkErr)
-        useSarahFallbackMirror()
+        useSarahFallbackMirror(transcript)
         return
       }
 
       if (!mirrorRes.ok) {
-        useSarahFallbackMirror()
+        useSarahFallbackMirror(transcript)
         return
       }
 
@@ -953,22 +975,23 @@ export default function App() {
       try {
         parsed = JSON.parse(await mirrorRes.text()) as unknown
       } catch {
-        useSarahFallbackMirror()
+        useSarahFallbackMirror(transcript)
         return
       }
 
       if (!isValidMirrorResult(parsed)) {
-        useSarahFallbackMirror()
+        useSarahFallbackMirror(transcript)
         return
       }
 
       setMirrorResult(parsed)
       setIsBackupDemoMirror(false)
       rememberFear(parsed)
+      setResultsTranscriptEcho(transcript.trim().slice(0, 500))
       setPhase("results")
     } catch (err) {
       console.error(err)
-      useSarahFallbackMirror()
+      useSarahFallbackMirror(transcript)
     }
   }, [cancerType, lovedOne, pathologyText, rememberFear, sessionId, userId])
 
@@ -983,6 +1006,7 @@ export default function App() {
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
     setActiveResultTab("overview")
+    setResultsTranscriptEcho(SARAH_DEMO_CONCERN)
     setPhase("results")
   }, [])
 
@@ -1326,7 +1350,9 @@ export default function App() {
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
-    window.localStorage.removeItem(ANCHOR_DEMO_CASE_KEY)
+    setFollowUpResponses([])
+    setActiveResultTab("overview")
+    setResultsTranscriptEcho("")
   }
 
   function resetMagicLink() {
@@ -2198,7 +2224,7 @@ function formatFollowUpClipboard(item: FollowUpResponseItem): string {
     item.caregiverMeaning ? `What this means for you\n${item.caregiverMeaning}` : "",
     "",
     item.confirmWithTeam?.length
-      ? `What to confirm with your care team\n${item.confirmWithTeam.map((b) => `• ${b}`).join("\n")}`
+      ? `Confirm with your care team\n${item.confirmWithTeam.map((b) => `• ${b}`).join("\n")}`
       : "",
     "",
     item.exactWords ? `Exact words you could use\n${item.exactWords}` : "",
@@ -2287,25 +2313,28 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
     item: { id: newFollowUpItemId(), timestamp: stamp, ...partial },
   })
 
-  if (custom) {
-    const defs = collectTermDefinitions(custom)
-    if (defs.length > 0) {
-      const body = defs.map((d) => `${d.title}: ${d.def}`).join("\n\n")
+  if (custom && !input.chipId) {
+    const low = custom.toLowerCase()
+
+    if (/\burgent\b|\bsevere\b|\bworse\b|\bemergency\b|\b911\b|\ber\b|\bpain\b|\bfever\b|\bbleeding\b/.test(low)) {
       return make({
         kind: "custom",
         questionLabel: custom.slice(0, 200),
-        title: "Plain-language terms (prep only)",
-        answer: body,
+        title: "Urgent or severe symptoms",
+        answer:
+          "If symptoms are severe, sudden, or rapidly worsening, your local emergency resources or clinic urgent line is the right path. Anchor cannot assess acuity or tell you to wait.",
         caregiverMeaning:
-          "These are general definitions so you can follow the conversation — they are not a verdict about your loved one’s situation.",
+          "It is reasonable to pause app planning and use the phone tree your team gave you — that is not overreacting.",
         confirmWithTeam: [
-          "Which of these topics actually applies on your chart today.",
-          "How your team uses each test or term in your specific plan.",
+          "Given what is happening now, should we use the after-hours line, go to urgent care, or call emergency services?",
         ],
-        safetyFooter: safeFooter,
+        exactWords:
+          "Given these symptoms, what should we do in the next few minutes to hours — and what signs would mean we should call emergency services?",
+        safetyFooter: `${FOLLOW_UP_SAFETY_STANDARD} ${FOLLOW_UP_SAFETY_URGENT}`,
       })
     }
-    if (/\bchemo\b|\bchemotherapy\b/i.test(custom)) {
+
+    if (/\bchemo\b|\bchemotherapy\b|\bfolfox\b|\bcapox\b/.test(low)) {
       return make({
         kind: "custom",
         questionLabel: custom.slice(0, 200),
@@ -2324,7 +2353,8 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
         safetyFooter: safeFooter,
       })
     }
-    if (/\bstage\b|\bstaging\b/i.test(custom)) {
+
+    if (/\bstage\b|\bstaging\b|\bstage\s*i{1,3}\b|\bstage\s*3\b/.test(low)) {
       return make({
         kind: "custom",
         questionLabel: custom.slice(0, 200),
@@ -2337,7 +2367,8 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
         safetyFooter: safeFooter,
       })
     }
-    if (/\bmmr\b|\bmsi\b/i.test(custom)) {
+
+    if (/\bmmr\b|\bmsi\b/.test(low)) {
       return make({
         kind: "custom",
         questionLabel: custom.slice(0, 200),
@@ -2353,7 +2384,8 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
         safetyFooter: safeFooter,
       })
     }
-    if (/\bimaging\b|\bscan(s)?\b|\bct\b|\bmri\b|\bpet\b/i.test(custom)) {
+
+    if (/\bimaging\b|\bscan(s)?\b|\bct\b|\bmri\b|\bpet\b/.test(low)) {
       return make({
         kind: "custom",
         questionLabel: custom.slice(0, 200),
@@ -2369,7 +2401,25 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
         safetyFooter: safeFooter,
       })
     }
-    if (/\binsurance\b|\bcoverage\b|\bauthorization\b|\bprior auth\b/i.test(custom)) {
+
+    if (/\bpathology\b|\bbiopsy\b|\breport\b/.test(low)) {
+      return make({
+        kind: "custom",
+        questionLabel: custom.slice(0, 200),
+        title: "Pathology and biopsy reports",
+        answer:
+          "Pathology reports describe tissue in medical language. Your care team connects those words to staging, biomarkers, and next steps. Anchor does not read your slides or confirm pathology findings.",
+        caregiverMeaning:
+          "Your practical job is often to confirm the report is finalized, ask for a plain-language summary, and note any pending addenda.",
+        confirmWithTeam: [
+          "Is the pathology report complete and reviewed, including any addenda?",
+          "What does the team conclude from pathology today, and what is still pending?",
+        ],
+        safetyFooter: safeFooter,
+      })
+    }
+
+    if (/\binsurance\b|\bcoverage\b|\bauthorization\b|\bprior auth\b/.test(low)) {
       return make({
         kind: "custom",
         questionLabel: custom.slice(0, 200),
@@ -2387,7 +2437,8 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
         safetyFooter: safeFooter,
       })
     }
-    if (/\bfamily\b|\bsibling\b|\bbrother\b|\bsister\b|\bchildren\b|\bkids\b/i.test(custom)) {
+
+    if (/\bfamily\b|\bsibling\b|\bdad\b|\bmom\b|\brelative\b|\bbrother\b|\bsister\b|\bchildren\b|\bkids\b/.test(low)) {
       return make({
         kind: "custom",
         questionLabel: custom.slice(0, 200),
@@ -2404,23 +2455,7 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
         safetyFooter: safeFooter,
       })
     }
-    if (/\burgent\b|\bsevere\b|\bworse\b|\bemergency\b|\b911\b|\ber\b/i.test(custom)) {
-      return make({
-        kind: "custom",
-        questionLabel: custom.slice(0, 200),
-        title: "Urgent or severe symptoms",
-        answer:
-          "If symptoms are severe, sudden, or rapidly worsening, your local emergency resources or clinic urgent line is the right path. Anchor cannot assess acuity or tell you to wait.",
-        caregiverMeaning:
-          "It is reasonable to pause app planning and use the phone tree your team gave you — that is not overreacting.",
-        confirmWithTeam: [
-          "Given what is happening now, should we use the after-hours line, go to urgent care, or call emergency services?",
-        ],
-        exactWords:
-          "Given these symptoms, what should we do in the next few minutes to hours — and what signs would mean we should call emergency services?",
-        safetyFooter: `${FOLLOW_UP_SAFETY_STANDARD} ${FOLLOW_UP_SAFETY_URGENT}`,
-      })
-    }
+
     return make({
       kind: "custom",
       questionLabel: custom.slice(0, 200),
@@ -2444,21 +2479,58 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
 
   const chip = input.chipId
 
-  if (chip === "term-mean") {
+  if (chip === "term_meaning") {
+    const termInput = input.customText.trim()
+    if (!termInput) {
+      return make({
+        kind: "term_meaning",
+        questionLabel: "What does this term mean?",
+        title: "Type the term you're asking about",
+        answer:
+          "Type the exact word or phrase from your paperwork or visit in the text box above (for example: MMR, MSI, margin, lymph node, CEA, PET scan), then tap Ask again.",
+        caregiverMeaning:
+          "Medical language is easiest to learn in short pieces — write the word exactly as printed, then ask your team to confirm what it means for your chart.",
+        confirmWithTeam: [
+          "Please define this term in plain language for our situation.",
+          "Does this result or label change anything about timing, tests, or next decisions for us?",
+        ],
+        safetyFooter: safeFooter,
+      })
+    }
+    const defs = collectTermDefinitions(termInput)
+    if (defs.length > 0) {
+      const body = defs.map((d) => `${d.title}: ${d.def}`).join("\n\n")
+      return make({
+        kind: "term_meaning",
+        questionLabel: termInput.slice(0, 200),
+        title: "Plain-language meaning (prep only)",
+        answer: body,
+        caregiverMeaning:
+          "These are general definitions so you can follow the conversation — they are not a verdict about your loved one’s situation.",
+        confirmWithTeam: [
+          "Which of these topics actually applies on your chart today.",
+          "How your team uses this term in your specific plan — your care team confirms.",
+        ],
+        safetyFooter: safeFooter,
+      })
+    }
     return make({
-      kind: "term-mean",
-      questionLabel: "What does this term mean?",
-      title: "Add the term you mean",
+      kind: "term_meaning",
+      questionLabel: termInput.slice(0, 200),
+      title: "Bring the exact phrase to your visit",
       answer:
-        "Type the exact word or phrase from your paperwork or visit (for example: MMR, MSI, margin, lymph node, CEA, PET scan) in the box above, then tap Ask again. Examples you can try: pathology, staging, MMR, MSI, biomarker, imaging, scan, margin, lymph node, oncology, second opinion, CEA.",
+        "Anchor could not match that text to a built-in glossary entry on-device. You can still ask your team to define it against your records — that is the safest source of truth.",
       caregiverMeaning:
-        "Medical language is dense on purpose — your job is to slow the conversation until you can repeat back what you understood, not to memorize everything.",
-      confirmWithTeam: ["Ask your team to define any word you cannot explain in one sentence."],
+        "A photo of the line on paper, or the portal PDF name and page, often saves time in clinic.",
+      confirmWithTeam: [
+        "What does this phrase mean in my loved one’s chart today?",
+        "Does it change timing, staging discussion, or treatment planning for us?",
+      ],
       safetyFooter: safeFooter,
     })
   }
 
-  if (chip === "explain-simply") {
+  if (chip === "explain_simple") {
     const done = new Set(input.completedPlanTaskIds)
     const openAdaptive = input.adaptivePlanTasks.filter((t) => !done.has(t.id)).length
     const planLine = input.planResult
@@ -2468,7 +2540,7 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
       ? `${openAdaptive} adaptive checklist item(s) from updates are still open on the Plan tab.`
       : "No open adaptive tasks from updates right now — or they are all marked done."
     return make({
-      kind: "explain-simply",
+      kind: "explain_simple",
       questionLabel: "Explain this simply",
       title: "Simple read of what Anchor is holding",
       answer: [
@@ -2485,9 +2557,9 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
     })
   }
 
-  if (chip === "ask-tomorrow") {
+  if (chip === "ask_tomorrow") {
     return make({
-      kind: "ask-tomorrow",
+      kind: "ask_tomorrow",
       questionLabel: "What should I ask tomorrow?",
       title: "Short question list for the next touchpoint",
       answer:
@@ -2505,9 +2577,9 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
     })
   }
 
-  if (chip === "phone-words") {
+  if (chip === "phone_script") {
     return make({
-      kind: "phone-words",
+      kind: "phone_script",
       questionLabel: "What should I say on the phone?",
       title: "Phone script starter (edit with real names)",
       answer:
@@ -2523,10 +2595,10 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
     })
   }
 
-  if (chip === "what-changed") {
+  if (chip === "what_changed") {
     if (!input.caseInformationUpdates.length) {
       return make({
-        kind: "what-changed",
+        kind: "what_changed",
         questionLabel: "What changed after the new information?",
         title: "Use the Updates tab first",
         answer:
@@ -2539,7 +2611,7 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
     }
     const latest = input.caseInformationUpdates[input.caseInformationUpdates.length - 1]
     return make({
-      kind: "what-changed",
+      kind: "what_changed",
       questionLabel: "What changed after the new information?",
       title: "Most recent update snapshot",
       answer: [
@@ -2555,9 +2627,9 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
     })
   }
 
-  if (chip === "urgent-vs-wait") {
+  if (chip === "urgent_vs_wait") {
     return make({
-      kind: "urgent-vs-wait",
+      kind: "urgent_vs_wait",
       questionLabel: "What is urgent and what can wait?",
       title: "Sorting urgency without triage",
       answer: [
@@ -2573,9 +2645,9 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
     })
   }
 
-  if (chip === "summarize-family") {
+  if (chip === "family_summary") {
     return make({
-      kind: "summarize-family",
+      kind: "family_summary",
       questionLabel: "Summarize this for my family",
       title: "Family-safe summary (facts + humility)",
       answer: [
@@ -2591,9 +2663,9 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
     })
   }
 
-  if (chip === "write-down") {
+  if (chip === "write_down") {
     return make({
-      kind: "write-down",
+      kind: "write_down",
       questionLabel: "What should I write down?",
       title: "A small paper trail that helps",
       answer:
@@ -2606,9 +2678,9 @@ function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpR
     })
   }
 
-  if (chip === "not-decide-yet") {
+  if (chip === "not_decide_yet") {
     return make({
-      kind: "not-decide-yet",
+      kind: "not_decide_yet",
       questionLabel: "What should I not decide yet?",
       title: "Decisions to hold loosely until your team weighs in",
       answer:
@@ -3795,8 +3867,8 @@ function ResultsView({
           {activeResultTab === "ask" && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
               <div className="min-w-0">
-                <p className="m-0 text-[13px] font-semibold text-[#3f3a36] sm:text-base">Ask Anchor</p>
-                <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{ASK_ANCHOR_SUBTITLE}</p>
+                <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-base">Ask Anchor</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{ASK_ANCHOR_SUBTITLE}</p>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {FOLLOW_UP_CHIP_DEFS.map((chip) => (
@@ -3804,13 +3876,18 @@ function ResultsView({
                     key={chip.id}
                     type="button"
                     onClick={() => {
-                      setSelectedFollowUpPrompt((cur) => (cur === chip.id ? null : chip.id))
+                      setSelectedFollowUpPrompt(chip.id)
                       setAskFollowUpError(null)
+                      const res = onAskFollowUpSubmit(chip.id, customFollowUpQuestion)
+                      if (!res.ok) {
+                        setAskFollowUpError(res.message)
+                        return
+                      }
                     }}
                     className={`max-w-full rounded-full border px-2.5 py-1 text-left text-[10px] font-medium leading-tight transition sm:text-[11px] ${
                       selectedFollowUpPrompt === chip.id
-                        ? "border-[#b98da0] bg-[#2a2433] text-[#f5eef8]"
-                        : "border-[#4a3f55]/55 bg-[#2f2838]/90 text-[#e8dfd8] hover:border-[#b98da0]/55"
+                        ? "border-[#b98da0] bg-[#f0e6f4] text-[#3f3a35] shadow-sm"
+                        : "border-[#cbc4be] bg-white text-[#3f3a35] hover:border-[#b98da0]/70 hover:bg-[#faf7f4]"
                     }`}
                   >
                     {chip.label}
@@ -3828,7 +3905,7 @@ function ResultsView({
                       setAskFollowUpError(null)
                     }}
                     placeholder="Ask a follow-up about this case…"
-                    className="w-full min-w-0 rounded-[14px] border border-[#4a3f55]/60 bg-[#2a2433]/95 px-3 py-2.5 text-[12px] text-[#f5eef8] outline-none placeholder:text-[#9b92a8] focus:border-[#b98da0]/70 sm:rounded-[16px] sm:text-sm"
+                    className="w-full min-w-0 rounded-[14px] border border-[#cbc4be] bg-white px-3 py-2.5 text-[12px] text-[#3f3a35] outline-none placeholder:text-[#6f665f] focus:border-[#b98da0] sm:rounded-[16px] sm:text-sm"
                   />
                 </label>
                 <button
@@ -3842,7 +3919,7 @@ function ResultsView({
                     }
                     setCustomFollowUpQuestion("")
                   }}
-                  className="shrink-0 rounded-[14px] border border-[#b98da0]/70 bg-[#b7a6c9] px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
+                  className="shrink-0 rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
                 >
                   Ask
                 </button>
@@ -3852,25 +3929,26 @@ function ResultsView({
                   {askFollowUpError}
                 </p>
               )}
-              <p className="m-0 text-[10px] leading-snug text-[#756f68] sm:text-[11px]">
+              <p className="m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">
                 Preparing questions for your care team only — not diagnosis, not treatment recommendation, not stage confirmation,
                 not emergency assessment.
               </p>
+              <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#6f665f] sm:text-xs">Questions asked</p>
               <div className="grid min-w-0 gap-2.5 sm:gap-3">
                 {followUpResponses.map((item) => (
                   <div
                     key={item.id}
-                    className="min-w-0 max-w-full rounded-[16px] border border-[#4a3f55]/55 bg-[#2a2433]/92 p-3 text-[#e8dfd8] shadow-[0_12px_40px_rgba(20,16,28,0.12)] sm:rounded-[20px] sm:p-4"
+                    className="min-w-0 max-w-full rounded-[16px] border border-[#cbc4be] bg-white p-3 text-[#3f3a35] shadow-[0_8px_28px_rgba(63,58,53,0.06)] sm:rounded-[20px] sm:p-4"
                   >
-                    <p className="m-0 text-[10px] font-medium uppercase tracking-wide text-[#c9b8d8]/90">
+                    <p className="m-0 text-[10px] font-medium uppercase tracking-wide text-[#6f665f]">
                       {formatDemoTimelineLabel(item.timestamp)} · {item.questionLabel}
                     </p>
-                    <p className="mt-1.5 m-0 text-[13px] font-semibold leading-snug text-[#fdfaf7] sm:text-sm">{item.title}</p>
-                    <p className="mt-2 m-0 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-[#d8cec5] sm:text-sm">
+                    <p className="mt-1.5 m-0 text-[13px] font-semibold leading-snug text-[#3f3a35] sm:text-sm">{item.title}</p>
+                    <p className="mt-2 m-0 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-[#3f3a35] sm:text-sm">
                       {item.answer}
                     </p>
                     {item.bullets && item.bullets.length > 0 && (
-                      <ul className="mt-2 m-0 list-disc space-y-1 pl-4 text-[11px] leading-snug text-[#c9b8d8]/95 sm:text-xs">
+                      <ul className="mt-2 m-0 list-disc space-y-1 pl-4 text-[11px] leading-snug text-[#3f3a35] sm:text-xs">
                         {item.bullets.map((b, idx) => (
                           <li key={`${item.id}-b-${idx}`} className="break-words">
                             {b}
@@ -3879,17 +3957,17 @@ function ResultsView({
                       </ul>
                     )}
                     {item.caregiverMeaning && (
-                      <div className="mt-3 border-t border-white/10 pt-3">
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#b98da0]/95">What this means for you</p>
-                        <p className="mt-1 m-0 text-[12px] leading-relaxed text-[#e8dfd8] sm:text-sm">{item.caregiverMeaning}</p>
+                      <div className="mt-3 border-t border-[#e8dfd8] pt-3">
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#6f665f]">What this means for you</p>
+                        <p className="mt-1 m-0 text-[12px] leading-relaxed text-[#3f3a35] sm:text-sm">{item.caregiverMeaning}</p>
                       </div>
                     )}
                     {item.confirmWithTeam && item.confirmWithTeam.length > 0 && (
-                      <div className="mt-3 border-t border-white/10 pt-3">
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#b98da0]/95">
-                          What to confirm with your care team
+                      <div className="mt-3 border-t border-[#e8dfd8] pt-3">
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#6f665f]">
+                          Confirm with your care team
                         </p>
-                        <ul className="mt-1.5 m-0 list-disc space-y-1 pl-4 text-[12px] leading-snug text-[#d8cec5] sm:text-sm">
+                        <ul className="mt-1.5 m-0 list-disc space-y-1 pl-4 text-[12px] leading-snug text-[#3f3a35] sm:text-sm">
                           {item.confirmWithTeam.map((c, idx) => (
                             <li key={`${item.id}-c-${idx}`} className="break-words">
                               {c}
@@ -3899,16 +3977,16 @@ function ResultsView({
                       </div>
                     )}
                     {item.exactWords && (
-                      <div className="mt-3 rounded-[12px] border border-[#6f6280]/40 bg-[#1e1a26]/90 p-2.5 sm:p-3">
-                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#c9b8d8]/90">Exact words</p>
-                        <p className="mt-1 m-0 text-[12px] leading-relaxed text-[#fdfaf7] sm:text-sm">{item.exactWords}</p>
+                      <div className="mt-3 rounded-[12px] border border-[#e8dfd8] bg-[#faf7f4] p-2.5 sm:p-3">
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#6f665f]">Exact words</p>
+                        <p className="mt-1 m-0 text-[12px] leading-relaxed text-[#3f3a35] sm:text-sm">{item.exactWords}</p>
                       </div>
                     )}
-                    <p className="mt-3 border-t border-white/10 pt-3 text-[10px] leading-snug text-[#9b92a8] sm:text-[11px]">{item.safetyFooter}</p>
+                    <p className="mt-3 border-t border-[#e8dfd8] pt-3 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{item.safetyFooter}</p>
                     <button
                       type="button"
                       onClick={() => void onCopy("followup", formatFollowUpClipboard(item))}
-                      className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[12px] border border-[#c9b8d8]/40 bg-[#3a3248]/90 py-2 text-[11px] font-medium text-[#f5eef8] transition hover:bg-[#4a3f55]/90 sm:rounded-[14px] sm:text-xs"
+                      className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[12px] border border-[#cbc4be] bg-[#faf7f4] py-2 text-[11px] font-medium text-[#3f3a35] transition hover:bg-white sm:rounded-[14px] sm:text-xs"
                     >
                       <Copy className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
                       Copy answer
@@ -3922,7 +4000,7 @@ function ResultsView({
                 </p>
               )}
               {followUpResponses.length === 0 && (
-                <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">
+                <p className="m-0 text-[12px] leading-snug text-[#6f665f] sm:text-sm">
                   Tap a chip or write your own — answers stay on this device and reload with your saved case.
                 </p>
               )}
@@ -4198,8 +4276,15 @@ function ResultsView({
               </div>
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Last voice / text detail (demo)</p>
-                <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
-                  {resultsTranscriptEcho.trim() || "Nothing captured yet in this browser session."}
+                <p className="m-0 text-[12px] leading-snug text-[#3f3a35] sm:text-sm">
+                  {(() => {
+                    const echo = resultsTranscriptEcho.trim()
+                    if (echo) return echo
+                    if (isBackupDemoMirror || mirrorResult.fearQuote.trim() === SARAH_DEMO_CONCERN.trim()) {
+                      return SARAH_DEMO_CONCERN
+                    }
+                    return "Nothing captured yet in this browser session."
+                  })()}
                 </p>
               </div>
               <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
