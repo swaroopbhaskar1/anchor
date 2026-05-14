@@ -12,6 +12,7 @@ import {
   Copy,
   FileText,
   HeartHandshake,
+  Info,
   Users,
   Mic,
   PenLine,
@@ -166,6 +167,50 @@ import {
   SARAH_NEEDS_CONFIRMATION_BULLETS,
   SARAH_NOT_TONIGHT_BULLETS,
   splitScriptTextToPhoneLines,
+  buildTrustSourceReceiptBlock,
+  TRUST_ACCURACY_CARDS,
+  TRUST_ACCURACY_SECTION_INTRO,
+  TRUST_ARCH_CARDS,
+  TRUST_CANNOT_DO_BULLETS,
+  TRUST_CARE_TEAM_CONFIRM_BULLETS,
+  TRUST_CLINICAL_LANE_VISUAL,
+  TRUST_DEMO_STORAGE_CATEGORIES,
+  TRUST_DEMO_STORAGE_NOTE,
+  TRUST_DID_NOT_USE_BULLETS,
+  TRUST_HERO_PLAN_CONNECT_BULLETS,
+  TRUST_HERO_PLAN_CONNECT_TITLE,
+  TRUST_HOW_ANSWERED_STEPS,
+  TRUST_JUDGE_QA,
+  TRUST_MYCHART_PREVIEW_BODY,
+  TRUST_MYCHART_PREVIEW_TITLE,
+  TRUST_NOT_CHATBOT_SUMMARY,
+  TRUST_NOT_MEDICAL_LINE,
+  TRUST_OUTCOME_WISDOM_BODY,
+  TRUST_OUTCOME_WISDOM_CONSENT,
+  TRUST_OUTCOME_WISDOM_NOT_ACTIVE,
+  TRUST_OUTCOME_WISDOM_TITLE,
+  TRUST_PANEL_BADGE,
+  TRUST_PANEL_SUBTITLE,
+  TRUST_PANEL_TITLE,
+  TRUST_PRODUCTION_DIRECTION_LABEL,
+  TRUST_PRODUCTION_READINESS_BULLETS,
+  TRUST_SOURCE_CARD_CASE_BODY,
+  TRUST_SOURCE_CARD_CASE_NOTE,
+  TRUST_SOURCE_CARD_CASE_TITLE,
+  TRUST_SOURCE_CARD_CLINICAL_BODY,
+  TRUST_SOURCE_CARD_CLINICAL_BOUNDARY,
+  TRUST_SOURCE_CARD_CLINICAL_TITLE,
+  TRUST_SOURCE_CARD_MODEL_BODY,
+  TRUST_SOURCE_CARD_MODEL_TITLE,
+  TRUST_SOURCE_CARD_RECORDS_BODY,
+  TRUST_SOURCE_CARD_RECORDS_TITLE,
+  TRUST_SOURCE_CARD_WISDOM_BODY,
+  TRUST_SOURCE_CARD_WISDOM_SEPARATION,
+  TRUST_SOURCE_CARD_WISDOM_TITLE,
+  TRUST_TOOLS_CARD_CTA,
+  TRUST_TOOLS_CARD_DESCRIPTION,
+  TRUST_TOOLS_CARD_TITLE,
+  TRUST_WISDOM_LANE_VISUAL,
   SYSTEM_MAPPER_COMPARISON_QUESTIONS,
   SYSTEM_MAPPER_FACTORS,
   SYSTEM_MAPPER_NOT_RANKING_LINE,
@@ -208,7 +253,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 type CancerType = "colon" | "breast" | "lymphoma"
 type AppPhase = "idle" | "recording" | "processing" | "results"
 type WorkspaceTab = "today" | "tools" | "saved"
-type ToolPanelId = "ask" | "updates" | "plan" | "actions" | "records" | "family"
+type ToolPanelId = "ask" | "updates" | "plan" | "actions" | "records" | "family" | "trust"
 
 type ResultCopyKind =
   | "note"
@@ -235,6 +280,7 @@ type ResultCopyKind =
   | "futureOutreachChecklist"
   | "phoneModeLine"
   | "phoneModeFull"
+  | "trustSourceReceipt"
 
 interface CopyTimelineMeta {
   taskTitle: string
@@ -393,7 +439,8 @@ function isToolPanelId(value: unknown): value is ToolPanelId {
     value === "plan" ||
     value === "actions" ||
     value === "records" ||
-    value === "family"
+    value === "family" ||
+    value === "trust"
   )
 }
 
@@ -3584,6 +3631,7 @@ function PhoneModeReader({
   markPlanTaskDone,
   onClose,
   onCopy,
+  onOpenTrust,
   open,
   script,
 }: {
@@ -3593,6 +3641,7 @@ function PhoneModeReader({
   markPlanTaskDone: (taskId: string) => void
   onClose: () => void
   onCopy: (kind: ResultCopyKind, value: string, timelineTitle?: string, meta?: CopyTimelineMeta) => void
+  onOpenTrust?: () => void
   open: boolean
   script: PhoneModeScript | null
 }) {
@@ -3887,6 +3936,17 @@ function PhoneModeReader({
             <p className="mt-4 text-center text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">
               Read line by line · Anchor does not call, text, or schedule for you.
             </p>
+            {onOpenTrust && (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenTrust()
+                }}
+                className="mt-2 w-full text-center text-[11px] font-medium text-[#6f6280] underline decoration-[#c9b8d8]/70 underline-offset-2"
+              >
+                Why this script?
+              </button>
+            )}
           </div>
         </motion.div>
       </motion.div>
@@ -4665,6 +4725,8 @@ function ResultsView({
   const [futurePreviewModal, setFuturePreviewModal] = useState<"sentinel" | "mapper" | "brief" | "outreach" | null>(null)
   const [phoneModeOpen, setPhoneModeOpen] = useState(false)
   const [phoneModeScript, setPhoneModeScript] = useState<PhoneModeScript | null>(null)
+  const [trustScrollToReceipt, setTrustScrollToReceipt] = useState(false)
+  const trustReceiptRef = useRef<HTMLDetailsElement | null>(null)
   const [askShowAll, setAskShowAll] = useState(false)
   const [visitPrepInlineNote, setVisitPrepInlineNote] = useState<string | null>(null)
   type DocAgentHome = "pick" | "sample" | "paste" | "chips"
@@ -5078,6 +5140,19 @@ function ResultsView({
     if (workspaceTab !== "tools" || toolPanel !== "ask") setAskShowAll(false)
   }, [toolPanel, workspaceTab])
 
+  useEffect(() => {
+    if (toolPanel !== "trust" || !trustScrollToReceipt) return
+    const el = trustReceiptRef.current
+    if (el) {
+      el.open = true
+      window.requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" })
+      })
+    }
+    const id = window.setTimeout(() => setTrustScrollToReceipt(false), 700)
+    return () => window.clearTimeout(id)
+  }, [toolPanel, trustScrollToReceipt])
+
   const mergedNeedsConfirmation = useMemo(
     () => mergeNeedsConfirmationForMemory(packet.needsConfirmation, caseInformationUpdates),
     [caseInformationUpdates, packet.needsConfirmation],
@@ -5116,6 +5191,43 @@ function ResultsView({
         (t) => t.initialStatus === "urgent" && !completedPlanTaskIds.includes(t.id),
       ),
     [adaptivePlanTasks, completedPlanTaskIds],
+  )
+
+  const trustLastHeroFlowLabel = useMemo(() => {
+    switch (lastHeroFlowUsed) {
+      case "visit":
+        return "Visit prep hero flow"
+      case "document":
+        return "Document hero flow"
+      case "insurance":
+        return "Insurance hero flow"
+      default:
+        return null
+    }
+  }, [lastHeroFlowUsed])
+
+  const trustSourceReceiptText = useMemo(
+    () =>
+      buildTrustSourceReceiptBlock({
+        concernLine: voiceConcernResolved,
+        isSarahDemo: isSarahVoiceCase,
+        caseUpdateCount: caseInformationUpdates.length,
+        followUpCount: followUpResponses.length,
+        adaptiveTaskCount: adaptivePlanTasks.length,
+        completedTaskCount: completedPlanTaskIds.length,
+        timelineArtifactCount: actionGuideDemoTimeline.length,
+        lastHeroFlowLabel: trustLastHeroFlowLabel,
+      }),
+    [
+      actionGuideDemoTimeline.length,
+      adaptivePlanTasks.length,
+      caseInformationUpdates.length,
+      completedPlanTaskIds.length,
+      followUpResponses.length,
+      isSarahVoiceCase,
+      trustLastHeroFlowLabel,
+      voiceConcernResolved,
+    ],
   )
 
   const visibleCareTimelineRows = useMemo(() => {
@@ -5602,6 +5714,11 @@ function ResultsView({
                       panel: "family" as const,
                     },
                     {
+                      title: TRUST_TOOLS_CARD_TITLE,
+                      body: TRUST_TOOLS_CARD_DESCRIPTION,
+                      panel: "trust" as const,
+                    },
+                    {
                       title: "Saved case",
                       body: "Case thread, tracking, scripts, handoff — local demo memory.",
                       panel: null,
@@ -5631,6 +5748,24 @@ function ResultsView({
                 <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
                   {FUTURE_PREVIEW_TOOLS_SUBTITLE}
                 </p>
+                <div className="mt-3 min-w-0 rounded-[14px] border border-[#b98da0]/40 bg-white/85 p-3 sm:rounded-[16px]">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#6f6280]" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{TRUST_TOOLS_CARD_TITLE}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                        {TRUST_TOOLS_CARD_DESCRIPTION}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => onOpenToolPanel("trust")}
+                        className="mt-2.5 w-full max-w-full rounded-[12px] border border-[#b98da0]/55 bg-[#f5eef8]/95 px-3 py-2 text-left text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:w-auto sm:text-xs"
+                      >
+                        {TRUST_TOOLS_CARD_CTA}
+                      </button>
+                    </div>
+                  </div>
+                </div>
                 <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 sm:gap-3">
                   <div className={`${GLASS_PANEL} min-w-0 rounded-[14px] border border-[#e8dfd8]/90 p-3 sm:rounded-[16px]`}>
                     <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Sentinel</p>
@@ -6685,6 +6820,22 @@ function ResultsView({
                         </div>
                       )}
                     </>
+                  )}
+
+                  {todayHeroModal && (
+                    <div className="mt-4 border-t border-[#ece4dc] pt-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTodayHeroModal(null)
+                          setTrustScrollToReceipt(true)
+                          onOpenToolPanel("trust")
+                        }}
+                        className="m-0 w-full max-w-full rounded-[12px] border border-[#d8cec5] bg-[#faf7f4]/95 px-2.5 py-2 text-left text-[11px] font-medium leading-snug text-[#5c4a62] transition hover:bg-white sm:text-xs"
+                      >
+                        Why this output? → opens How Anchor works (source receipt).
+                      </button>
+                    </div>
                   )}
 
                   {(copied === "visitPrep" ||
@@ -8103,6 +8254,306 @@ function ResultsView({
             </motion.div>
           )}
 
+          {workspaceTab === "tools" && toolPanel === "trust" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
+              <div className="min-w-0 max-w-full">
+                <p className="m-0 text-[16px] font-semibold text-[#3f3a35] sm:text-lg">{TRUST_PANEL_TITLE}</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{TRUST_PANEL_SUBTITLE}</p>
+                <span className="mt-2 inline-flex max-w-full rounded-full border border-[#c9b8d8]/90 bg-white/85 px-2.5 py-1 text-[10px] font-semibold leading-snug text-[#6f6280] sm:text-[11px]">
+                  {TRUST_PANEL_BADGE}
+                </span>
+              </div>
+              <div className="rounded-[14px] border border-[#2a2420]/90 bg-[#2a2420] px-3 py-2.5 text-[11px] leading-snug text-[#fdf6f0] sm:text-xs sm:leading-relaxed">
+                {TRUST_NOT_MEDICAL_LINE}
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">How Anchor answered this</p>
+                <ol className="mt-2 m-0 list-none space-y-2 p-0">
+                  {TRUST_HOW_ANSWERED_STEPS.map((line, i) => (
+                    <li key={line} className="flex min-w-0 gap-2.5 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#b98da0]/60 bg-[#f5eef8]/90 text-[10px] font-bold text-[#4a3548]">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0 pt-0.5">{line}</span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-3 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{TRUST_NOT_CHATBOT_SUMMARY}</p>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">What Anchor used</p>
+                <div className="mt-2 grid min-w-0 gap-2">
+                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_CASE_TITLE}</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_CASE_BODY}</p>
+                    <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{TRUST_SOURCE_CARD_CASE_NOTE}</p>
+                  </div>
+                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_CLINICAL_TITLE}</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_CLINICAL_BODY}</p>
+                    <p className="mt-1.5 m-0 text-[10px] font-semibold leading-snug text-[#6f5a55] sm:text-[11px]">{TRUST_SOURCE_CARD_CLINICAL_BOUNDARY}</p>
+                  </div>
+                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_WISDOM_TITLE}</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_WISDOM_BODY}</p>
+                    <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#6f665f] sm:text-[11px]">{TRUST_SOURCE_CARD_WISDOM_SEPARATION}</p>
+                  </div>
+                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_RECORDS_TITLE}</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_RECORDS_BODY}</p>
+                  </div>
+                  <div className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                    <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{TRUST_SOURCE_CARD_MODEL_TITLE}</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_SOURCE_CARD_MODEL_BODY}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">What Anchor did not use</p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                  {TRUST_DID_NOT_USE_BULLETS.map((b) => (
+                    <li key={b} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">What Anchor cannot do</p>
+                <ul className="mt-2 m-0 grid list-none gap-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:grid-cols-2 sm:text-xs">
+                  {TRUST_CANNOT_DO_BULLETS.map((b) => (
+                    <li key={b} className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <details ref={trustReceiptRef} className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  Source receipt preview
+                  <span className="mt-1 block text-[11px] font-normal leading-snug text-[#756f68] sm:text-xs">
+                    A judge-style snapshot of what shaped answers in this browser session.
+                  </span>
+                </summary>
+                <div className="mt-3 space-y-2 rounded-[12px] border border-[#ece4dc] bg-white/80 p-2.5 text-[11px] leading-snug text-[#3f3a36] sm:p-3 sm:text-xs">
+                  <p className="m-0 font-semibold text-[#5f5a55]">Input</p>
+                  <p className="m-0 break-words">
+                    {isSarahVoiceCase
+                      ? "Sarah’s concern about possible colon cancer and missing questions."
+                      : voiceConcernResolved.trim().slice(0, 280) || "Add a concern to see this receipt personalize."}
+                  </p>
+                  <p className="m-0 pt-1 font-semibold text-[#5f5a55]">Used</p>
+                  <ul className="m-0 list-none space-y-1 p-0">
+                    <li>• Current case concern</li>
+                    <li>• NCCN-aware oncology workflow patterns</li>
+                    <li>• Caregiver wisdom layer</li>
+                    <li>• {isSarahVoiceCase ? "Sample / de-identified demo context" : "Details you typed in this demo case"}</li>
+                    {(caseInformationUpdates.length > 0 ||
+                      followUpResponses.length > 0 ||
+                      adaptivePlanTasks.length > 0 ||
+                      completedPlanTaskIds.length > 0) && (
+                      <li>
+                        • Local saved updates / Ask / plan rows when present ({caseInformationUpdates.length} updates ·{" "}
+                        {followUpResponses.length} Ask · {adaptivePlanTasks.length} tasks · {completedPlanTaskIds.length} done)
+                      </li>
+                    )}
+                  </ul>
+                  <p className="m-0 pt-1 font-semibold text-[#5f5a55]">Output produced</p>
+                  <ul className="m-0 list-none space-y-1 p-0">
+                    <li>• Questions and prep frames</li>
+                    <li>• Exact words / Phone Mode scripts when you copy them</li>
+                    <li>• 72-hour plan tasks</li>
+                    <li>• Saved timeline entries when you save</li>
+                  </ul>
+                  <p className="m-0 pt-1 font-semibold text-[#5f5a55]">Still requires confirmation</p>
+                  <ul className="m-0 list-none space-y-1 p-0">
+                    <li>• Stage, final pathology, imaging, biomarker/MMR/MSI, treatment decisions</li>
+                  </ul>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void onCopy("trustSourceReceipt", trustSourceReceiptText, undefined, {
+                      taskTitle: "Copied source receipt",
+                      badge: "Trust",
+                      taskId: "trust-receipt",
+                    })
+                  }
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-2.5 text-[12px] font-semibold text-white sm:rounded-[16px]"
+                >
+                  <Copy className="h-4 w-4 shrink-0" aria-hidden />
+                  Copy source receipt
+                </button>
+                {copied === "trustSourceReceipt" && (
+                  <p className="mt-2 m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
+                    Copied. Anchor did not send anything.
+                  </p>
+                )}
+              </details>
+
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  Architecture preview
+                  <span className="mt-1 block text-[11px] font-normal leading-snug text-[#756f68] sm:text-xs">
+                    Voice, mirror, dual-track retrieval, plan, ingestion, and storage — how the real stack fits together.
+                  </span>
+                </summary>
+                <div className="mt-3 grid min-w-0 gap-2">
+                  {TRUST_ARCH_CARDS.map((c) => (
+                    <div key={c.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{c.title}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{c.body}</p>
+                    </div>
+                  ))}
+                  <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+                    <div className="rounded-[12px] border border-[#d8e8d8]/90 bg-[#f6faf6]/90 p-2.5 sm:p-3">
+                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#3d5c4f] sm:text-[11px]">Clinical lane</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{TRUST_CLINICAL_LANE_VISUAL}</p>
+                    </div>
+                    <div className="rounded-[12px] border border-[#ece4dc] bg-white/80 p-2.5 sm:p-3">
+                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Wisdom lane</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">{TRUST_WISDOM_LANE_VISUAL}</p>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  Local storage & privacy
+                  <span className="mt-1 block text-[11px] font-normal leading-snug text-[#756f68] sm:text-xs">
+                    What this demo keeps in your browser — not HIPAA-grade production storage.
+                  </span>
+                </summary>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{TRUST_DEMO_STORAGE_NOTE}</p>
+                <ul className="mt-2 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                  {TRUST_DEMO_STORAGE_CATEGORIES.map((line) => (
+                    <li key={line} className="relative break-words pl-3 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => onWorkspaceTabChange("saved")}
+                  className="mt-3 w-full rounded-[14px] border border-[#b98da0]/55 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:rounded-[16px]"
+                >
+                  Go to Saved case
+                </button>
+              </details>
+
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  Before real healthcare deployment
+                  <span className="mt-1 block text-[11px] font-normal leading-snug text-[#756f68] sm:text-xs">
+                    {TRUST_PRODUCTION_DIRECTION_LABEL} — not claimed as done in this prototype.
+                  </span>
+                </summary>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                  {TRUST_PRODUCTION_READINESS_BULLETS.map((b) => (
+                    <li key={b} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-3 rounded-[12px] border border-dashed border-[#c9b8d8]/90 bg-[#faf7f4]/90 p-2.5 opacity-80 sm:p-3">
+                  <p className="m-0 text-[11px] font-semibold text-[#6f6280] sm:text-xs">{TRUST_MYCHART_PREVIEW_TITLE}</p>
+                  <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{TRUST_MYCHART_PREVIEW_BODY}</p>
+                </div>
+              </details>
+
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  How Anchor reduces unsafe answers
+                  <span className="mt-1 block text-[11px] font-normal leading-snug text-[#756f68] sm:text-xs">
+                    Bounded design — not hallucination-proof or guaranteed accurate.
+                  </span>
+                </summary>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{TRUST_ACCURACY_SECTION_INTRO}</p>
+                <div className="mt-2 grid min-w-0 gap-2">
+                  {TRUST_ACCURACY_CARDS.map((c) => (
+                    <div key={c.title} className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{c.title}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{c.body}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
+
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  What your care team must confirm
+                </summary>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                  {TRUST_CARE_TEAM_CONFIRM_BULLETS.map((b) => (
+                    <li key={b} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  How hero flows connect to the plan & Saved case
+                </summary>
+                <p className="mt-2 m-0 text-[11px] font-semibold text-[#5f5a55] sm:text-xs">{TRUST_HERO_PLAN_CONNECT_TITLE}</p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs">
+                  {TRUST_HERO_PLAN_CONNECT_BULLETS.map((b) => (
+                    <li key={b} className="relative break-words pl-3.5 before:absolute before:left-0 before:top-[0.35em] before:text-[#b98da0] before:content-['•']">
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  Questions judges may ask
+                </summary>
+                <div className="mt-2 grid min-w-0 gap-2">
+                  {TRUST_JUDGE_QA.map((qa) => (
+                    <div key={qa.q} className="rounded-[12px] border border-[#e8dfd8] bg-white/75 p-2.5 sm:p-3">
+                      <p className="m-0 text-[11px] font-semibold text-[#3f3a36] sm:text-xs">{qa.q}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{qa.a}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
+
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  {TRUST_OUTCOME_WISDOM_TITLE}
+                  <span className="mt-1 block text-[11px] font-normal leading-snug text-[#756f68] sm:text-xs">{TRUST_OUTCOME_WISDOM_NOT_ACTIVE}</span>
+                </summary>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">{TRUST_OUTCOME_WISDOM_BODY}</p>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{TRUST_OUTCOME_WISDOM_CONSENT}</p>
+              </details>
+
+              <details className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <summary className="cursor-pointer list-none text-[12px] font-semibold text-[#3f3a35] sm:text-sm [&::-webkit-details-marker]:hidden">
+                  Sentinel & other previews
+                </summary>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">{SENTINEL_PREVIEW_INTRO}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFuturePreviewModal("sentinel")
+                  }}
+                  className="mt-3 w-full rounded-[12px] border border-[#b98da0]/50 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
+                >
+                  Open {SENTINEL_PREVIEW_TITLE}
+                </button>
+              </details>
+            </motion.div>
+          )}
+
           {workspaceTab === "saved" && (
             <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
               <div className="min-w-0 max-w-full">
@@ -8421,6 +8872,25 @@ function ResultsView({
                 <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">{mirrorResult.mirror}</p>
               </ResultPacketCard>
 
+              <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] border border-[#d8cec5]/80 bg-[#faf7f4]/95 p-3 sm:rounded-[20px] sm:p-4`}>
+                <div className="flex min-w-0 items-start gap-2">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#6f6280]" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">Want to see what Anchor used and what it did not use?</p>
+                    <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                      Open the trust panel for a receipt-style view of sources, storage, and safety boundaries.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onOpenToolPanel("trust")}
+                      className="mt-2.5 w-full rounded-[14px] border border-[#b98da0]/55 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-sm"
+                    >
+                      Open How Anchor works
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
                 Start over (above) clears this local demo case in your browser. Nothing here is HIPAA-grade storage, a medical
                 record, or a substitute for your care team.
@@ -8456,6 +8926,12 @@ function ResultsView({
             setPhoneModeScript(null)
           }}
           onCopy={onCopy}
+          onOpenTrust={() => {
+            setPhoneModeOpen(false)
+            setPhoneModeScript(null)
+            setTrustScrollToReceipt(true)
+            onOpenToolPanel("trust")
+          }}
           open={phoneModeOpen}
           script={phoneModeScript}
         />
@@ -8480,8 +8956,19 @@ function ResultsView({
         variants={itemVariants}
         className="mt-3 rounded-[16px] border border-[#d8cec5]/80 bg-[#faf7f4]/90 px-3 py-2.5 text-[11px] leading-snug text-[#5f5a55] sm:mt-4 sm:rounded-[20px] sm:px-4 sm:py-3 sm:text-xs sm:leading-relaxed"
       >
-        Anchor can help prepare NCCN-aware questions and organize next steps. It does not diagnose, prescribe, choose
-        treatment, confirm stage, or replace your care team.
+        <p className="m-0">
+          Anchor can help prepare NCCN-aware questions and organize next steps. It does not diagnose, prescribe, choose
+          treatment, confirm stage, or replace your care team.
+        </p>
+        {memoryTimelineLowRisk && (
+          <button
+            type="button"
+            onClick={() => onOpenToolPanel("trust")}
+            className="mt-2.5 w-full rounded-[12px] border border-[#b98da0]/40 bg-white/90 px-2.5 py-2 text-left text-[11px] font-semibold leading-snug text-[#4a3548] transition hover:bg-white sm:text-xs"
+          >
+            How Anchor works — sources, storage, and what we never do automatically
+          </button>
+        )}
       </motion.div>
 
       <p className="mt-3 text-[11px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">

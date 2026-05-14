@@ -2239,3 +2239,331 @@ export function splitScriptTextToPhoneLines(text: string): string[] {
   const bySentence = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length > 6)
   return bySentence.length ? bySentence : [t]
 }
+
+/** Prompt 11 — Trust / “How Anchor works” copy (UI + clipboard receipt). */
+export const TRUST_PANEL_TITLE = "How Anchor works"
+
+export const TRUST_PANEL_SUBTITLE = "Transparent source, privacy, and safety view for this demo."
+
+export const TRUST_PANEL_BADGE = "Prototype trust layer · not HIPAA-grade deployment"
+
+export const TRUST_NOT_MEDICAL_LINE =
+  "Prototype only. Not medical advice. Not diagnosis. Not treatment recommendation. Not stage confirmation. Not emergency assessment. Nothing sent automatically. Your care team confirms medical decisions. Start over clears this local demo case."
+
+export const TRUST_HOW_ANSWERED_STEPS: string[] = [
+  "You share a concern, document, denial, or update.",
+  "Anchor separates what seems known from what is still pending.",
+  "Anchor turns it into questions, scripts, and 72-hour tasks.",
+  "You use Phone Mode or copy drafts if helpful.",
+  "You add what changed.",
+  "Anchor updates the plan and saves the thread locally for this demo.",
+  "Your care team confirms medical decisions.",
+]
+
+export const TRUST_NOT_CHATBOT_SUMMARY =
+  "Anchor is not a doctor and not a general chatbot. It is a constrained caregiver workflow: listen, organize, prepare words, update the plan, and save what happened."
+
+export const TRUST_SOURCE_CARD_CASE_TITLE = "Current case details"
+
+export const TRUST_SOURCE_CARD_CASE_BODY =
+  "Original concern, added updates, questions asked, plan tasks, saved scripts or artifacts, and copied outcomes when you save them."
+
+export const TRUST_SOURCE_CARD_CASE_NOTE =
+  "These are the details you gave Anchor inside this local demo case."
+
+export const TRUST_SOURCE_CARD_CLINICAL_TITLE = "NCCN-aware clinical grounding"
+
+export const TRUST_SOURCE_CARD_CLINICAL_BODY =
+  "Anchor uses oncology guideline workflow patterns to shape questions and boundaries: what to confirm, what may be pending, what records matter, and what the care team should explain."
+
+export const TRUST_SOURCE_CARD_CLINICAL_BOUNDARY =
+  "This is question preparation, not treatment guidance. Anchor does not give NCCN treatment recommendations."
+
+export const TRUST_SOURCE_CARD_WISDOM_TITLE = "Caregiver wisdom layer"
+
+export const TRUST_SOURCE_CARD_WISDOM_BODY =
+  "Caregiver wisdom is the human navigation layer: how to ask without freezing, what families wish they had written down, how to call offices, and how to reduce family burden. It is not a medical source."
+
+export const TRUST_SOURCE_CARD_WISDOM_SEPARATION =
+  "Wisdom is separated from clinical grounding so emotional and navigation advice does not get treated as medical authority."
+
+export const TRUST_SOURCE_CARD_RECORDS_TITLE = "Sample records / pasted text"
+
+export const TRUST_SOURCE_CARD_RECORDS_BODY =
+  "Sample pathology-style content and pasted text demonstrate how Anchor turns records into questions. Anchor does not diagnose from documents."
+
+export const TRUST_SOURCE_CARD_MODEL_TITLE = "Model output layer"
+
+export const TRUST_SOURCE_CARD_MODEL_BODY =
+  "Language models help convert messy text into structured questions, scripts, checklists, and summaries. Anchor constrains outputs with safety boundaries, care-team-confirmation language, and task-specific flows."
+
+export const TRUST_DID_NOT_USE_BULLETS: string[] = [
+  "It did not access your hospital portal.",
+  "It did not contact your doctor.",
+  "It did not call insurance.",
+  "It did not send texts or emails.",
+  "It did not schedule appointments.",
+  "It did not verify real insurance coverage.",
+  "It did not rank doctors.",
+  "It did not diagnose from documents.",
+  "It did not confirm stage.",
+  "It did not choose treatment.",
+  "It did not use real patient data in the Sarah demo.",
+]
+
+export interface TrustArchCard {
+  id: string
+  title: string
+  body: string
+}
+
+export const TRUST_ARCH_CARDS: TrustArchCard[] = [
+  {
+    id: "voice",
+    title: "Voice intake",
+    body: "Voice intake uses a Realtime/WebRTC session. The transcript is sent to Anchor’s mirror flow when the caregiver stops recording.",
+  },
+  {
+    id: "mirror",
+    title: "Mirror engine",
+    body: "The mirror flow takes transcript + cancer context and produces: emotional reflection, clinical grounding, fear summary, raw fear quote, and next actions.",
+  },
+  {
+    id: "dual",
+    title: "Dual-track retrieval",
+    body: "Anchor’s original architecture retrieves from two lanes: clinical guideline chunks and caregiver wisdom chunks. The goal is to combine medical structure with human navigation support.",
+  },
+  {
+    id: "plan",
+    title: "72-hour plan engine",
+    body: "The plan flow turns the concern into short-horizon tasks. In the current demo, hero agents also add plan tasks locally so the 72-hour plan becomes the operating layer.",
+  },
+  {
+    id: "ingest",
+    title: "Document ingestion",
+    body: "Prototype document ingestion used LlamaParse and embeddings to turn PDFs into searchable chunks. The current demo document agent is sample/paste-based and does not claim real clinical interpretation.",
+  },
+  {
+    id: "storage",
+    title: "Storage",
+    body: "Authenticated users can use Appwrite in the original architecture. Guest/demo users use browser localStorage. This pitch demo stores the case locally in the browser and Start over clears it.",
+  },
+]
+
+export const TRUST_CLINICAL_LANE_VISUAL = "NCCN-aware guideline chunks → what to ask / what needs confirmation."
+
+export const TRUST_WISDOM_LANE_VISUAL = "Caregiver wisdom chunks → how to ask / what people forget / what reduces burden."
+
+export const TRUST_DEMO_STORAGE_CATEGORIES: string[] = [
+  "Original concern",
+  "Relationship / cancer context",
+  "Added updates",
+  "Follow-up questions",
+  "Plan tasks",
+  "Completed tasks",
+  "Copied scripts and artifacts",
+  "Document / insurance / family activity",
+  "Saved outcomes",
+  "Active hero flow / recommended next move when shown",
+]
+
+export const TRUST_DEMO_STORAGE_NOTE =
+  "This stays in this browser for the demo. Start over clears the local demo case."
+
+export const TRUST_PRODUCTION_DIRECTION_LABEL = "Production direction"
+
+export const TRUST_PRODUCTION_READINESS_BULLETS: string[] = [
+  "Security review",
+  "HIPAA and legal review",
+  "Encryption and access controls",
+  "Audit logs",
+  "User deletion and export controls",
+  "Clinician or navigator review workflow",
+  "Source tracing for every clinical claim",
+  "Safer document ingestion pipeline",
+  "EHR/FHIR integration only through approved channels",
+  "No selling health data",
+  "Clear consent for what is saved",
+]
+
+export const TRUST_MYCHART_PREVIEW_TITLE = "Connect MyChart / EHR — coming later"
+
+export const TRUST_MYCHART_PREVIEW_BODY =
+  "Future secure read-only ingestion would require approved healthcare integrations. This demo starts with voice, text, sample records, and local case memory."
+
+export const TRUST_ACCURACY_CARDS: { title: string; body: string }[] = [
+  {
+    title: "Narrow scope",
+    body: "Caregiver preparation, not medical decision-making — reduces risk by design.",
+  },
+  {
+    title: "Boundary language",
+    body: "Clinical areas point back to the care team so uncertainty stays visible.",
+  },
+  {
+    title: "Known vs pending",
+    body: "Anchor separates what seems known from what still needs confirmation.",
+  },
+  {
+    title: "No treatment selection",
+    body: "Anchor does not tell the family which treatment to choose.",
+  },
+  {
+    title: "Hero-agent flows",
+    body: "Visit, document, and insurance flows constrain output to scripts, questions, checklists, and tasks.",
+  },
+  {
+    title: "Source-aware design",
+    body: "Clinical grounding and caregiver wisdom stay separated so navigation advice does not read as medical authority.",
+  },
+]
+
+export const TRUST_ACCURACY_SECTION_INTRO =
+  "Anchor is bounded and designed to make uncertainty visible. It reduces risk; it is not hallucination-proof, completely safe, or guaranteed accurate."
+
+export const TRUST_CARE_TEAM_CONFIRM_BULLETS: string[] = [
+  "Diagnosis wording",
+  "Stage",
+  "Pathology interpretation",
+  "Imaging interpretation",
+  "Biomarkers / MMR / MSI",
+  "Treatment options",
+  "Urgent symptoms",
+  "Medication changes",
+  "Whether chemo, surgery, radiation, or trials apply",
+  "Insurance or authorization status when handled by the care team or insurer",
+]
+
+export const TRUST_CANNOT_DO_BULLETS: string[] = [
+  "Diagnose",
+  "Prescribe",
+  "Choose treatment",
+  "Confirm stage",
+  "Determine urgency",
+  "Replace emergency care",
+  "Rank doctors",
+  "Judge medical quality",
+  "File insurance appeals",
+  "Contact clinics",
+  "Make calls",
+  "Send messages",
+  "Schedule appointments",
+  "Guarantee approval",
+  "Guarantee accuracy",
+  "Claim HIPAA compliance in this prototype",
+]
+
+export const TRUST_JUDGE_QA: { q: string; a: string }[] = [
+  {
+    q: "Is this medical advice?",
+    a: "No. Anchor prepares questions, scripts, and task lists. Doctors and care teams confirm medical facts and decisions.",
+  },
+  {
+    q: "Is this HIPAA compliant?",
+    a: "Not yet. This is a prototype demo. Production would require HIPAA/legal review, security controls, consent, audit logs, deletion/export, and approved integrations.",
+  },
+  {
+    q: "How is this different from ChatGPT?",
+    a: "ChatGPT answers a prompt. Anchor keeps a caregiver workflow: concern → known/pending → script → plan task → outcome → saved case.",
+  },
+  {
+    q: "Where do answers come from?",
+    a: "From the current case, NCCN-aware workflow grounding, caregiver wisdom patterns, and task-specific safety constraints. In production, source receipts would trace each clinical statement.",
+  },
+  {
+    q: "What happens if Anchor is wrong?",
+    a: "Anchor avoids final medical decisions where possible. It surfaces uncertainty and turns issues into questions for the care team.",
+  },
+  {
+    q: "Does Anchor send messages or make calls?",
+    a: "No. Anchor prepares drafts and scripts. The caregiver reviews, copies, and decides what to say.",
+  },
+]
+
+export const TRUST_OUTCOME_WISDOM_TITLE = "Outcome & Wisdom Agent preview"
+
+export const TRUST_OUTCOME_WISDOM_NOT_ACTIVE = "Not active in this demo."
+
+export const TRUST_OUTCOME_WISDOM_BODY =
+  "Future Anchor could ask after a call: Did this script help? Did the denial get clarified? What worked? With consent and anonymization, successful patterns could improve the wisdom layer for future families."
+
+export const TRUST_OUTCOME_WISDOM_CONSENT =
+  "This would require consent, anonymization, review, and clear opt-out. Anchor is not learning from users, training models on private data, or selling health data in this prototype."
+
+export const TRUST_HERO_PLAN_CONNECT_TITLE = "Hero flows, 72-hour plan, and Saved case"
+
+export const TRUST_HERO_PLAN_CONNECT_BULLETS: string[] = [
+  "Visit, document, and insurance hero flows add concrete plan tasks locally so the 72-hour board stays the operating layer.",
+  "Ask, Updates, and Words to say feed the same case thread you see under Saved.",
+  "Phone Mode is read-only rehearsal — nothing is dialed or messaged from Anchor.",
+]
+
+export const TRUST_TOOLS_CARD_TITLE = TRUST_PANEL_TITLE
+
+export const TRUST_TOOLS_CARD_DESCRIPTION =
+  "See what Anchor used, what it did not use, what is stored, and what your care team must confirm."
+
+export const TRUST_TOOLS_CARD_CTA = "Open trust panel"
+
+export interface TrustSourceReceiptInput {
+  concernLine: string
+  isSarahDemo: boolean
+  caseUpdateCount: number
+  followUpCount: number
+  adaptiveTaskCount: number
+  completedTaskCount: number
+  timelineArtifactCount: number
+  lastHeroFlowLabel: string | null
+}
+
+export function buildTrustSourceReceiptBlock(input: TrustSourceReceiptInput): string {
+  const inputLine = input.isSarahDemo
+    ? "Sarah’s concern about possible colon cancer and missing questions."
+    : input.concernLine.trim().slice(0, 400) || "Current case concern (local demo)."
+  const usedLines = [
+    "Current case concern",
+    "NCCN-aware oncology workflow patterns",
+    "Caregiver wisdom layer",
+    input.isSarahDemo ? "Sample / de-identified demo context" : "Case context you entered in this browser",
+  ]
+  if (input.caseUpdateCount > 0 || input.followUpCount > 0 || input.adaptiveTaskCount > 0 || input.completedTaskCount > 0) {
+    usedLines.push(
+      `Local saved activity (updates: ${input.caseUpdateCount}, Ask entries: ${input.followUpCount}, plan rows: ${input.adaptiveTaskCount}, completed: ${input.completedTaskCount})`,
+    )
+  }
+  const outLines = [
+    "Questions and prep frames from Ask and hero flows",
+    "Exact words / Phone Mode scripts when you copy or rehearse",
+    "72-hour plan tasks (baseline + locally added)",
+    "Saved timeline entries when you choose to save",
+  ]
+  const stillLines = [
+    "Stage",
+    "Final pathology",
+    "Imaging",
+    "Biomarker/MMR/MSI status",
+    "Treatment decisions",
+  ]
+  const heroNote = input.lastHeroFlowLabel ? `Last hero surface: ${input.lastHeroFlowLabel}.` : ""
+  const lines = [
+    "ANCHOR — SOURCE RECEIPT (LOCAL DEMO)",
+    TRUST_PANEL_BADGE,
+    "",
+    "INPUT",
+    inputLine,
+    "",
+    "USED",
+    ...usedLines.map((l) => `• ${l}`),
+    "",
+    "OUTPUT PRODUCED",
+    ...outLines.map((l) => `• ${l}`),
+    "",
+    "STILL REQUIRES CONFIRMATION",
+    ...stillLines.map((l) => `• ${l}`),
+    "",
+    heroNote,
+    "",
+    "— Copied from Anchor prototype. Anchor did not send anything.",
+  ]
+  return lines.filter((l) => l.length > 0).join("\n")
+}
