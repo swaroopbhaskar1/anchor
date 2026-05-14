@@ -21,16 +21,16 @@ export const MEMORY_SUBTITLE_LINES = [
 ] as const
 
 export const MEMORY_EMPTY_QUESTIONS_ASKED =
-  "No Ask tab entries yet — open Ask to capture brief prep frames for your care team."
+  "Nothing here yet — open Tools → Ask Anchor when you want to capture brief prep frames for your care team."
 
 export const MEMORY_EMPTY_CASE_UPDATES =
-  "No structured updates yet — open Updates to add a detail; Anchor will reflect it on the plan board."
+  "No structured updates yet — open Tools → Update the plan to add a detail; Anchor will reflect it on the plan board."
 
 export const MEMORY_EMPTY_TASKS_DONE =
-  "No checklist items marked done yet — use the Plan tab when you are ready."
+  "No checklist items marked done yet — open Tools → 72-hour plan when you are ready."
 
 export const MEMORY_EMPTY_TIMELINE_ARTIFACTS =
-  "Nothing saved from Guide me yet — open a task in Plan and tap Guide me, then save to the demo timeline if you want a record here."
+  "Nothing saved from Guide me yet — open Tools → 72-hour plan, tap Guide me on a task, then save to the demo timeline if you want a record here."
 
 export const MEMORY_CARE_TIMELINE_INTRO =
   "Only the key moments from this session — not a full medical timeline."
@@ -931,3 +931,81 @@ export const FAMILY_AVOID_PRESSURE_LINES: string[] = [
   "“Everything happens for a reason.”",
   "Pressuring for constant updates",
 ]
+
+/** Guided cockpit (Prompt 8.6C) — consent line near Today / Saved. */
+export const COCKPIT_LOCAL_CONSENT_LINE =
+  "Add details only if you want Anchor to keep them in this local demo case. Start over clears it."
+
+/** Stable id for “visit prep” task from Today guided prep (dedupe in UI). */
+export const GUIDED_VISIT_PREP_TASK_ID = "local:guided-visit-prep"
+
+export function buildGuidedVisitPrepTask(): StoredAdaptivePlanTask {
+  return {
+    id: GUIDED_VISIT_PREP_TASK_ID,
+    title: "Visit prep: confirm what is known, what is pending, and what decisions are next",
+    detail: "Added from Today guided prep — not sent from Anchor.",
+    initialStatus: "active",
+    fromUpdate: false,
+  }
+}
+
+export const COCKPIT_WHY_NOT_CHATBOT_TITLE = "Why this is different from a chatbot"
+
+export const COCKPIT_WHY_NOT_CHATBOT_BODY =
+  "Anchor does not just answer once. It keeps the case open, updates the plan when details change, turns tasks into exact words, and saves what happened locally in this demo so the caregiver does not restart from zero."
+
+export const VISIT_GUIDE_TITLE = "Guide the visit"
+
+export const VISIT_GUIDE_PURPOSE = "Use this to get clear answers, not perfect notes."
+
+export const VISIT_GUIDE_OPEN_LINE =
+  "Before we get into details, can we start by confirming what is known, what is pending, and what decisions actually need to be made next?"
+
+export const VISIT_GUIDE_LISTEN_FOR: string[] = [
+  "What is confirmed",
+  "What is pending",
+  "What decision is next",
+  "Who to contact after",
+  "What to watch for before the next visit",
+]
+
+export const VISIT_GUIDE_IF_CONFUSED: string[] = [
+  "Can you say that in plain language?",
+  "Is this confirmed, or are we waiting on another result?",
+  "What should we do before the next appointment?",
+]
+
+export const VISIT_GUIDE_END_LINE = "Can we repeat back what we heard to make sure we understood correctly?"
+
+export const VISIT_GUIDE_AFTER_VISIT: string[] = [
+  "Add new information in Anchor.",
+  "Update the plan.",
+  "Save the top 3 answers.",
+]
+
+export const VISIT_GUIDE_VISIT_NOTES_HINT =
+  "Visit notes may come later from the clinic. This is about not missing the key answers in the moment."
+
+export function buildVisitGuideClipboardBlock(): string {
+  return [
+    "ANCHOR — VISIT GUIDE (LOCAL DEMO)",
+    "Preparation only. Your care team confirms medical decisions. Not diagnosis, treatment recommendation, or stage confirmation.",
+    "",
+    "OPEN WITH",
+    VISIT_GUIDE_OPEN_LINE,
+    "",
+    "LISTEN FOR",
+    ...VISIT_GUIDE_LISTEN_FOR.map((l) => `• ${l}`),
+    "",
+    "IF CONFUSED",
+    ...VISIT_GUIDE_IF_CONFUSED.map((l) => `• ${l}`),
+    "",
+    "END WITH",
+    VISIT_GUIDE_END_LINE,
+    "",
+    "AFTER THE VISIT",
+    ...VISIT_GUIDE_AFTER_VISIT.map((l) => `• ${l}`),
+    "",
+    "— Copied from Anchor prototype. Nothing was sent by Anchor.",
+  ].join("\n")
+}

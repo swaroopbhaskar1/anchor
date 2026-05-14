@@ -46,7 +46,6 @@ import {
   MEMORY_EMPTY_TASKS_DONE,
   MEMORY_EMPTY_TIMELINE_ARTIFACTS,
   MEMORY_PROTO_BADGE,
-  MEMORY_SUBTITLE_LINES,
   buildMemoryHoldingNarrative,
   SARAH_KNOW_NOW_BULLETS,
   SARAH_NEEDS_CONFIRMATION_BULLETS,
@@ -69,6 +68,8 @@ import {
   buildRecordsChecklistAdaptiveTask,
   buildRecordsQuickAdaptiveTask,
   buildFamilySupportAdaptiveTask,
+  buildGuidedVisitPrepTask,
+  buildVisitGuideClipboardBlock,
   createDefaultFamilyCoordBoard,
   FAMILY_AVOID_PRESSURE_LINES,
   FAMILY_EXPLAIN_CARDS,
@@ -81,6 +82,18 @@ import {
   FAMILY_UPDATE_DRAFT_CALM,
   FAMILY_UPDATE_DRAFT_DETAIL,
   FAMILY_UPDATE_DRAFT_HELP,
+  COCKPIT_LOCAL_CONSENT_LINE,
+  COCKPIT_WHY_NOT_CHATBOT_BODY,
+  COCKPIT_WHY_NOT_CHATBOT_TITLE,
+  GUIDED_VISIT_PREP_TASK_ID,
+  VISIT_GUIDE_AFTER_VISIT,
+  VISIT_GUIDE_END_LINE,
+  VISIT_GUIDE_IF_CONFUSED,
+  VISIT_GUIDE_LISTEN_FOR,
+  VISIT_GUIDE_OPEN_LINE,
+  VISIT_GUIDE_PURPOSE,
+  VISIT_GUIDE_TITLE,
+  VISIT_GUIDE_VISIT_NOTES_HINT,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
   normalizeFollowUpChipKind,
@@ -97,7 +110,8 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 
 type CancerType = "colon" | "breast" | "lymphoma"
 type AppPhase = "idle" | "recording" | "processing" | "results"
-type ResultWorkspaceTab = "overview" | "plan" | "ask" | "actions" | "updates" | "records" | "family" | "memory"
+type WorkspaceTab = "today" | "tools" | "saved"
+type ToolPanelId = "ask" | "updates" | "plan" | "actions" | "records" | "family"
 
 type ResultCopyKind =
   | "note"
@@ -109,6 +123,7 @@ type ResultCopyKind =
   | "recordsTransfer"
   | "recordsOnePager"
   | "familyClip"
+  | "visitPrep"
 
 interface CopyTimelineMeta {
   taskTitle: string
@@ -201,7 +216,10 @@ interface AnchorDemoCaseV1 {
   completedPlanTaskIds: string[]
   adaptivePlanTasks: StoredAdaptivePlanTask[]
   actionGuideDemoTimeline?: ActionGuideDemoTimelineEntry[]
-  activeResultTab?: ResultWorkspaceTab
+  workspaceTab?: WorkspaceTab
+  toolPanel?: ToolPanelId | null
+  /** Legacy workspace routing (Prompt 8.6C migration). */
+  activeResultTab?: string
   followUpResponses?: FollowUpResponseItem[]
   familyCoordBoard?: FamilyCoordBoardRow[]
 }
@@ -247,17 +265,37 @@ function isActionGuideDemoTimelineEntry(value: unknown): value is ActionGuideDem
   )
 }
 
-function isResultWorkspaceTab(value: unknown): value is ResultWorkspaceTab {
+function isWorkspaceTab(value: unknown): value is WorkspaceTab {
+  return value === "today" || value === "tools" || value === "saved"
+}
+
+function isToolPanelId(value: unknown): value is ToolPanelId {
   return (
-    value === "overview" ||
-    value === "plan" ||
     value === "ask" ||
-    value === "actions" ||
     value === "updates" ||
+    value === "plan" ||
+    value === "actions" ||
     value === "records" ||
-    value === "family" ||
-    value === "memory"
+    value === "family"
   )
+}
+
+function migrateWorkspaceFromSnapshot(o: Record<string, unknown>): { tab: WorkspaceTab; panel: ToolPanelId | null } {
+  const ws = o.workspaceTab
+  if (isWorkspaceTab(ws)) {
+    const rawPanel = o.toolPanel
+    const panel = rawPanel === null || rawPanel === undefined ? null : isToolPanelId(rawPanel) ? rawPanel : null
+    return { tab: ws, panel: ws === "tools" ? panel : null }
+  }
+  const legacy = o.activeResultTab
+  if (legacy === "memory") return { tab: "saved", panel: null }
+  if (legacy === "plan") return { tab: "tools", panel: "plan" }
+  if (legacy === "ask") return { tab: "tools", panel: "ask" }
+  if (legacy === "actions") return { tab: "tools", panel: "actions" }
+  if (legacy === "updates") return { tab: "tools", panel: "updates" }
+  if (legacy === "records") return { tab: "tools", panel: "records" }
+  if (legacy === "family") return { tab: "tools", panel: "family" }
+  return { tab: "today", panel: null }
 }
 
 function isFollowUpResponseKind(value: unknown): value is FollowUpResponseKind {
@@ -588,7 +626,8 @@ export default function App() {
   const [oneThingUsed, setOneThingUsed] = useState<number[]>([])
   const [currentOneThing, setCurrentOneThing] = useState(0)
   const [activeScreen, setActiveScreen] = useState<CompanionScreen>(null)
-  const [hoveredRegret, setHoveredRegret] = useState<string | null>(null)
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("today")
+  const [toolPanel, setToolPanel] = useState<ToolPanelId | null>(null)
   const [breathStep, setBreathStep] = useState(0)
   const [breathCycles, setBreathCycles] = useState(0)
   const wasActiveRef = useRef(false)
@@ -599,7 +638,6 @@ export default function App() {
   const [completedPlanTaskIds, setCompletedPlanTaskIds] = useState<string[]>([])
   const [adaptivePlanTasks, setAdaptivePlanTasks] = useState<StoredAdaptivePlanTask[]>([])
   const [actionGuideDemoTimeline, setActionGuideDemoTimeline] = useState<ActionGuideDemoTimelineEntry[]>([])
-  const [activeResultTab, setActiveResultTab] = useState<ResultWorkspaceTab>("overview")
   const [followUpResponses, setFollowUpResponses] = useState<FollowUpResponseItem[]>([])
   const [familyCoordBoard, setFamilyCoordBoard] = useState<FamilyCoordBoardRow[]>(() => createDefaultFamilyCoordBoard())
   const [resultsTranscriptEcho, setResultsTranscriptEcho] = useState("")
@@ -817,9 +855,9 @@ export default function App() {
       const tlRaw = o.actionGuideDemoTimeline
       const tl = Array.isArray(tlRaw) ? tlRaw.filter(isActionGuideDemoTimelineEntry) : []
       setActionGuideDemoTimeline(tl)
-      const tabRaw = o.activeResultTab
-      if (isResultWorkspaceTab(tabRaw)) setActiveResultTab(tabRaw)
-      else setActiveResultTab("overview")
+      const migrated = migrateWorkspaceFromSnapshot(rec)
+      setWorkspaceTab(migrated.tab)
+      setToolPanel(migrated.panel)
       const fuRaw = o.followUpResponses
       const followUpsRaw = Array.isArray(fuRaw) ? fuRaw.filter(isFollowUpResponseItem) : []
       const followUps: FollowUpResponseItem[] = followUpsRaw
@@ -870,7 +908,8 @@ export default function App() {
         completedPlanTaskIds,
         adaptivePlanTasks,
         actionGuideDemoTimeline,
-        activeResultTab,
+        workspaceTab,
+        toolPanel: workspaceTab === "tools" ? toolPanel : null,
         followUpResponses,
         familyCoordBoard,
       }
@@ -880,7 +919,8 @@ export default function App() {
     }
   }, [
     actionGuideDemoTimeline,
-    activeResultTab,
+    workspaceTab,
+    toolPanel,
     adaptivePlanTasks,
     cancerType,
     caregiverName,
@@ -1011,7 +1051,8 @@ export default function App() {
   const processRant = useCallback(async (transcript: string) => {
     setPhase("processing")
     setError(null)
-    setActiveResultTab("overview")
+    setWorkspaceTab("today")
+    setToolPanel(null)
     setResultsTranscriptEcho("")
     setPlanResult(null)
     setIsBackupDemoMirror(false)
@@ -1094,7 +1135,8 @@ export default function App() {
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
-    setActiveResultTab("overview")
+    setWorkspaceTab("today")
+    setToolPanel(null)
     setResultsTranscriptEcho(SARAH_DEMO_CONCERN)
     setPhase("results")
   }, [])
@@ -1296,7 +1338,8 @@ export default function App() {
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
     setFamilyCoordBoard(createDefaultFamilyCoordBoard())
-    setActiveResultTab("overview")
+    setWorkspaceTab("today")
+    setToolPanel(null)
     setResultsTranscriptEcho("")
     setFearTimeline([])
     setJournalEntries([])
@@ -1332,7 +1375,8 @@ export default function App() {
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
     setFamilyCoordBoard(createDefaultFamilyCoordBoard())
-    setActiveResultTab("overview")
+    setWorkspaceTab("today")
+    setToolPanel(null)
     setResultsTranscriptEcho("")
     setPhase("idle")
   }
@@ -1462,7 +1506,8 @@ export default function App() {
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
     setFollowUpResponses([])
-    setActiveResultTab("overview")
+    setWorkspaceTab("today")
+    setToolPanel(null)
     setResultsTranscriptEcho("")
   }
 
@@ -1636,7 +1681,6 @@ export default function App() {
                   {phase === "results" && mirrorResult && (
                     <ResultsView
                       actionGuideDemoTimeline={actionGuideDemoTimeline}
-                      activeResultTab={activeResultTab}
                       adaptivePlanTasks={adaptivePlanTasks}
                       appendActionGuideDemoTimeline={appendActionGuideDemoTimeline}
                       appendAdaptivePlanTasks={appendAdaptivePlanTasks}
@@ -1650,24 +1694,31 @@ export default function App() {
                       familyCoordBoard={familyCoordBoard}
                       followUpResponses={followUpResponses}
                       handoffText={handoffText}
-                      hoveredRegret={hoveredRegret}
                       isBackupDemoMirror={isBackupDemoMirror}
                       isPlanning={isPlanning}
                       lovedOne={lovedOne}
                       markPlanTaskDone={markPlanTaskDone}
                       mirrorResult={mirrorResult}
                       noteText={noteText}
-                      onActiveResultTabChange={setActiveResultTab}
                       onAddByVoice={beginVoiceFollowUp}
                       onAskFollowUpSubmit={submitAskFollowUp}
                       onCopy={copyText}
-                      onHoverRegret={setHoveredRegret}
+                      onOpenToolPanel={(panel) => {
+                        setWorkspaceTab("tools")
+                        setToolPanel(panel)
+                      }}
                       onPlan={requestPlan}
                       onSarahBackupDemo={showSarahBackupDemo}
                       onStartOver={startOver}
+                      onWorkspaceTabChange={(tab) => {
+                        setWorkspaceTab(tab)
+                        if (tab !== "tools") setToolPanel(null)
+                      }}
                       planResult={planResult}
                       resultsTranscriptEcho={resultsTranscriptEcho}
                       setFamilyCoordBoard={setFamilyCoordBoard}
+                      toolPanel={toolPanel}
+                      workspaceTab={workspaceTab}
                     />
                   )}
                 </AnimatePresence>
@@ -3419,29 +3470,21 @@ function resolveOpenGuideRow(
 
 function PlanBoardTaskRow({
   done,
-  onHoverRegret,
   onMarkDone,
   onOpenGuide,
   row,
 }: {
   done: boolean
-  onHoverRegret: (value: string | null) => void
   onMarkDone?: (taskId: string) => void
   onOpenGuide: (taskId: string) => void
   row: PlanBoardDisplayRow
 }) {
-  const { detail, fromFamily, fromRecords, fromUpdate, id, regretQuote, title } = row
+  const { detail, fromFamily, fromRecords, fromUpdate, id, title } = row
   const artifact = inferTaskArtifact(row)
   const guideLabel = planRowGuideTriggerLabel(done, artifact.code)
   const borderClass = done ? "border-[#d8e8d8]/90 bg-white/50" : "border-[#e5ddd4] bg-white/70"
   return (
-    <div
-      className={`rounded-[14px] border px-2.5 py-2 sm:rounded-[16px] sm:px-3 sm:py-2.5 ${borderClass}`}
-      onBlur={() => regretQuote && onHoverRegret(null)}
-      onFocus={() => regretQuote && onHoverRegret(regretQuote)}
-      onMouseEnter={() => regretQuote && onHoverRegret(regretQuote)}
-      onMouseLeave={() => regretQuote && onHoverRegret(null)}
-    >
+    <div className={`rounded-[14px] border px-2.5 py-2 sm:rounded-[16px] sm:px-3 sm:py-2.5 ${borderClass}`}>
       <div className="flex min-w-0 items-start justify-between gap-2">
         <p className="m-0 min-w-0 flex-1 text-[12px] font-medium leading-snug text-[#3f3a36] sm:text-sm">{title}</p>
         <div className="flex max-w-[11rem] shrink-0 flex-wrap items-center justify-end gap-1 sm:max-w-none">
@@ -3485,14 +3528,12 @@ function PlanBoardTaskRow({
 
 function PlanBoardSubsection({
   emptyHint,
-  onHoverRegret,
   onMarkDone,
   onOpenGuide,
   rows,
   title,
 }: {
   emptyHint?: string
-  onHoverRegret: (value: string | null) => void
   onMarkDone: (taskId: string) => void
   onOpenGuide: (taskId: string) => void
   rows: PlanBoardDisplayRow[]
@@ -3507,7 +3548,6 @@ function PlanBoardSubsection({
           <PlanBoardTaskRow
             key={row.id}
             done={false}
-            onHoverRegret={onHoverRegret}
             onMarkDone={onMarkDone}
             onOpenGuide={onOpenGuide}
             row={row}
@@ -3520,11 +3560,9 @@ function PlanBoardSubsection({
 }
 
 function PlanBoardDoneSubsection({
-  onHoverRegret,
   onOpenGuide,
   rows,
 }: {
-  onHoverRegret: (value: string | null) => void
   onOpenGuide: (taskId: string) => void
   rows: PlanBoardDisplayRow[]
 }) {
@@ -3534,7 +3572,7 @@ function PlanBoardDoneSubsection({
       <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Done</p>
       <div className="grid gap-1.5 sm:gap-2">
         {rows.map((row) => (
-          <PlanBoardTaskRow key={row.id} done onHoverRegret={onHoverRegret} onOpenGuide={onOpenGuide} row={row} />
+          <PlanBoardTaskRow key={row.id} done onOpenGuide={onOpenGuide} row={row} />
         ))}
       </div>
     </div>
@@ -3548,7 +3586,6 @@ function AdaptivePlanBoard({
   isBackupDemoMirror,
   lovedOneLabel,
   onGuideOpenChange,
-  onHoverRegret,
   onMarkDone,
   planResult,
 }: {
@@ -3558,11 +3595,11 @@ function AdaptivePlanBoard({
   isBackupDemoMirror: boolean
   lovedOneLabel: string
   onGuideOpenChange: (taskId: string | null) => void
-  onHoverRegret: (value: string | null) => void
   onMarkDone: (taskId: string) => void
   planResult: PlanResult | null
 }) {
   const doneSet = useMemo(() => new Set(completedPlanTaskIds), [completedPlanTaskIds])
+  const [expandActiveTasks, setExpandActiveTasks] = useState(false)
 
   const baselineRows = useMemo(
     () => (planResult ? baselineRowsFromPlan(planResult) : []),
@@ -3590,6 +3627,10 @@ function AdaptivePlanBoard({
 
   const activeCombined = useMemo(() => [...otherActive, ...activeBaseline], [activeBaseline, otherActive])
   const doneCombined = useMemo(() => [...doneBaseline, ...doneAdaptive], [doneAdaptive, doneBaseline])
+  const activeRowsForBoard = useMemo(() => {
+    if (expandActiveTasks || activeCombined.length <= 3) return activeCombined
+    return activeCombined.slice(0, 3)
+  }, [activeCombined, expandActiveTasks])
 
   const showBoard = Boolean(planResult) || adaptivePlanTasks.length > 0
   if (!showBoard) return null
@@ -3603,7 +3644,6 @@ function AdaptivePlanBoard({
         </p>
       )}
       <PlanBoardSubsection
-        onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
         onOpenGuide={(id) => onGuideOpenChange(id)}
         rows={urgent}
@@ -3611,27 +3651,33 @@ function AdaptivePlanBoard({
       />
       <PlanBoardSubsection
         emptyHint="Baseline steps from your plan; mark done as you go."
-        onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
         onOpenGuide={(id) => onGuideOpenChange(id)}
-        rows={activeCombined}
+        rows={activeRowsForBoard}
         title="Active next steps"
       />
+      {activeCombined.length > 3 && (
+        <button
+          type="button"
+          onClick={() => setExpandActiveTasks((v) => !v)}
+          className="mt-2 w-full rounded-full border border-[#8f7e9b]/40 bg-[#faf7f4]/95 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+        >
+          {expandActiveTasks ? "Show fewer active tasks" : `Show all active tasks (${activeCombined.length})`}
+        </button>
+      )}
       <PlanBoardSubsection
-        onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
         onOpenGuide={(id) => onGuideOpenChange(id)}
         rows={waiting}
         title="Waiting on care team"
       />
       <PlanBoardSubsection
-        onHoverRegret={onHoverRegret}
         onMarkDone={onMarkDone}
         onOpenGuide={(id) => onGuideOpenChange(id)}
         rows={changed}
         title="Changed because of new information"
       />
-      <PlanBoardDoneSubsection onHoverRegret={onHoverRegret} onOpenGuide={(id) => onGuideOpenChange(id)} rows={doneCombined} />
+      <PlanBoardDoneSubsection onOpenGuide={(id) => onGuideOpenChange(id)} rows={doneCombined} />
       <p className="mt-3 text-[12px] leading-snug text-[#756f68] sm:mt-4 sm:text-sm sm:leading-6">
         {isBackupDemoMirror
           ? "Sample NCCN-aware checklist based on what Anchor knows right now — not set in stone, not a treatment recommendation. Confirm timing and details with your care team."
@@ -3931,20 +3977,29 @@ function pickWhoGoingLine(nightNote: NightNoteContent, lovedOneLabel: string): s
   return `Confirm who will attend with ${lovedOneLabel} and who will take notes.`
 }
 
-const RESULT_WORKSPACE_TAB_DEFS: { id: ResultWorkspaceTab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "plan", label: "Plan" },
-  { id: "ask", label: "Ask" },
-  { id: "actions", label: "Actions" },
-  { id: "updates", label: "Updates" },
-  { id: "records", label: "Records" },
-  { id: "family", label: "Family" },
-  { id: "memory", label: "Memory" },
+function CockpitToolsBackRow({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="mb-3 min-w-0">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#d8cec5] bg-white/80 px-3 py-1.5 text-[11px] font-medium text-[#5f5a55] transition hover:bg-white sm:text-xs"
+      >
+        <ArrowLeft className="h-3.5 w-3.5 shrink-0 text-[#9b829c] sm:h-4 sm:w-4" aria-hidden />
+        Back to tools
+      </button>
+    </div>
+  )
+}
+
+const COCKPIT_TAB_DEFS: { id: WorkspaceTab; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "tools", label: "Tools" },
+  { id: "saved", label: "Saved" },
 ]
 
 function ResultsView({
   actionGuideDemoTimeline,
-  activeResultTab,
   adaptivePlanTasks,
   appendActionGuideDemoTimeline,
   appendAdaptivePlanTasks,
@@ -3958,27 +4013,27 @@ function ResultsView({
   familyCoordBoard,
   followUpResponses,
   handoffText,
-  hoveredRegret,
   isBackupDemoMirror,
   isPlanning,
   lovedOne,
   markPlanTaskDone,
   mirrorResult,
   noteText,
-  onActiveResultTabChange,
   onAddByVoice,
   onAskFollowUpSubmit,
   onCopy,
-  onHoverRegret,
+  onOpenToolPanel,
   onPlan,
   onSarahBackupDemo,
   onStartOver,
+  onWorkspaceTabChange,
   planResult,
   resultsTranscriptEcho,
   setFamilyCoordBoard,
+  toolPanel,
+  workspaceTab,
 }: {
   actionGuideDemoTimeline: ActionGuideDemoTimelineEntry[]
-  activeResultTab: ResultWorkspaceTab
   adaptivePlanTasks: StoredAdaptivePlanTask[]
   appendActionGuideDemoTimeline: (entry: ActionGuideDemoTimelineEntry) => void
   appendAdaptivePlanTasks: (tasks: StoredAdaptivePlanTask[]) => void
@@ -3992,24 +4047,25 @@ function ResultsView({
   familyCoordBoard: FamilyCoordBoardRow[]
   followUpResponses: FollowUpResponseItem[]
   handoffText: string
-  hoveredRegret: string | null
   isBackupDemoMirror: boolean
   isPlanning: boolean
   lovedOne: string
   markPlanTaskDone: (taskId: string) => void
   mirrorResult: MirrorResult
   noteText: string
-  onActiveResultTabChange: (tab: ResultWorkspaceTab) => void
   onAddByVoice: () => void
   onAskFollowUpSubmit: (chipId: FollowUpChipId | null, customText: string) => CreateFollowUpResult
   onCopy: (kind: ResultCopyKind, value: string, timelineTitle?: string, timelineMeta?: CopyTimelineMeta) => void
-  onHoverRegret: (value: string | null) => void
+  onOpenToolPanel: (panel: ToolPanelId | null) => void
   onPlan: () => void
   onSarahBackupDemo: () => void
   onStartOver: () => void
+  onWorkspaceTabChange: (tab: WorkspaceTab) => void
   planResult: PlanResult | null
   resultsTranscriptEcho: string
   setFamilyCoordBoard: React.Dispatch<React.SetStateAction<FamilyCoordBoardRow[]>>
+  toolPanel: ToolPanelId | null
+  workspaceTab: WorkspaceTab
 }) {
   const [guideOpenId, setGuideOpenId] = useState<string | null>(null)
   const [infoPanelOpen, setInfoPanelOpen] = useState(false)
@@ -4025,6 +4081,9 @@ function ResultsView({
   const recordsDocStackRef = useRef<HTMLDivElement | null>(null)
   const recordsMissingRef = useRef<HTMLDivElement | null>(null)
   const [memoryTimelineExpanded, setMemoryTimelineExpanded] = useState(false)
+  const [guidedPrepOpen, setGuidedPrepOpen] = useState(false)
+  const [askShowAll, setAskShowAll] = useState(false)
+  const [visitPrepInlineNote, setVisitPrepInlineNote] = useState<string | null>(null)
 
   function scrollToRecordsSection(ref: React.RefObject<HTMLDivElement | null>) {
     window.requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
@@ -4042,6 +4101,17 @@ function ResultsView({
       badge: "Family",
       savedAt: new Date().toISOString(),
     })
+  }
+
+  function handleAddGuidedVisitPrepTask() {
+    if (adaptivePlanTasks.some((t) => t.id === GUIDED_VISIT_PREP_TASK_ID)) {
+      setVisitPrepInlineNote("Visit prep is already on your plan.")
+      window.setTimeout(() => setVisitPrepInlineNote(null), 2800)
+      return
+    }
+    appendAdaptivePlanTasks([buildGuidedVisitPrepTask()])
+    setVisitPrepInlineNote("Added to your 72-hour plan (Tools).")
+    window.setTimeout(() => setVisitPrepInlineNote(null), 2800)
   }
 
   function familyRoleTaskAlreadyPresent(roleKey: string): boolean {
@@ -4077,7 +4147,7 @@ function ResultsView({
   }
 
   const familyTimelineMeta: CopyTimelineMeta = {
-    taskTitle: "Copied from Family tab",
+    taskTitle: "Copied from family support (Tools)",
     badge: "Family",
     taskId: "family-activity",
   }
@@ -4162,6 +4232,12 @@ function ResultsView({
   )
 
   const boardCountsLine = useMemo(() => formatAdaptiveBoardCountsLine(boardCounts), [boardCounts])
+
+  const askResponsesNewestFirst = useMemo(() => [...followUpResponses].reverse(), [followUpResponses])
+
+  useEffect(() => {
+    if (workspaceTab !== "tools" || toolPanel !== "ask") setAskShowAll(false)
+  }, [toolPanel, workspaceTab])
 
   const mergedNeedsConfirmation = useMemo(
     () => mergeNeedsConfirmationForMemory(packet.needsConfirmation, caseInformationUpdates),
@@ -4413,13 +4489,13 @@ function ResultsView({
 
         <div className="sticky top-0 z-[24] mb-3 border-b border-[#e8dfd8] bg-[#fdfbf8]/96 py-2 backdrop-blur-md sm:mb-4">
           <div className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {RESULT_WORKSPACE_TAB_DEFS.map((tab) => (
+            {COCKPIT_TAB_DEFS.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => onActiveResultTabChange(tab.id)}
+                onClick={() => onWorkspaceTabChange(tab.id)}
                 className={`shrink-0 rounded-full border px-3 py-2 text-[12px] font-medium transition sm:px-3.5 sm:py-2 sm:text-sm ${
-                  activeResultTab === tab.id
+                  workspaceTab === tab.id
                     ? "border-[#b98da0] bg-[#f0e6f4] text-[#4a3548] shadow-sm"
                     : "border-transparent bg-white/60 text-[#5f5a55] hover:border-[#d8cec5] hover:bg-white/90"
                 }`}
@@ -4431,51 +4507,350 @@ function ResultsView({
         </div>
 
         <div className="min-w-0 max-w-full overflow-x-hidden pb-2">
-          {activeResultTab === "overview" && (
-            <motion.div variants={itemVariants} className="grid min-w-0 gap-2 sm:gap-3">
-              <motion.p
-                variants={itemVariants}
-                className="m-0 break-words text-[10px] font-semibold uppercase leading-snug tracking-wide text-[#8f7e9b] sm:text-xs"
-              >
-                YOUR NEXT MOVES FOR YOUR {lovedOne.toUpperCase()}&apos;S {cancerType.toUpperCase()} CANCER
-              </motion.p>
-              <motion.blockquote
-                variants={itemVariants}
-                className={`m-0 max-w-full break-words text-xl font-normal leading-snug sm:text-3xl md:text-4xl lg:text-5xl ${SOFT_GRADIENT_TEXT}`}
-              >
-                &quot;{mirrorResult.fearQuote}&quot;
-              </motion.blockquote>
-              <motion.div variants={itemVariants} className="mt-1 sm:mt-2">
-                <span className="inline-flex max-w-full items-center rounded-full border border-[#c9b8d8]/80 bg-white/70 px-2.5 py-1 text-[10px] font-semibold leading-tight tracking-wide text-[#6f6280] sm:px-3 sm:text-[11px]">
-                  NCCN-aware prep · care team decides
-                </span>
-              </motion.div>
-              <ResultPacketCard icon={<Brain className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="NCCN-aware care preparation">
-                <p className="mb-2 text-[12px] leading-snug text-[#756f68] sm:mb-2.5 sm:text-sm sm:leading-relaxed">{packet.careTeamIntro}</p>
-                <ResultBulletList items={packet.careTeamBullets} />
-              </ResultPacketCard>
-              <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What we know right now">
-                <ResultBulletList items={packet.knowNow} />
-              </ResultPacketCard>
-              <ResultPacketCard icon={<Clipboard className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What still needs confirmation">
-                <ResultBulletList items={packet.needsConfirmation} />
-              </ResultPacketCard>
-              <ResultPacketCard icon={<Wind className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="What does not need to be solved tonight">
-                <ResultBulletList items={packet.notTonight} />
-              </ResultPacketCard>
-              <NightNoteCard note={packet.nightNote} />
-              <button
-                type="button"
-                onClick={() => onActiveResultTabChange("plan")}
-                className="mt-2 w-full rounded-[20px] border border-white/80 bg-[#b7a6c9] px-4 py-3 text-sm font-medium text-white shadow-[0_14px_40px_rgba(151,128,163,0.22)] transition hover:-translate-y-0.5 sm:rounded-[22px]"
-              >
-                Next: open the 72-hour plan
-              </button>
+          {workspaceTab === "today" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <p className="m-0 text-[17px] font-semibold leading-snug text-[#3f3a35] sm:text-xl">
+                  {isSarahVoiceCase
+                    ? "Sarah's next 72 hours"
+                    : `${displayName !== "there" ? displayName : lovedOneLabel}'s next 72 hours`}
+                </p>
+                <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  NCCN-aware prep · care team decides · stored locally for this demo
+                </p>
+              </div>
+
+              <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_LOCAL_CONSENT_LINE}</p>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e5ddd4]/90 p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Recommended now</p>
+                <p className="mt-2 m-0 text-[15px] font-semibold leading-snug text-[#3f3a35] sm:text-base">Prepare for tomorrow&apos;s appointment</p>
+                <p className="mt-2 m-0 text-[12px] leading-snug text-[#5f5a55] sm:text-sm sm:leading-relaxed">
+                  Start with the next conversation: what is confirmed, what is pending, what records to bring, and what questions
+                  you are afraid you will forget.
+                </p>
+                <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setGuidedPrepOpen(true)}
+                    className="w-full rounded-[16px] border border-[#b98da0]/80 bg-[#b7a6c9] px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:flex-1 sm:rounded-[18px] sm:text-sm"
+                  >
+                    Start guided prep
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenToolPanel("updates")
+                    }}
+                    className={`${GLASS_BUTTON} w-full rounded-[16px] px-4 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                  >
+                    Add new information
+                  </button>
+                </div>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What matters now</p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                  <li className="relative pl-3.5 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                    Confirm what is known versus still pending with your care team.
+                  </li>
+                  <li className="relative pl-3.5 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                    Bring the records you already have so the visit stays concrete.
+                  </li>
+                  <li className="relative pl-3.5 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                    Ask what decisions, if any, are expected next — not diagnosis or treatment choice from Anchor.
+                  </li>
+                </ul>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Next best action</p>
+                <p className="mt-2 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
+                  Open guided prep, then add anything new under Tools → Update the plan so the checklist stays honest.
+                </p>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Top 3 questions</p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                  <li>What is confirmed right now?</li>
+                  <li>What is still pending?</li>
+                  <li>What decision actually needs to be made next?</li>
+                </ul>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">What to bring</p>
+                <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                  <li>Pathology or report notes you already have</li>
+                  <li>Imaging summaries if available</li>
+                  <li>Medication list</li>
+                  <li>Portal messages or appointment details</li>
+                </ul>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Mini plan status</p>
+                <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Tap a count to open the full 72-hour plan in Tools. Nothing is sent automatically.
+                </p>
+                <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
+                  <button
+                    type="button"
+                    onClick={() => onOpenToolPanel("plan")}
+                    className="rounded-[14px] border border-[#e5ddd4] bg-white/80 px-2 py-2 text-left transition hover:bg-white sm:rounded-[16px]"
+                  >
+                    <p className="m-0 text-[20px] font-semibold tabular-nums text-[#3f3a35]">{boardCounts.active}</p>
+                    <p className="mt-0.5 m-0 text-[10px] font-medium leading-snug text-[#756f68] sm:text-[11px]">Active tasks</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenToolPanel("plan")}
+                    className="rounded-[14px] border border-[#e5ddd4] bg-white/80 px-2 py-2 text-left transition hover:bg-white sm:rounded-[16px]"
+                  >
+                    <p className="m-0 text-[20px] font-semibold tabular-nums text-[#3f3a35]">{boardCounts.waiting}</p>
+                    <p className="mt-0.5 m-0 text-[10px] font-medium leading-snug text-[#756f68] sm:text-[11px]">Waiting on care team</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenToolPanel("plan")}
+                    className="rounded-[14px] border border-[#e5ddd4] bg-white/80 px-2 py-2 text-left transition hover:bg-white sm:rounded-[16px]"
+                  >
+                    <p className="m-0 text-[20px] font-semibold tabular-nums text-[#3f3a35]">{boardCounts.done}</p>
+                    <p className="mt-0.5 m-0 text-[10px] font-medium leading-snug text-[#756f68] sm:text-[11px]">Done</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenToolPanel("updates")}
+                    className="rounded-[14px] border border-[#e5ddd4] bg-white/80 px-2 py-2 text-left transition hover:bg-white sm:rounded-[16px]"
+                  >
+                    <p className="m-0 text-[20px] font-semibold tabular-nums text-[#3f3a35]">{caseInformationUpdates.length}</p>
+                    <p className="mt-0.5 m-0 text-[10px] font-medium leading-snug text-[#756f68] sm:text-[11px]">Updates added</p>
+                  </button>
+                </div>
+                {boardCounts.changed > 0 && (
+                  <p className="mt-2 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">
+                    {boardCounts.changed} task{boardCounts.changed === 1 ? "" : "s"} changed after new information — see Plan.
+                  </p>
+                )}
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Night note · compact</p>
+                <p className="mt-2 m-0 text-[12px] font-medium text-[#3f3a35] sm:text-sm">{packet.nightNote.subtitle}</p>
+                <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{packet.nightNote.body}</p>
+                <ul className="mt-2 m-0 list-none space-y-1 p-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs">
+                  {packet.nightNote.tinyActions.slice(0, 3).map((line) => (
+                    <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.4em] before:h-1 before:w-1 before:rounded-full before:bg-[#c9b8d8]/80">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{COCKPIT_WHY_NOT_CHATBOT_TITLE}</p>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_WHY_NOT_CHATBOT_BODY}</p>
+              </div>
             </motion.div>
           )}
 
-          {activeResultTab === "plan" && (
+          {workspaceTab === "tools" && toolPanel === null && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <p className="m-0 text-[16px] font-semibold text-[#3f3a35] sm:text-lg">Anchor tools</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
+                  Use these when you need more than the recommended next step.
+                </p>
+              </div>
+              <div className="grid min-w-0 gap-2 sm:grid-cols-2 sm:gap-3">
+                {(
+                  [
+                    {
+                      title: "Ask Anchor",
+                      body: "Ask a case-aware follow-up in plain language.",
+                      panel: "ask" as const,
+                    },
+                    {
+                      title: "Update the plan",
+                      body: "Add new information and see what changed.",
+                      panel: "updates" as const,
+                    },
+                    {
+                      title: "72-hour plan",
+                      body: "Track active, waiting, changed, and done tasks.",
+                      panel: "plan" as const,
+                    },
+                    {
+                      title: "Get exact words",
+                      body: "Open call scripts, doctor questions, portal drafts, and family updates.",
+                      panel: "actions" as const,
+                    },
+                    {
+                      title: "Records",
+                      body: "Know what to bring, what is missing, and what to ask.",
+                      panel: "records" as const,
+                    },
+                    {
+                      title: "Family support",
+                      body: "Ask for one concrete thing without explaining everything again.",
+                      panel: "family" as const,
+                    },
+                    {
+                      title: "Memory",
+                      body: "Review what Anchor saved locally for this demo.",
+                      panel: null,
+                    },
+                  ] as const
+                ).map((card) => (
+                  <button
+                    key={card.title}
+                    type="button"
+                    onClick={() => {
+                      if (card.panel === null) {
+                        onWorkspaceTabChange("saved")
+                        return
+                      }
+                      onOpenToolPanel(card.panel)
+                    }}
+                    className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 text-left transition hover:border-[#b98da0]/45 hover:bg-white/90 sm:rounded-[20px] sm:p-4`}
+                  >
+                    <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-sm">{card.title}</p>
+                    <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{card.body}</p>
+                  </button>
+                ))}
+              </div>
+              <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_LOCAL_CONSENT_LINE}</p>
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="m-0 text-[12px] font-semibold text-[#3f3a35] sm:text-sm">{COCKPIT_WHY_NOT_CHATBOT_TITLE}</p>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_WHY_NOT_CHATBOT_BODY}</p>
+              </div>
+            </motion.div>
+          )}
+
+          <AnimatePresence>
+            {guidedPrepOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setGuidedPrepOpen(false)}
+                className="fixed inset-0 z-[60] flex items-end justify-center bg-[#242230]/35 p-3 pb-6 sm:items-center sm:p-6"
+                role="presentation"
+              >
+                <motion.div
+                  initial={{ y: 48, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 32, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`${GLASS_PANEL} max-h-[min(92vh,640px)] w-full max-w-lg overflow-y-auto rounded-[20px] p-4 shadow-[0_24px_80px_rgba(36,34,48,0.18)] sm:rounded-[24px] sm:p-5`}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={VISIT_GUIDE_TITLE}
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="m-0 text-[15px] font-semibold text-[#3f3a35] sm:text-base">{VISIT_GUIDE_TITLE}</p>
+                      <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{VISIT_GUIDE_PURPOSE}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setGuidedPrepOpen(false)}
+                      className="shrink-0 rounded-full border border-[#e5ddd4] bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    <div>
+                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">1 · Open with this</p>
+                      <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{VISIT_GUIDE_OPEN_LINE}</p>
+                    </div>
+                    <div>
+                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">2 · Listen for</p>
+                      <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                        {VISIT_GUIDE_LISTEN_FOR.map((line) => (
+                          <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">3 · Ask if confused</p>
+                      <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                        {VISIT_GUIDE_IF_CONFUSED.map((line) => (
+                          <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">4 · End with</p>
+                      <p className="mt-1.5 m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">{VISIT_GUIDE_END_LINE}</p>
+                    </div>
+                    <div>
+                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">5 · After the visit</p>
+                      <ul className="mt-1.5 m-0 list-none space-y-1 p-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm">
+                        {VISIT_GUIDE_AFTER_VISIT.map((line) => (
+                          <li key={line} className="relative pl-3 before:absolute before:left-0 before:top-[0.42em] before:h-1 before:w-1 before:rounded-full before:bg-[#b98da0]/90">
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">{VISIT_GUIDE_VISIT_NOTES_HINT}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => void onCopy("visitPrep", buildVisitGuideClipboardBlock())}
+                      className={`${GLASS_BUTTON} flex w-full items-center justify-center gap-2 rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                    >
+                      <Copy className="h-4 w-4 shrink-0 text-[#9b829c]" />
+                      Copy visit questions
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddGuidedVisitPrepTask}
+                      className="w-full rounded-[16px] border border-[#b98da0]/80 bg-[#f5eef8]/95 px-3 py-2.5 text-[12px] font-semibold text-[#4a3548] transition hover:bg-white sm:flex-1 sm:rounded-[18px] sm:text-sm"
+                    >
+                      Add visit-prep task to plan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGuidedPrepOpen(false)
+                        onOpenToolPanel("plan")
+                      }}
+                      className={`${GLASS_BUTTON} w-full rounded-[16px] px-3 py-2.5 text-[12px] font-medium text-[#3f3a36] sm:flex-1 sm:rounded-[18px] sm:text-sm`}
+                    >
+                      Open full plan
+                    </button>
+                  </div>
+                  {copied === "visitPrep" && (
+                    <p className="mt-3 m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
+                      Copied. Anchor did not send anything.
+                    </p>
+                  )}
+                  {visitPrepInlineNote && (
+                    <p className="mt-2 m-0 text-center text-[11px] text-[#8b6914] sm:text-xs" role="status">
+                      {visitPrepInlineNote}
+                    </p>
+                  )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {workspaceTab === "tools" && toolPanel === "plan" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
               {!planResult && (
                 <p className="m-0 rounded-[14px] border border-[#e5ddd4] bg-white/70 px-3 py-2.5 text-[12px] leading-snug text-[#5f5a55] sm:rounded-[16px] sm:text-sm">
                   Generate the 72-hour plan to expand this checklist. New information you add will stay attached to this case.
@@ -4539,30 +4914,18 @@ function ResultsView({
                       isBackupDemoMirror={isBackupDemoMirror}
                       lovedOneLabel={lovedOneLabel}
                       onGuideOpenChange={setGuideOpenId}
-                      onHoverRegret={onHoverRegret}
                       onMarkDone={markPlanTaskDone}
                       planResult={planResult}
                     />
-                    <AnimatePresence>
-                      {hoveredRegret && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 12 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 8 }}
-                          className={`${GLASS_PANEL} mt-3 rounded-[20px] p-3 text-[13px] italic leading-snug text-[#6f6280] sm:mt-4 sm:rounded-[24px] sm:p-4 sm:text-sm sm:leading-6`}
-                        >
-                          {hoveredRegret}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
                   </motion.div>
                 )}
               </AnimatePresence>
             </motion.div>
           )}
 
-          {activeResultTab === "ask" && (
+          {workspaceTab === "tools" && toolPanel === "ask" && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
               <div className="min-w-0">
                 <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-base">Ask Anchor</p>
                 <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{ASK_ANCHOR_SUBTITLE}</p>
@@ -4632,7 +4995,7 @@ function ResultsView({
               </p>
               <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#6f665f] sm:text-xs">Questions asked</p>
               <div className="grid min-w-0 gap-2.5 sm:gap-3">
-                {followUpResponses.map((item) => (
+                {(askShowAll ? askResponsesNewestFirst : askResponsesNewestFirst.slice(0, 3)).map((item) => (
                   <div
                     key={item.id}
                     className="min-w-0 max-w-full rounded-[16px] border border-[#cbc4be] bg-white p-3 text-[#3f3a35] shadow-[0_8px_28px_rgba(63,58,53,0.06)] sm:rounded-[20px] sm:p-4"
@@ -4691,6 +5054,15 @@ function ResultsView({
                   </div>
                 ))}
               </div>
+              {askResponsesNewestFirst.length > 3 && (
+                <button
+                  type="button"
+                  onClick={() => setAskShowAll((v) => !v)}
+                  className="w-full rounded-full border border-[#8f7e9b]/40 bg-[#faf7f4]/95 py-1.5 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
+                >
+                  {askShowAll ? "Show fewer answers" : `Show all answers (${askResponsesNewestFirst.length})`}
+                </button>
+              )}
               {copied === "followup" && (
                 <p className="m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
                   Copied. Anchor did not send anything.
@@ -4704,10 +5076,11 @@ function ResultsView({
             </motion.div>
           )}
 
-          {activeResultTab === "actions" && (
+          {workspaceTab === "tools" && toolPanel === "actions" && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
               <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
-                Open any task in the Plan tab and tap Guide me for exact words. These quick cards open the same guided sheet.
+                Open any task in Tools → 72-hour plan and tap Guide me for exact words. These quick cards open the same guided sheet.
               </p>
               <div>
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">THREE NEXT STEPS</p>
@@ -4758,11 +5131,12 @@ function ResultsView({
             </motion.div>
           )}
 
-          {activeResultTab === "updates" && (
+          {workspaceTab === "tools" && toolPanel === "updates" && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
               <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
                 Add one detail. Anchor will show what changed and update the plan board. Updates you save here also feed the
-                adaptive checklist on the Plan tab — NCCN-aware prep, not set in stone.
+                adaptive checklist in Tools → 72-hour plan — NCCN-aware prep, not set in stone.
               </p>
               <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <div className="mb-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -4880,8 +5254,9 @@ function ResultsView({
             </motion.div>
           )}
 
-          {activeResultTab === "records" && (
+          {workspaceTab === "tools" && toolPanel === "records" && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
               <div className="min-w-0">
                 <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-base">Records</p>
                 <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{RECORDS_TAB_SUBTITLE}</p>
@@ -5186,8 +5561,9 @@ function ResultsView({
             </motion.div>
           )}
 
-          {activeResultTab === "family" && (
+          {workspaceTab === "tools" && toolPanel === "family" && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
               <div className="min-w-0">
                 <p className="m-0 text-[13px] font-semibold text-[#3f3a35] sm:text-base">Family support</p>
                 <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">{FAMILY_TAB_SUBTITLE}</p>
@@ -5480,12 +5856,12 @@ function ResultsView({
             </motion.div>
           )}
 
-          {activeResultTab === "memory" && (
+          {workspaceTab === "saved" && (
             <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
               <div className="min-w-0 max-w-full">
-                <p className="m-0 text-[13px] font-semibold leading-snug text-[#3f3a35] sm:text-base">Memory</p>
+                <p className="m-0 text-[16px] font-semibold leading-snug text-[#3f3a35] sm:text-lg">Saved case</p>
                 <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">
-                  {MEMORY_SUBTITLE_LINES[0]} {MEMORY_SUBTITLE_LINES[1]}
+                  Anchor keeps the important parts locally for this demo so you do not have to restart from zero.
                 </p>
                 <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                   <span className="inline-flex max-w-full shrink-0 items-center rounded-full border border-[#c9b8d8]/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-[#6f6280] sm:text-[11px]">
@@ -5493,6 +5869,7 @@ function ResultsView({
                   </span>
                 </div>
                 <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{MEMORY_ANCHOR_ORGANIZED_LINE}</p>
+                <p className="mt-2 m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_LOCAL_CONSENT_LINE}</p>
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
@@ -5564,7 +5941,7 @@ function ResultsView({
                         </div>
                         <button
                           type="button"
-                          onClick={() => onActiveResultTabChange("ask")}
+                          onClick={() => onOpenToolPanel("ask")}
                           className="shrink-0 self-start rounded-full border border-[#b98da0]/50 bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
                         >
                           View in Ask
@@ -5629,12 +6006,14 @@ function ResultsView({
               </div>
 
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Plan changes (adaptive board)</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Plan at a glance</p>
                 <p className="m-0 text-[12px] font-medium leading-snug text-[#3f3a36] sm:text-sm">{boardCountsLine}</p>
                 <p className="mt-1.5 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  Counts follow the same buckets as the Plan tab (active includes urgent + active next steps).{" "}
+                  Counts match the same buckets as your 72-hour plan in Tools.{" "}
                   <span className="font-medium text-[#5f5a55]">
-                    {planResult ? "A plan snapshot is on your Plan tab." : "Generate the plan on the Plan tab when you want the full checklist."}
+                    {planResult
+                      ? "Your checklist is in Tools → 72-hour plan."
+                      : "When you are ready, generate the checklist under Tools → 72-hour plan."}
                   </span>
                 </p>
               </div>
@@ -5758,7 +6137,7 @@ function ResultsView({
               <div className={`${GLASS_PANEL} min-w-0 max-w-full rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-[11px]">Later · Support snapshot</p>
                 <p className="m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
-                  From your Family tab — local only, not sent. Open there to move cards or copy drafts.
+                  From family support in Tools — local only, not sent. Open there to move cards or copy drafts.
                 </p>
                 <ul className="mt-2 m-0 list-none space-y-1.5 p-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
                   <li>
@@ -5780,10 +6159,10 @@ function ResultsView({
                 </ul>
                 <button
                   type="button"
-                  onClick={() => onActiveResultTabChange("family")}
+                  onClick={() => onOpenToolPanel("family")}
                   className="mt-2 rounded-full border border-[#b98da0]/50 bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#5c4a62] transition hover:bg-white sm:text-[11px]"
                 >
-                  Open Family tab
+                  Open family support
                 </button>
               </div>
 
