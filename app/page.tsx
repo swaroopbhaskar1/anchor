@@ -42,9 +42,12 @@ import {
   SARAH_NEEDS_CONFIRMATION_BULLETS,
   SARAH_NOT_TONIGHT_BULLETS,
   SARAH_NIGHT_NOTE,
+  ASK_ANCHOR_SUBTITLE,
+  FOLLOW_UP_CHIP_DEFS,
   getDemoCaseDeltaFromChip,
   getDemoCaseDeltaFromCustomNote,
   type AdaptivePlanTaskInitialStatus,
+  type FollowUpChipId,
   type NightNoteContent,
   type StoredAdaptivePlanTask,
 } from "@/lib/demo/sarah-case"
@@ -53,7 +56,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 
 type CancerType = "colon" | "breast" | "lymphoma"
 type AppPhase = "idle" | "recording" | "processing" | "results"
-type ResultWorkspaceTab = "overview" | "plan" | "actions" | "updates" | "memory"
+type ResultWorkspaceTab = "overview" | "plan" | "ask" | "actions" | "updates" | "memory"
 type OnboardingStep = "name" | "relationship"
 type CompanionScreen = "breathe" | "control" | "say" | "oneThing" | null
 type AuthStatus = "checking" | "auth" | "authenticated" | "guest"
@@ -109,6 +112,22 @@ interface ActionGuideDemoTimelineEntry {
   savedAt: string
 }
 
+type FollowUpResponseKind = FollowUpChipId | "custom"
+
+interface FollowUpResponseItem {
+  id: string
+  timestamp: string
+  kind: FollowUpResponseKind
+  questionLabel: string
+  title: string
+  answer: string
+  caregiverMeaning?: string
+  confirmWithTeam?: string[]
+  exactWords?: string
+  safetyFooter: string
+  bullets?: string[]
+}
+
 interface AnchorDemoCaseV1 {
   v: 1
   phase: AppPhase
@@ -125,6 +144,7 @@ interface AnchorDemoCaseV1 {
   adaptivePlanTasks: StoredAdaptivePlanTask[]
   actionGuideDemoTimeline?: ActionGuideDemoTimelineEntry[]
   activeResultTab?: ResultWorkspaceTab
+  followUpResponses?: FollowUpResponseItem[]
 }
 
 function isValidPlanResult(value: unknown): value is PlanResult {
@@ -172,10 +192,36 @@ function isResultWorkspaceTab(value: unknown): value is ResultWorkspaceTab {
   return (
     value === "overview" ||
     value === "plan" ||
+    value === "ask" ||
     value === "actions" ||
     value === "updates" ||
     value === "memory"
   )
+}
+
+function isFollowUpResponseKind(value: unknown): value is FollowUpResponseKind {
+  if (value === "custom") return true
+  return FOLLOW_UP_CHIP_DEFS.some((c) => c.id === value)
+}
+
+function isFollowUpResponseItem(value: unknown): value is FollowUpResponseItem {
+  if (!value || typeof value !== "object") return false
+  const o = value as Record<string, unknown>
+  if (typeof o.id !== "string" || typeof o.timestamp !== "string") return false
+  if (!isFollowUpResponseKind(o.kind)) return false
+  if (typeof o.questionLabel !== "string" || typeof o.title !== "string" || typeof o.answer !== "string") return false
+  if (typeof o.safetyFooter !== "string") return false
+  if (o.caregiverMeaning != null && typeof o.caregiverMeaning !== "string") return false
+  if (o.exactWords != null && typeof o.exactWords !== "string") return false
+  if (o.confirmWithTeam != null) {
+    if (!Array.isArray(o.confirmWithTeam)) return false
+    if (!o.confirmWithTeam.every((x) => typeof x === "string")) return false
+  }
+  if (o.bullets != null) {
+    if (!Array.isArray(o.bullets)) return false
+    if (!o.bullets.every((x) => typeof x === "string")) return false
+  }
+  return true
 }
 
 function isStoredAdaptivePlanTask(value: unknown): value is StoredAdaptivePlanTask {
@@ -447,7 +493,7 @@ export default function App() {
   const [pathologyText, setPathologyText] = useState("")
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "done" | "error">("idle")
   const [uploadLabel, setUploadLabel] = useState("")
-  const [copied, setCopied] = useState<"note" | "handoff" | null>(null)
+  const [copied, setCopied] = useState<"note" | "handoff" | "followup" | null>(null)
   const [showExampleOutput, setShowExampleOutput] = useState(false)
   const [isBackupDemoMirror, setIsBackupDemoMirror] = useState(false)
   const [fearTimeline, setFearTimeline] = useState<FearMemory[]>([])
@@ -468,6 +514,7 @@ export default function App() {
   const [adaptivePlanTasks, setAdaptivePlanTasks] = useState<StoredAdaptivePlanTask[]>([])
   const [actionGuideDemoTimeline, setActionGuideDemoTimeline] = useState<ActionGuideDemoTimelineEntry[]>([])
   const [activeResultTab, setActiveResultTab] = useState<ResultWorkspaceTab>("overview")
+  const [followUpResponses, setFollowUpResponses] = useState<FollowUpResponseItem[]>([])
   const [resultsTranscriptEcho, setResultsTranscriptEcho] = useState("")
 
   const {
@@ -685,6 +732,9 @@ export default function App() {
       const tabRaw = o.activeResultTab
       if (isResultWorkspaceTab(tabRaw)) setActiveResultTab(tabRaw)
       else setActiveResultTab("overview")
+      const fuRaw = o.followUpResponses
+      const followUps = Array.isArray(fuRaw) ? fuRaw.filter(isFollowUpResponseItem) : []
+      setFollowUpResponses(followUps)
       const snip = o.lastTranscriptSnippet
       setResultsTranscriptEcho(typeof snip === "string" ? snip.slice(0, 500) : "")
       setOnboarded(true)
@@ -715,6 +765,7 @@ export default function App() {
         adaptivePlanTasks,
         actionGuideDemoTimeline,
         activeResultTab,
+        followUpResponses,
       }
       window.localStorage.setItem(ANCHOR_DEMO_CASE_KEY, JSON.stringify(payload))
     } catch {
@@ -728,6 +779,7 @@ export default function App() {
     caregiverName,
     caseInformationUpdates,
     completedPlanTaskIds,
+    followUpResponses,
     hydrated,
     isBackupDemoMirror,
     latestUserLine,
@@ -801,6 +853,37 @@ export default function App() {
     setActionGuideDemoTimeline((prev) => [...prev, entry].slice(-48))
   }, [])
 
+  const submitAskFollowUp = useCallback(
+    (chipId: FollowUpChipId | null, customText: string) => {
+      if (!mirrorResult) return { ok: false as const, message: "No case loaded." }
+      const packet = buildCaregiverResultPacket(mirrorResult, isBackupDemoMirror)
+      const res = createFollowUpResponseItem({
+        chipId,
+        customText,
+        packet,
+        mirrorResult,
+        cancerType,
+        lovedOneLabel,
+        caseInformationUpdates,
+        planResult,
+        adaptivePlanTasks,
+        completedPlanTaskIds,
+      })
+      if (res.ok) setFollowUpResponses((prev) => [res.item, ...prev])
+      return res
+    },
+    [
+      adaptivePlanTasks,
+      cancerType,
+      caseInformationUpdates,
+      completedPlanTaskIds,
+      isBackupDemoMirror,
+      lovedOneLabel,
+      mirrorResult,
+      planResult,
+    ],
+  )
+
   const markPlanTaskDone = useCallback((taskId: string) => {
     if (taskId.startsWith("demo-quick-")) return
     setCompletedPlanTaskIds((prev) => (prev.includes(taskId) ? prev : [...prev, taskId]))
@@ -827,6 +910,7 @@ export default function App() {
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
+    setFollowUpResponses([])
 
     const useSarahFallbackMirror = () => {
       setMirrorResult(SARAH_MIRROR_RESULT)
@@ -897,6 +981,7 @@ export default function App() {
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
+    setFollowUpResponses([])
     setActiveResultTab("overview")
     setPhase("results")
   }, [])
@@ -1019,7 +1104,7 @@ export default function App() {
     }
   }
 
-  async function copyText(kind: "note" | "handoff", value: string) {
+  async function copyText(kind: "note" | "handoff" | "followup", value: string) {
     if (!value) return
 
     try {
@@ -1076,6 +1161,7 @@ export default function App() {
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
+    setFollowUpResponses([])
     setActiveResultTab("overview")
     setResultsTranscriptEcho("")
     setFearTimeline([])
@@ -1110,6 +1196,7 @@ export default function App() {
     setCompletedPlanTaskIds([])
     setAdaptivePlanTasks([])
     setActionGuideDemoTimeline([])
+    setFollowUpResponses([])
     setActiveResultTab("overview")
     setResultsTranscriptEcho("")
     setPhase("idle")
@@ -1423,6 +1510,7 @@ export default function App() {
                       copied={copied}
                       displayName={displayName}
                       error={error}
+                      followUpResponses={followUpResponses}
                       handoffText={handoffText}
                       hoveredRegret={hoveredRegret}
                       isBackupDemoMirror={isBackupDemoMirror}
@@ -1433,6 +1521,7 @@ export default function App() {
                       noteText={noteText}
                       onActiveResultTabChange={setActiveResultTab}
                       onAddByVoice={beginVoiceFollowUp}
+                      onAskFollowUpSubmit={submitAskFollowUp}
                       onCopy={copyText}
                       onHoverRegret={setHoveredRegret}
                       onPlan={requestPlan}
@@ -2070,6 +2159,473 @@ function buildCaregiverResultPacket(mirrorResult: MirrorResult, isBackupDemoMirr
     needsConfirmation: DEFAULT_NEEDS_CONFIRMATION_BULLETS,
     notTonight: SARAH_NOT_TONIGHT_BULLETS,
     nightNote: GENERIC_NIGHT_NOTE,
+  }
+}
+
+const FOLLOW_UP_SAFETY_STANDARD =
+  "Anchor helps you prepare questions and organize caregiving information on this device. It does not diagnose, prescribe, recommend treatment, confirm staging, assess emergencies, or replace your clinician."
+
+const FOLLOW_UP_SAFETY_URGENT =
+  "If something urgent or severe is happening, use your clinic’s urgent line or emergency services instead of relying on Anchor. Anchor does not triage emergencies."
+
+interface CreateFollowUpInput {
+  chipId: FollowUpChipId | null
+  customText: string
+  packet: CaregiverResultPacket
+  mirrorResult: MirrorResult
+  cancerType: CancerType
+  lovedOneLabel: string
+  caseInformationUpdates: DemoCaseUpdate[]
+  planResult: PlanResult | null
+  adaptivePlanTasks: StoredAdaptivePlanTask[]
+  completedPlanTaskIds: string[]
+}
+
+type CreateFollowUpResult = { ok: true; item: FollowUpResponseItem } | { ok: false; message: string }
+
+function newFollowUpItemId(): string {
+  return typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID
+    ? globalThis.crypto.randomUUID()
+    : `fu-${Date.now()}`
+}
+
+function formatFollowUpClipboard(item: FollowUpResponseItem): string {
+  const lines = [
+    item.title,
+    "",
+    item.answer,
+    "",
+    item.caregiverMeaning ? `What this means for you\n${item.caregiverMeaning}` : "",
+    "",
+    item.confirmWithTeam?.length
+      ? `What to confirm with your care team\n${item.confirmWithTeam.map((b) => `• ${b}`).join("\n")}`
+      : "",
+    "",
+    item.exactWords ? `Exact words you could use\n${item.exactWords}` : "",
+    "",
+    item.bullets?.length ? item.bullets.map((b) => `• ${b}`).join("\n") : "",
+    "",
+    item.safetyFooter,
+  ]
+  return lines.filter((l) => l !== "").join("\n").trim()
+}
+
+const TERM_GLOSSARY: { test: RegExp; title: string; def: string }[] = [
+  {
+    test: /\bpatholog(y|ical|ist|ists)?\b/i,
+    title: "Pathology",
+    def: "Pathology is the lab study of tissue or cells. A pathology report describes what the sample looks like under the microscope in medical language — your care team translates that into what it means for treatment options.",
+  },
+  {
+    test: /\bstag(e|es|ing)\b/i,
+    title: "Staging",
+    def: "Staging is a structured way clinicians summarize how far a cancer may have spread, based on tests and definitions they use. The exact stage is not something Anchor can confirm — only your care team can, using finalized reports.",
+  },
+  {
+    test: /\bmmr\b/i,
+    title: "MMR (mismatch repair)",
+    def: "MMR refers to a DNA-repair pathway some tumors are tested for. Results can matter for treatment planning, but the implication is specific to your case — ask your oncologist what your result means for you.",
+  },
+  {
+    test: /\bmsi\b/i,
+    title: "MSI (microsatellite instability)",
+    def: "MSI is a lab pattern related to how stable certain DNA repeats are in tumor cells. It is often discussed alongside MMR testing. Your team explains whether it is high or stable and what that means for options.",
+  },
+  {
+    test: /\bbioma(rker|arkers)?\b/i,
+    title: "Biomarker",
+    def: "A biomarker is a measurable signal from labs or tissue (for example proteins or gene patterns) that can help your team choose or sequence treatments. Names and cutoffs vary — confirm interpretation with your oncologist.",
+  },
+  {
+    test: /\bimag(e|ing)|\bscan(s)?\b|\bct\b|\bmri\b|\bpet\b/i,
+    title: "Imaging / scans",
+    def: "Imaging studies create pictures of the inside of the body. They help your team look for spread or measure response, but reading them belongs to radiology and your treating clinicians — not a caregiver app.",
+  },
+  {
+    test: /\bmargin(s)?\b/i,
+    title: "Surgical margin",
+    def: "Margins describe whether tumor cells were seen at the edge of removed tissue. “Clear” versus “positive” margins affects next steps, but only your surgeon/pathology team can state what was found in your case.",
+  },
+  {
+    test: /\blymph nodes?\b|\bnode involvement\b/i,
+    title: "Lymph nodes",
+    def: "Lymph nodes are small immune filters. Cancer findings in nodes can change staging and treatment discussions. Whether nodes are involved is read from pathology and imaging by your care team.",
+  },
+  {
+    test: /\boncolog(y|ist|ists)\b/i,
+    title: "Oncology",
+    def: "Oncology is the medical specialty focused on cancer treatment planning (such as surgery, systemic therapy, or radiation). Your oncologist coordinates tests and options based on your records.",
+  },
+  {
+    test: /\bsecond opinion\b/i,
+    title: "Second opinion",
+    def: "A second opinion means another qualified team reviews your records and may suggest the same plan, alternatives, or extra tests. It is a normal part of serious care — ask your primary team how to arrange records.",
+  },
+  {
+    test: /\bcea\b/i,
+    title: "CEA (blood marker)",
+    def: "CEA is a blood test sometimes tracked in certain colon cancer follow-ups. A single number rarely tells the whole story; trends and context belong to your clinician.",
+  },
+]
+
+function collectTermDefinitions(text: string): { title: string; def: string }[] {
+  const out: { title: string; def: string }[] = []
+  for (const g of TERM_GLOSSARY) {
+    if (g.test.test(text) && !out.some((o) => o.title === g.title)) out.push({ title: g.title, def: g.def })
+  }
+  return out.slice(0, 4)
+}
+
+function createFollowUpResponseItem(input: CreateFollowUpInput): CreateFollowUpResult {
+  const custom = input.customText.trim()
+  const stamp = new Date().toISOString()
+  const baseConfirm = input.packet.needsConfirmation.slice(0, 5)
+  const safeFooter = FOLLOW_UP_SAFETY_STANDARD
+
+  const make = (partial: Omit<FollowUpResponseItem, "id" | "timestamp">): CreateFollowUpResult => ({
+    ok: true,
+    item: { id: newFollowUpItemId(), timestamp: stamp, ...partial },
+  })
+
+  if (custom) {
+    const defs = collectTermDefinitions(custom)
+    if (defs.length > 0) {
+      const body = defs.map((d) => `${d.title}: ${d.def}`).join("\n\n")
+      return make({
+        kind: "custom",
+        questionLabel: custom.slice(0, 200),
+        title: "Plain-language terms (prep only)",
+        answer: body,
+        caregiverMeaning:
+          "These are general definitions so you can follow the conversation — they are not a verdict about your loved one’s situation.",
+        confirmWithTeam: [
+          "Which of these topics actually applies on your chart today.",
+          "How your team uses each test or term in your specific plan.",
+        ],
+        safetyFooter: safeFooter,
+      })
+    }
+    if (/\bchemo\b|\bchemotherapy\b/i.test(custom)) {
+      return make({
+        kind: "custom",
+        questionLabel: custom.slice(0, 200),
+        title: "Chemotherapy questions belong to your oncologist",
+        answer:
+          "Chemotherapy plans depend on pathology, staging workup, overall health, and team judgment. Anchor cannot say whether chemo is needed, which regimen is right, or how many cycles apply.",
+        caregiverMeaning:
+          "Your role is often to ask what information is still missing, what side effects to watch for if chemo is discussed, and who to call with urgent symptoms — not to decide the regimen yourself tonight.",
+        confirmWithTeam: [
+          "What information you are using to decide whether systemic therapy is recommended.",
+          "What alternatives or clinical trials, if any, are on the table and how much time you have to decide.",
+          "What urgent symptoms should trigger a call or emergency visit.",
+        ],
+        exactWords:
+          "What information are you using to decide whether chemotherapy is part of the plan, and what is still pending before we can understand the recommendation?",
+        safetyFooter: safeFooter,
+      })
+    }
+    if (/\bstage\b|\bstaging\b/i.test(custom)) {
+      return make({
+        kind: "custom",
+        questionLabel: custom.slice(0, 200),
+        title: "Staging is confirmed only by your care team",
+        answer:
+          "Staging labels summarize findings from pathology, imaging, and exam. Until your team states a stage using finalized reports, treat any number you heard as uncertain.",
+        caregiverMeaning:
+          "You can still prepare: bring reports, write questions, and ask what is confirmed versus still in workup — without needing to “lock in” a stage yourself.",
+        confirmWithTeam: baseConfirm.slice(0, 4),
+        safetyFooter: safeFooter,
+      })
+    }
+    if (/\bmmr\b|\bmsi\b/i.test(custom)) {
+      return make({
+        kind: "custom",
+        questionLabel: custom.slice(0, 200),
+        title: "MMR / MSI testing",
+        answer:
+          "MMR and MSI tests look at DNA repair patterns in tumor cells. They can matter for treatment pathways, but results must be interpreted in your chart.",
+        caregiverMeaning:
+          "Ask whether testing was completed, what the result was in plain language, and whether it changes the next discussion — rather than guessing from online examples.",
+        confirmWithTeam: [
+          "Has MMR/MSI testing been completed, and who will review the result with us?",
+          "Does this result change surveillance, treatment options, or family screening conversations for us?",
+        ],
+        safetyFooter: safeFooter,
+      })
+    }
+    if (/\bimaging\b|\bscan(s)?\b|\bct\b|\bmri\b|\bpet\b/i.test(custom)) {
+      return make({
+        kind: "custom",
+        questionLabel: custom.slice(0, 200),
+        title: "Imaging and scans",
+        answer:
+          "Imaging helps your team see structures and spread, but each report is read in context of the full story. Anchor cannot read films or confirm findings.",
+        caregiverMeaning:
+          "You can request a plain-language summary of what is confirmed, what is pending, and what decisions wait on imaging.",
+        confirmWithTeam: [
+          "Which imaging studies are complete, and are any still scheduled?",
+          "Do current images change the plan discussed with us so far?",
+        ],
+        safetyFooter: safeFooter,
+      })
+    }
+    if (/\binsurance\b|\bcoverage\b|\bauthorization\b|\bprior auth\b/i.test(custom)) {
+      return make({
+        kind: "custom",
+        questionLabel: custom.slice(0, 200),
+        title: "Insurance and records",
+        answer:
+          "Insurance questions are administrative: which documents, deadlines, and portals apply. They do not replace medical judgment from your team.",
+        caregiverMeaning:
+          "Keep copies of what you submit, note deadlines, and ask your clinic which office handles medical records requests.",
+        confirmWithTeam: [
+          "Which exact documents does our insurer need, and can your office help with the checklist?",
+          "Will any delay in authorization affect scheduled tests or visits?",
+        ],
+        exactWords:
+          "Our insurer asked for records — which documents should we upload, what is the deadline, and is there a preferred submission path from your office?",
+        safetyFooter: safeFooter,
+      })
+    }
+    if (/\bfamily\b|\bsibling\b|\bbrother\b|\bsister\b|\bchildren\b|\bkids\b/i.test(custom)) {
+      return make({
+        kind: "custom",
+        questionLabel: custom.slice(0, 200),
+        title: "Family conversations",
+        answer:
+          "Sharing updates with family is emotional work. Anchor can help you separate confirmed facts from pending items so you do not over-promise details still being finalized.",
+        caregiverMeaning:
+          "Name one spokesperson, decide what level of detail feels fair, and schedule a short check-in after visits when you have written notes.",
+        confirmWithTeam: [
+          "What we are allowed to share from today’s visit while we wait for finalized results.",
+          "Who should be listed for portal access or appointment updates.",
+        ],
+        exactWords: `Quick update about ${input.lovedOneLabel}: we’re still confirming some details with the care team. I’ll share what’s settled after we speak with them — please don’t treat texts as medical facts.`,
+        safetyFooter: safeFooter,
+      })
+    }
+    if (/\burgent\b|\bsevere\b|\bworse\b|\bemergency\b|\b911\b|\ber\b/i.test(custom)) {
+      return make({
+        kind: "custom",
+        questionLabel: custom.slice(0, 200),
+        title: "Urgent or severe symptoms",
+        answer:
+          "If symptoms are severe, sudden, or rapidly worsening, your local emergency resources or clinic urgent line is the right path. Anchor cannot assess acuity or tell you to wait.",
+        caregiverMeaning:
+          "It is reasonable to pause app planning and use the phone tree your team gave you — that is not overreacting.",
+        confirmWithTeam: [
+          "Given what is happening now, should we use the after-hours line, go to urgent care, or call emergency services?",
+        ],
+        exactWords:
+          "Given these symptoms, what should we do in the next few minutes to hours — and what signs would mean we should call emergency services?",
+        safetyFooter: `${FOLLOW_UP_SAFETY_STANDARD} ${FOLLOW_UP_SAFETY_URGENT}`,
+      })
+    }
+    return make({
+      kind: "custom",
+      questionLabel: custom.slice(0, 200),
+      title: "Neutral prep template",
+      answer:
+        "Anchor can’t infer a precise medical answer from that free-text question on-device. You can still walk into the next touchpoint with a clean structure: what is confirmed, what is pending, and what you need clarified.",
+      caregiverMeaning:
+        "Short lists reduce panic. Three questions on paper often beat an hour of searching alone.",
+      confirmWithTeam: [
+        "What is confirmed in the record today versus still pending?",
+        "What decisions, if any, are expected at the next visit?",
+        "What should we watch for and who do we call if something changes before then?",
+      ],
+      safetyFooter: safeFooter,
+    })
+  }
+
+  if (!input.chipId) {
+    return { ok: false, message: "Choose a quick chip or type a follow-up in the box." }
+  }
+
+  const chip = input.chipId
+
+  if (chip === "term-mean") {
+    return make({
+      kind: "term-mean",
+      questionLabel: "What does this term mean?",
+      title: "Add the term you mean",
+      answer:
+        "Type the exact word or phrase from your paperwork or visit (for example: MMR, MSI, margin, lymph node, CEA, PET scan) in the box above, then tap Ask again. Examples you can try: pathology, staging, MMR, MSI, biomarker, imaging, scan, margin, lymph node, oncology, second opinion, CEA.",
+      caregiverMeaning:
+        "Medical language is dense on purpose — your job is to slow the conversation until you can repeat back what you understood, not to memorize everything.",
+      confirmWithTeam: ["Ask your team to define any word you cannot explain in one sentence."],
+      safetyFooter: safeFooter,
+    })
+  }
+
+  if (chip === "explain-simply") {
+    const done = new Set(input.completedPlanTaskIds)
+    const openAdaptive = input.adaptivePlanTasks.filter((t) => !done.has(t.id)).length
+    const planLine = input.planResult
+      ? "A 72-hour plan is already generated for this demo case."
+      : "The 72-hour plan is not generated yet — you can add it from the Plan tab when you are ready."
+    const adaptLine = openAdaptive
+      ? `${openAdaptive} adaptive checklist item(s) from updates are still open on the Plan tab.`
+      : "No open adaptive tasks from updates right now — or they are all marked done."
+    return make({
+      kind: "explain-simply",
+      questionLabel: "Explain this simply",
+      title: "Simple read of what Anchor is holding",
+      answer: [
+        `Mirror in plain words: ${input.mirrorResult.mirror}`,
+        `What feels scary underneath: ${input.mirrorResult.fearSummary}`,
+        `Known themes from the packet: ${input.packet.knowNow.slice(0, 2).join(" ")}`,
+        planLine,
+        adaptLine,
+      ].join(" "),
+      caregiverMeaning:
+        "You are not failing if this feels huge — you are doing the part where you translate fear into a short list for the care team.",
+      confirmWithTeam: baseConfirm.slice(0, 4),
+      safetyFooter: safeFooter,
+    })
+  }
+
+  if (chip === "ask-tomorrow") {
+    return make({
+      kind: "ask-tomorrow",
+      questionLabel: "What should I ask tomorrow?",
+      title: "Short question list for the next touchpoint",
+      answer:
+        "Bring three headings on paper or phone notes: Confirmed, Still unclear, Questions for the team. Under each, add bullets as you remember — you can fix wording after you hear answers.",
+      caregiverMeaning:
+        "Tomorrow’s win is clarity, not perfection. Reading questions aloud is allowed.",
+      confirmWithTeam: [
+        "What is confirmed today versus still pending in pathology, imaging, or biomarkers?",
+        "What decisions, if any, are expected at this visit?",
+        "What should we watch for or call about before the next touchpoint?",
+      ],
+      exactWords: input.packet.careTeamBullets.slice(0, 3).join(" "),
+      bullets: input.mirrorResult.actions.slice(0, 3),
+      safetyFooter: safeFooter,
+    })
+  }
+
+  if (chip === "phone-words") {
+    return make({
+      kind: "phone-words",
+      questionLabel: "What should I say on the phone?",
+      title: "Phone script starter (edit with real names)",
+      answer:
+        "Use a calm opener, say who you are calling for, name the concern, and ask for three things: what is confirmed, what is pending, and what to bring next.",
+      caregiverMeaning:
+        "You are allowed to read from a screen. You are allowed to ask them to slow down.",
+      confirmWithTeam: [
+        "Spell back dates and instructions.",
+        "Ask where portal results will appear.",
+      ],
+      exactWords: `Hi, I'm calling for ${input.lovedOneLabel}. We're trying to prepare for our next oncology touchpoint. What is confirmed in the chart today, what is still pending, and what records should we bring or upload next?`,
+      safetyFooter: safeFooter,
+    })
+  }
+
+  if (chip === "what-changed") {
+    if (!input.caseInformationUpdates.length) {
+      return make({
+        kind: "what-changed",
+        questionLabel: "What changed after the new information?",
+        title: "Use the Updates tab first",
+        answer:
+          "Anchor does not see a structured “new information” entry yet for this demo case. When you add an update there, this tab can summarize how it may shift questions and timing.",
+        caregiverMeaning:
+          "If something changed verbally but is not written down yet, your next step is often to confirm it in the portal or with the scheduler.",
+        confirmWithTeam: ["Ask the team to confirm any verbal update against the official chart."],
+        safetyFooter: safeFooter,
+      })
+    }
+    const latest = input.caseInformationUpdates[input.caseInformationUpdates.length - 1]
+    return make({
+      kind: "what-changed",
+      questionLabel: "What changed after the new information?",
+      title: "Most recent update snapshot",
+      answer: [
+        `Source: ${latest.sourceLabel}`,
+        `New information: ${latest.newInformation}`,
+        `What this may affect: ${latest.mayAffect}`,
+        `Revised next step (prep): ${latest.revisedStep}`,
+      ].join("\n\n"),
+      caregiverMeaning:
+        "Treat each update as a prompt to refresh your question list — not as a final medical decision from Anchor.",
+      confirmWithTeam: [latest.needsConfirmation, latest.askNext],
+      safetyFooter: safeFooter,
+    })
+  }
+
+  if (chip === "urgent-vs-wait") {
+    return make({
+      kind: "urgent-vs-wait",
+      questionLabel: "What is urgent and what can wait?",
+      title: "Sorting urgency without triage",
+      answer: [
+        "Often urgent: new severe pain, trouble breathing, black stools or vomiting blood, sudden confusion, fever with chemotherapy instructions that say to call, inability to keep fluids down, or symptoms your team told you to escalate immediately.",
+        "Often can wait until routine hours: portal paperwork, printing lists, scheduling non-emergency follow-ups, and reading general education — as long as nothing above is present.",
+      ].join("\n\n"),
+      caregiverMeaning:
+        "When unsure, the after-hours line exists for exactly that gray zone — Anchor will not tell you to wait out a red flag.",
+      confirmWithTeam: [
+        "Given what we are seeing now, should we use the after-hours line, urgent care, or emergency services?",
+      ],
+      safetyFooter: `${FOLLOW_UP_SAFETY_STANDARD} ${FOLLOW_UP_SAFETY_URGENT}`,
+    })
+  }
+
+  if (chip === "summarize-family") {
+    return make({
+      kind: "summarize-family",
+      questionLabel: "Summarize this for my family",
+      title: "Family-safe summary (facts + humility)",
+      answer: [
+        `We are supporting ${input.lovedOneLabel} with ${titleCase(input.cancerType)} care planning.`,
+        `What we heard them feeling: ${input.mirrorResult.fearSummary}`,
+        `What we are doing next: preparing questions, gathering records, and confirming pending tests with the team.`,
+      ].join(" "),
+      caregiverMeaning:
+        "You can be honest about uncertainty. Families often need fewer medical details and more clarity about who is owning which task.",
+      confirmWithTeam: ["What we are allowed to share before results are final.", "Who is the point person for updates after visits."],
+      exactWords: `Update (not medical advice): we’re organizing questions and records for ${input.lovedOneLabel}’s care team. Some details are still pending — we’ll share what’s confirmed after the next visit.`,
+      safetyFooter: safeFooter,
+    })
+  }
+
+  if (chip === "write-down") {
+    return make({
+      kind: "write-down",
+      questionLabel: "What should I write down?",
+      title: "A small paper trail that helps",
+      answer:
+        "Write the appointment time and location, the names of who you spoke with, the exact diagnosis or staging language they used (quoted), pending tests, and the follow-up phone numbers.",
+      caregiverMeaning:
+        "Photos of paperwork and one shared note reduce duplicate calls between family members.",
+      confirmWithTeam: ["Ask the team to spell any word you cannot repeat back.", "Ask where updated results will appear in the portal."],
+      bullets: ["Confirmed", "Still unclear", "Questions for next visit", "Who to call if symptoms change"],
+      safetyFooter: safeFooter,
+    })
+  }
+
+  if (chip === "not-decide-yet") {
+    return make({
+      kind: "not-decide-yet",
+      questionLabel: "What should I not decide yet?",
+      title: "Decisions to hold loosely until your team weighs in",
+      answer:
+        "Avoid locking in a stage number, a chemo yes/no, a surgery choice, or a prognosis story based on partial information or forums. Also avoid negotiating timelines with family as if they are guaranteed.",
+      caregiverMeaning:
+        "It is still wise to arrange logistics — rides, childcare, work coverage — without pretending you know the medical outcome.",
+      confirmWithTeam: [
+        "What is premature to decide before pathology/imaging/biomarkers are complete?",
+        "What decisions are truly on the table at the next visit?",
+      ],
+      safetyFooter: safeFooter,
+    })
+  }
+
+  return {
+    ok: false,
+    message: "Could not build that follow-up — try a chip or shorter custom question.",
   }
 }
 
@@ -2895,6 +3451,7 @@ function formatDemoTimelineLabel(iso: string): string {
 const RESULT_WORKSPACE_TAB_DEFS: { id: ResultWorkspaceTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "plan", label: "Plan" },
+  { id: "ask", label: "Ask" },
   { id: "actions", label: "Actions" },
   { id: "updates", label: "Updates" },
   { id: "memory", label: "Memory" },
@@ -2913,6 +3470,7 @@ function ResultsView({
   copied,
   displayName,
   error,
+  followUpResponses,
   handoffText,
   hoveredRegret,
   isBackupDemoMirror,
@@ -2923,6 +3481,7 @@ function ResultsView({
   noteText,
   onActiveResultTabChange,
   onAddByVoice,
+  onAskFollowUpSubmit,
   onCopy,
   onHoverRegret,
   onPlan,
@@ -2940,9 +3499,10 @@ function ResultsView({
   cancerType: CancerType
   caseInformationUpdates: DemoCaseUpdate[]
   completedPlanTaskIds: string[]
-  copied: "note" | "handoff" | null
+  copied: "note" | "handoff" | "followup" | null
   displayName: string
   error: string | null
+  followUpResponses: FollowUpResponseItem[]
   handoffText: string
   hoveredRegret: string | null
   isBackupDemoMirror: boolean
@@ -2953,7 +3513,8 @@ function ResultsView({
   noteText: string
   onActiveResultTabChange: (tab: ResultWorkspaceTab) => void
   onAddByVoice: () => void
-  onCopy: (kind: "note" | "handoff", value: string) => void
+  onAskFollowUpSubmit: (chipId: FollowUpChipId | null, customText: string) => CreateFollowUpResult
+  onCopy: (kind: "note" | "handoff" | "followup", value: string) => void
   onHoverRegret: (value: string | null) => void
   onPlan: () => void
   onSarahBackupDemo: () => void
@@ -2965,6 +3526,9 @@ function ResultsView({
   const [infoPanelOpen, setInfoPanelOpen] = useState(false)
   const [infoDraft, setInfoDraft] = useState("")
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null)
+  const [selectedFollowUpPrompt, setSelectedFollowUpPrompt] = useState<FollowUpChipId | null>(null)
+  const [customFollowUpQuestion, setCustomFollowUpQuestion] = useState("")
+  const [askFollowUpError, setAskFollowUpError] = useState<string | null>(null)
 
   const lovedOneLabel = useMemo(
     () => RELATIONSHIPS.find((item) => item.value === lovedOne)?.label ?? "Your person",
@@ -3228,6 +3792,143 @@ function ResultsView({
             </motion.div>
           )}
 
+          {activeResultTab === "ask" && (
+            <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <p className="m-0 text-[13px] font-semibold text-[#3f3a36] sm:text-base">Ask Anchor</p>
+                <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">{ASK_ANCHOR_SUBTITLE}</p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {FOLLOW_UP_CHIP_DEFS.map((chip) => (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedFollowUpPrompt((cur) => (cur === chip.id ? null : chip.id))
+                      setAskFollowUpError(null)
+                    }}
+                    className={`max-w-full rounded-full border px-2.5 py-1 text-left text-[10px] font-medium leading-tight transition sm:text-[11px] ${
+                      selectedFollowUpPrompt === chip.id
+                        ? "border-[#b98da0] bg-[#2a2433] text-[#f5eef8]"
+                        : "border-[#4a3f55]/55 bg-[#2f2838]/90 text-[#e8dfd8] hover:border-[#b98da0]/55"
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-2 sm:flex sm:flex-row sm:gap-2">
+                <label className="min-w-0 flex-1">
+                  <span className="sr-only">Follow-up question</span>
+                  <input
+                    type="text"
+                    value={customFollowUpQuestion}
+                    onChange={(e) => {
+                      setCustomFollowUpQuestion(e.target.value)
+                      setAskFollowUpError(null)
+                    }}
+                    placeholder="Ask a follow-up about this case…"
+                    className="w-full min-w-0 rounded-[14px] border border-[#4a3f55]/60 bg-[#2a2433]/95 px-3 py-2.5 text-[12px] text-[#f5eef8] outline-none placeholder:text-[#9b92a8] focus:border-[#b98da0]/70 sm:rounded-[16px] sm:text-sm"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAskFollowUpError(null)
+                    const res = onAskFollowUpSubmit(selectedFollowUpPrompt, customFollowUpQuestion)
+                    if (!res.ok) {
+                      setAskFollowUpError(res.message)
+                      return
+                    }
+                    setCustomFollowUpQuestion("")
+                  }}
+                  className="shrink-0 rounded-[14px] border border-[#b98da0]/70 bg-[#b7a6c9] px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
+                >
+                  Ask
+                </button>
+              </div>
+              {askFollowUpError && (
+                <p className="m-0 text-[11px] leading-snug text-[#9b4d60] sm:text-xs" role="status">
+                  {askFollowUpError}
+                </p>
+              )}
+              <p className="m-0 text-[10px] leading-snug text-[#756f68] sm:text-[11px]">
+                Preparing questions for your care team only — not diagnosis, not treatment recommendation, not stage confirmation,
+                not emergency assessment.
+              </p>
+              <div className="grid min-w-0 gap-2.5 sm:gap-3">
+                {followUpResponses.map((item) => (
+                  <div
+                    key={item.id}
+                    className="min-w-0 max-w-full rounded-[16px] border border-[#4a3f55]/55 bg-[#2a2433]/92 p-3 text-[#e8dfd8] shadow-[0_12px_40px_rgba(20,16,28,0.12)] sm:rounded-[20px] sm:p-4"
+                  >
+                    <p className="m-0 text-[10px] font-medium uppercase tracking-wide text-[#c9b8d8]/90">
+                      {formatDemoTimelineLabel(item.timestamp)} · {item.questionLabel}
+                    </p>
+                    <p className="mt-1.5 m-0 text-[13px] font-semibold leading-snug text-[#fdfaf7] sm:text-sm">{item.title}</p>
+                    <p className="mt-2 m-0 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-[#d8cec5] sm:text-sm">
+                      {item.answer}
+                    </p>
+                    {item.bullets && item.bullets.length > 0 && (
+                      <ul className="mt-2 m-0 list-disc space-y-1 pl-4 text-[11px] leading-snug text-[#c9b8d8]/95 sm:text-xs">
+                        {item.bullets.map((b, idx) => (
+                          <li key={`${item.id}-b-${idx}`} className="break-words">
+                            {b}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {item.caregiverMeaning && (
+                      <div className="mt-3 border-t border-white/10 pt-3">
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#b98da0]/95">What this means for you</p>
+                        <p className="mt-1 m-0 text-[12px] leading-relaxed text-[#e8dfd8] sm:text-sm">{item.caregiverMeaning}</p>
+                      </div>
+                    )}
+                    {item.confirmWithTeam && item.confirmWithTeam.length > 0 && (
+                      <div className="mt-3 border-t border-white/10 pt-3">
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#b98da0]/95">
+                          What to confirm with your care team
+                        </p>
+                        <ul className="mt-1.5 m-0 list-disc space-y-1 pl-4 text-[12px] leading-snug text-[#d8cec5] sm:text-sm">
+                          {item.confirmWithTeam.map((c, idx) => (
+                            <li key={`${item.id}-c-${idx}`} className="break-words">
+                              {c}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {item.exactWords && (
+                      <div className="mt-3 rounded-[12px] border border-[#6f6280]/40 bg-[#1e1a26]/90 p-2.5 sm:p-3">
+                        <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[#c9b8d8]/90">Exact words</p>
+                        <p className="mt-1 m-0 text-[12px] leading-relaxed text-[#fdfaf7] sm:text-sm">{item.exactWords}</p>
+                      </div>
+                    )}
+                    <p className="mt-3 border-t border-white/10 pt-3 text-[10px] leading-snug text-[#9b92a8] sm:text-[11px]">{item.safetyFooter}</p>
+                    <button
+                      type="button"
+                      onClick={() => void onCopy("followup", formatFollowUpClipboard(item))}
+                      className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[12px] border border-[#c9b8d8]/40 bg-[#3a3248]/90 py-2 text-[11px] font-medium text-[#f5eef8] transition hover:bg-[#4a3f55]/90 sm:rounded-[14px] sm:text-xs"
+                    >
+                      <Copy className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+                      Copy answer
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {copied === "followup" && (
+                <p className="m-0 text-center text-[11px] text-[#4a7c59] sm:text-xs" role="status">
+                  Copied. Anchor did not send anything.
+                </p>
+              )}
+              {followUpResponses.length === 0 && (
+                <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">
+                  Tap a chip or write your own — answers stay on this device and reload with your saved case.
+                </p>
+              )}
+            </motion.div>
+          )}
+
           {activeResultTab === "actions" && (
             <motion.div variants={itemVariants} className="grid min-w-0 gap-3 sm:gap-4">
               <p className="m-0 text-[12px] leading-snug text-[#3f3a36] sm:text-sm sm:leading-relaxed">
@@ -3411,6 +4112,26 @@ function ResultsView({
                 <p className="mt-1 text-[11px] leading-snug text-[#756f68] sm:text-xs sm:leading-relaxed">
                   Stored locally for this demo. Start over clears this demo case. This is not HIPAA-grade or production memory.
                 </p>
+              </div>
+              <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] p-3 sm:rounded-[20px] sm:p-4`}>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:text-xs">Questions asked</p>
+                {followUpResponses.length === 0 ? (
+                  <p className="m-0 text-[12px] leading-snug text-[#756f68] sm:text-sm">
+                    No follow-up answers yet — use the Ask tab on this case.
+                  </p>
+                ) : (
+                  <ul className="m-0 list-none space-y-2 p-0">
+                    {followUpResponses.slice(0, 8).map((item) => (
+                      <li key={item.id} className="rounded-[12px] border border-[#e8dfd8] bg-white/65 p-2 sm:p-2.5">
+                        <p className="m-0 text-[10px] font-medium text-[#9b829c] sm:text-[11px]">{item.questionLabel}</p>
+                        <p className="mt-1 m-0 text-[11px] leading-snug text-[#756f68] sm:text-xs">
+                          {item.answer.slice(0, 180)}
+                          {item.answer.length > 180 ? "…" : ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <ResultPacketCard icon={<ShieldCheck className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />} label="Known facts (demo)">
                 <ResultBulletList items={packet.knowNow} />

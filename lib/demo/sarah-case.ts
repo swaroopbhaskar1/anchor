@@ -433,3 +433,22 @@ export function buildAdaptiveTasksFromCustomPlanNote(note: string): StoredAdapti
     },
   ]
 }
+
+/** Ask tab — subtitle shown under “Ask Anchor” (local prep only, no outbound send). */
+export const ASK_ANCHOR_SUBTITLE =
+  "Case-aware follow-up prep on this device — questions and plain-language explanations to take to your care team. Nothing is sent from Anchor."
+
+/** Ask tab quick chips (id + label). */
+export const FOLLOW_UP_CHIP_DEFS = [
+  { id: "explain-simply", label: "Explain this simply" },
+  { id: "ask-tomorrow", label: "What should I ask tomorrow?" },
+  { id: "term-mean", label: "What does this term mean?" },
+  { id: "phone-words", label: "What should I say on the phone?" },
+  { id: "what-changed", label: "What changed after the new information?" },
+  { id: "urgent-vs-wait", label: "What is urgent and what can wait?" },
+  { id: "summarize-family", label: "Summarize this for my family" },
+  { id: "write-down", label: "What should I write down?" },
+  { id: "not-decide-yet", label: "What should I not decide yet?" },
+] as const
+
+export type FollowUpChipId = (typeof FOLLOW_UP_CHIP_DEFS)[number]["id"]
