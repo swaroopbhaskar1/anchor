@@ -9,6 +9,57 @@ export interface SarahMirrorResult {
 export const SARAH_DEMO_CONCERN =
   "I feel like I'm missing everything. My mom may have stage III colon cancer, and I don't even know what questions to ask tomorrow."
 
+/** Bullets for structured results UI (Sarah demo / backup mirror). */
+export const SARAH_KNOW_NOW_BULLETS = [
+  "Your mom may have possible stage III colon cancer — confirm staging and details with your care team.",
+  "There is an appointment tomorrow morning.",
+  "Some details still need confirmation before you rely on them.",
+  "In demo or backup mode, this is a sample, de-identified case — not a real medical record.",
+]
+
+export const SARAH_NEEDS_CONFIRMATION_BULLETS = [
+  "Whether stage III is confirmed versus still in workup — ask your team what is settled.",
+  "Whether imaging is complete and what it may suggest (interpretation belongs to your clinicians).",
+  "Whether pathology is finalized and matches what you were told in plain language.",
+  "Whether biomarker or MMR/MSI testing is pending or already done.",
+  "What decisions, if any, are expected at tomorrow's visit.",
+]
+
+export const SARAH_NOT_TONIGHT_BULLETS = [
+  "You do not need to decide treatment tonight.",
+  "You do not need to understand every medical term tonight.",
+  "You do not need to call every hospital or finish every portal task tonight.",
+  "The goal is to rest enough to ask clear questions tomorrow.",
+]
+
+export interface NightNoteContent {
+  subtitle: string
+  body: string
+  tinyActions: string[]
+}
+
+/** Night Note for Sarah-structured caregiver packet. */
+export const SARAH_NIGHT_NOTE: NightNoteContent = {
+  subtitle: "For the moment when everything feels too big.",
+  body: "You are carrying a lot, and the timeline may feel unfair. Tonight you can pause the research spiral — one honest sentence for tomorrow still counts as preparation. Your care team owns the medical decisions; you own showing up as prepared as you can be.",
+  tinyActions: [
+    "Name one worry out loud, then exhale slowly for ten counts.",
+    "Write one plain-language question for tomorrow — you can edit after you sleep.",
+    "Set your list or folder by the door so the morning starts calmer.",
+  ],
+}
+
+/** Night Note when mirror content is not the Sarah demo shape. */
+export const GENERIC_NIGHT_NOTE: NightNoteContent = {
+  subtitle: "For the moment when everything feels too big.",
+  body: "Nothing tonight has to be perfect to be worth rest. A small pause between you and the next search or call is allowed. Tomorrow you can bring questions to the people trained to answer them.",
+  tinyActions: [
+    "Name one feeling in a single word.",
+    "Drink a glass of water.",
+    "Set one reminder for the next concrete task, not the whole week.",
+  ],
+}
+
 export const SARAH_DEMO_MIRROR_RESULT: SarahMirrorResult = {
   fearQuote: SARAH_DEMO_CONCERN,
   fearSummary:
@@ -16,11 +67,11 @@ export const SARAH_DEMO_MIRROR_RESULT: SarahMirrorResult = {
   mirror:
     "You are worried you may miss something important before tomorrow's appointment, and you are trying to support your mom while feeling overwhelmed.",
   ground: [
-    "What we know right now: Your mom may have possible stage III colon cancer — staging and details still need confirmation from the care team. There is an appointment tomorrow morning. Some details still need confirmation. This is a sample, de-identified demo case (not your real medical record).",
+    `What we know right now: ${SARAH_KNOW_NOW_BULLETS.slice(0, 3).join(" ")} ${SARAH_KNOW_NOW_BULLETS[3]}`,
     "",
-    "What still needs confirmation with your doctor: Whether stage III is confirmed or only suspected. Whether imaging is complete. Whether the full pathology report is finalized. Whether lymph node information is available. Whether biomarker or MMR/MSI testing is pending or completed. What decisions, if any, will be discussed tomorrow.",
+    `What still needs confirmation with your doctor: ${SARAH_NEEDS_CONFIRMATION_BULLETS.join(" ")}`,
     "",
-    "What does not need to be solved tonight: You do not need to decide treatment tonight. You do not need to understand every medical term tonight. You do not need to call every hospital tonight. The goal is to prepare clear questions for tomorrow.",
+    `What does not need to be solved tonight: ${SARAH_NOT_TONIGHT_BULLETS.join(" ")}`,
     "",
     "Anchor helps families prepare questions and organize next steps. It does not diagnose, prescribe, choose treatment, or replace your care team.",
   ].join("\n"),
