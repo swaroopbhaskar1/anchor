@@ -3633,6 +3633,7 @@ function PhoneModeReader({
   onCopy,
   onOpenTrust,
   open,
+  phoneReviewPhaseNudge,
   script,
 }: {
   appendActionGuideDemoTimeline: (entry: ActionGuideDemoTimelineEntry) => void
@@ -3643,12 +3644,15 @@ function PhoneModeReader({
   onCopy: (kind: ResultCopyKind, value: string, timelineTitle?: string, meta?: CopyTimelineMeta) => void
   onOpenTrust?: () => void
   open: boolean
+  /** Increment from demo guide to jump to outcome/review when Phone Mode is already open (navigation only). */
+  phoneReviewPhaseNudge?: number
   script: PhoneModeScript | null
 }) {
   const [lineIndex, setLineIndex] = useState(0)
   const [phase, setPhase] = useState<"lines" | "summary">("lines")
   const [outcomeText, setOutcomeText] = useState("")
   const [inlineMsg, setInlineMsg] = useState<string | null>(null)
+  const lastReviewNudgeRef = useRef(0)
 
   useEffect(() => {
     if (!open || !script) return
@@ -3656,7 +3660,16 @@ function PhoneModeReader({
     setPhase("lines")
     setOutcomeText("")
     setInlineMsg(null)
+    lastReviewNudgeRef.current = 0
   }, [open, script?.id])
+
+  useEffect(() => {
+    if (!open || !script) return
+    const n = phoneReviewPhaseNudge ?? 0
+    if (n <= lastReviewNudgeRef.current) return
+    lastReviewNudgeRef.current = n
+    setPhase("summary")
+  }, [open, phoneReviewPhaseNudge, script])
 
   if (!open || !script) return null
 
@@ -4627,6 +4640,106 @@ const COCKPIT_TAB_DEFS: { id: WorkspaceTab; label: string }[] = [
   { id: "saved", label: "Saved" },
 ]
 
+type PitchHighlightTarget = "heroCards" | "planBoard" | "savedCase" | "trustPanel"
+
+const PITCH_GUIDE_STEP_COUNT = 11
+
+const PITCH_GUIDE_STEPS: readonly {
+  title: string
+  judgeNotice: string
+  whatToSay: string
+  primaryCta: string
+}[] = [
+  {
+    title: "Start with Sarah’s concern",
+    judgeNotice:
+      "Anchor starts where families actually start: a messy fear, not a clean medical form.",
+    whatToSay:
+      "Most healthcare tools ask for structured data. Anchor starts with the caregiver’s actual panic.",
+    primaryCta: "Go to Today",
+  },
+  {
+    title: "Three battles Anchor helps with first",
+    judgeNotice:
+      "Anchor does not act like a general chatbot. It gives the caregiver three concrete battles: visit prep, document confusion, and insurance/records friction.",
+    whatToSay:
+      "These are not random features. These are the first three problems families hit after diagnosis.",
+    primaryCta: "Show hero actions",
+  },
+  {
+    title: "Prepare for the next conversation",
+    judgeNotice:
+      "Anchor turns fear into questions, what to bring, and exact words for the care team.",
+    whatToSay:
+      "This is the first wedge: the caregiver does not need to know medicine. They need to know what to ask.",
+    primaryCta: "Open visit prep",
+  },
+  {
+    title: "Make the script usable in the moment",
+    judgeNotice:
+      "Instead of dumping a paragraph, Anchor gives one line at a time for a stressed caregiver to read during a call or appointment.",
+    whatToSay:
+      "ChatGPT can write a script. Anchor turns it into a live script reader, then saves what happened.",
+    primaryCta: "Open Phone Mode",
+  },
+  {
+    title: "Close the loop after the call",
+    judgeNotice:
+      "Anchor is stateful. After a conversation, the caregiver can save what happened so the plan changes.",
+    whatToSay:
+      "This is what makes it an operating system. It remembers the outcome instead of starting over.",
+    primaryCta: "Show outcome step",
+  },
+  {
+    title: "The plan becomes the glue",
+    judgeNotice:
+      "Each agent feeds the same 72-hour plan: urgent, active, waiting, changed, and done.",
+    whatToSay:
+      "The plan is the connective tissue. Visit prep, documents, insurance, and updates all change the same case.",
+    primaryCta: "Open 72-hour plan",
+  },
+  {
+    title: "Turn documents into questions",
+    judgeNotice:
+      "Anchor does not diagnose from a report. It turns a report into questions, missing pieces, and care-team confirmation points.",
+    whatToSay:
+      "The product is safer because it says what the document cannot confirm.",
+    primaryCta: "Open Document Agent",
+  },
+  {
+    title: "Fight the admin battle",
+    judgeNotice:
+      "Anchor turns denial, prior authorization, or missing-records confusion into a script, draft, checklist, and follow-up task.",
+    whatToSay:
+      "This is where Anchor becomes operational. It helps with the friction that delays care.",
+    primaryCta: "Open Insurance Agent",
+  },
+  {
+    title: "Anchor remembers the thread",
+    judgeNotice:
+      "Saved case keeps updates, questions, copied scripts, outcomes, and plan changes in one place.",
+    whatToSay:
+      "Generic chat forgets the workflow. Anchor keeps the case thread.",
+    primaryCta: "Open Saved case",
+  },
+  {
+    title: "Answer safety and privacy questions",
+    judgeNotice:
+      "Anchor explains what it used, what it did not use, what is stored, and what the care team must confirm.",
+    whatToSay:
+      "This is where we answer the hard healthcare AI questions before the judges ask them.",
+    primaryCta: "Open trust panel",
+  },
+  {
+    title: "Close the loop",
+    judgeNotice:
+      "Anchor is not a cancer chatbot. It is a caregiver workflow: concern → questions → script → plan → outcome → saved case.",
+    whatToSay:
+      "The goal is not autonomous medicine. The goal is to make the caregiver less alone, more prepared, and safer in the questions they ask.",
+    primaryCta: "Finish demo",
+  },
+]
+
 function ResultsView({
   actionGuideDemoTimeline,
   adaptivePlanTasks,
@@ -4740,6 +4853,30 @@ function ResultsView({
   const [insDenialPaste, setInsDenialPaste] = useState("")
   const [insDenialExplained, setInsDenialExplained] = useState(false)
   const [insDenialOut, setInsDenialOut] = useState<InsuranceDenialAgentOutput | null>(null)
+
+  const [pitchModeOpen, setPitchModeOpen] = useState(false)
+  const [pitchStepIndex, setPitchStepIndex] = useState(0)
+  const [pitchStep5InlineTip, setPitchStep5InlineTip] = useState<string | null>(null)
+  const [highlightedDemoTarget, setHighlightedDemoTarget] = useState<PitchHighlightTarget | null>(null)
+  const [phoneReviewPhaseNudge, setPhoneReviewPhaseNudge] = useState(0)
+  const cockpitTopRef = useRef<HTMLDivElement | null>(null)
+  const heroBattlesRef = useRef<HTMLDivElement | null>(null)
+  const planBoardRef = useRef<HTMLDivElement | null>(null)
+  const savedCaseTopRef = useRef<HTMLDivElement | null>(null)
+
+  const scrollPitchTargetIntoView = useCallback((el: HTMLElement | null) => {
+    window.requestAnimationFrame(() => el?.scrollIntoView({ behavior: "smooth", block: "start" }))
+  }, [])
+
+  useEffect(() => {
+    if (pitchStepIndex !== 4) setPitchStep5InlineTip(null)
+  }, [pitchStepIndex])
+
+  useEffect(() => {
+    if (!highlightedDemoTarget) return
+    const t = window.setTimeout(() => setHighlightedDemoTarget(null), 2000)
+    return () => window.clearTimeout(t)
+  }, [highlightedDemoTarget])
 
   useEffect(() => {
     if (todayHeroModal !== "document") {
@@ -4957,9 +5094,94 @@ function ResultsView({
     setTodayHeroModal(null)
     setFuturePreviewModal(null)
     setWordsSayModal(null)
+    setPhoneReviewPhaseNudge(0)
     setPhoneModeScript(s)
     setPhoneModeOpen(true)
   }, [])
+
+  const runPitchPrimaryAction = useCallback(
+    (stepIdx: number) => {
+      const closeAuxModals = () => {
+        setTodayHeroModal(null)
+        setFuturePreviewModal(null)
+        setWordsSayModal(null)
+        setGuideOpenId(null)
+        setPhoneModeOpen(false)
+        setPhoneModeScript(null)
+        setPhoneReviewPhaseNudge(0)
+      }
+      switch (stepIdx) {
+        case 0:
+          closeAuxModals()
+          onWorkspaceTabChange("today")
+          scrollPitchTargetIntoView(cockpitTopRef.current)
+          break
+        case 1:
+          closeAuxModals()
+          onWorkspaceTabChange("today")
+          setHighlightedDemoTarget("heroCards")
+          scrollPitchTargetIntoView(heroBattlesRef.current)
+          break
+        case 2:
+          openHeroModal("visit")
+          break
+        case 3:
+          openPhoneMode(PHONE_SCRIPT_VISIT_PREP)
+          break
+        case 4:
+          if (phoneModeOpen && phoneModeScript?.id === PHONE_SCRIPT_VISIT_PREP.id) {
+            setPitchStep5InlineTip(null)
+            setPhoneReviewPhaseNudge((n) => n + 1)
+          } else {
+            setPitchStep5InlineTip("Inside Phone Mode, use Save outcome after the call.")
+          }
+          break
+        case 5:
+          closeAuxModals()
+          onOpenToolPanel("plan")
+          setHighlightedDemoTarget("planBoard")
+          window.setTimeout(() => scrollPitchTargetIntoView(planBoardRef.current), 120)
+          break
+        case 6:
+          closeAuxModals()
+          onWorkspaceTabChange("today")
+          openHeroModal("document")
+          window.setTimeout(() => setDocAgentHome("sample"), 80)
+          break
+        case 7:
+          closeAuxModals()
+          onWorkspaceTabChange("today")
+          openHeroModal("insurance")
+          break
+        case 8:
+          closeAuxModals()
+          onWorkspaceTabChange("saved")
+          setHighlightedDemoTarget("savedCase")
+          window.setTimeout(() => scrollPitchTargetIntoView(savedCaseTopRef.current), 120)
+          break
+        case 9:
+          closeAuxModals()
+          onOpenToolPanel("trust")
+          setHighlightedDemoTarget("trustPanel")
+          scrollPitchTargetIntoView(cockpitTopRef.current)
+          break
+        case 10:
+          setPitchModeOpen(false)
+          break
+        default:
+          break
+      }
+    },
+    [
+      onOpenToolPanel,
+      onWorkspaceTabChange,
+      openHeroModal,
+      openPhoneMode,
+      phoneModeOpen,
+      phoneModeScript?.id,
+      scrollPitchTargetIntoView,
+    ],
+  )
 
   function handleSentinelOpenInsuranceFlow() {
     setFuturePreviewModal(null)
@@ -5438,7 +5660,7 @@ function ResultsView({
           </button>
         </motion.div>
 
-        <div className="sticky top-0 z-[24] mb-3 border-b border-[#e8dfd8] bg-[#fdfbf8]/96 py-2 backdrop-blur-md sm:mb-4">
+        <div ref={cockpitTopRef} className="sticky top-0 z-[24] mb-3 border-b border-[#e8dfd8] bg-[#fdfbf8]/96 py-2 backdrop-blur-md sm:mb-4">
           <div className="mb-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
             <button
               type="button"
@@ -5469,6 +5691,25 @@ function ResultsView({
               </button>
             ))}
           </div>
+          <div className="mt-2.5 flex min-w-0 flex-col gap-1.5 rounded-[14px] border border-[#ece4dc]/90 bg-white/70 px-2.5 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2.5">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPitchModeOpen(true)}
+                  className="inline-flex max-w-full items-center justify-center rounded-full border border-[#b98da0]/70 bg-[#f5eef8]/95 px-3 py-1.5 text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
+                >
+                  Guide me through the demo
+                </button>
+                <span className="inline-flex shrink-0 rounded-full border border-[#d8cec5] bg-[#faf7f4]/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#756f68] sm:text-[10px]">
+                  Pitch Mode
+                </span>
+              </div>
+              <p className="mt-1 m-0 max-w-full text-[10px] leading-snug text-[#756f68] sm:text-[11px]">
+                Shows the best 90-second path. Does not change the case.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="min-w-0 max-w-full overflow-x-hidden pb-2">
@@ -5484,6 +5725,15 @@ function ResultsView({
                 <p className="mt-2 m-0 text-[12px] leading-snug text-[#5f5a55] sm:text-sm sm:leading-relaxed">
                   Start with the problem in front of you. Anchor turns it into exact words, a short plan, and a saved thread.
                 </p>
+                {isSarahVoiceCase && (
+                  <button
+                    type="button"
+                    onClick={() => setPitchModeOpen(true)}
+                    className="mt-2 w-fit max-w-full break-words text-left text-[10px] font-medium text-[#8f7e9b] underline decoration-[#c9b8d8]/50 underline-offset-2 hover:text-[#5c4a62] sm:text-[11px]"
+                  >
+                    Guided demo path (optional)
+                  </button>
+                )}
               </div>
 
               <p className="m-0 text-[11px] leading-snug text-[#5f5a55] sm:text-xs sm:leading-relaxed">{COCKPIT_LOCAL_CONSENT_LINE}</p>
@@ -5528,7 +5778,14 @@ function ResultsView({
                 </p>
               </div>
 
-              <div className="min-w-0">
+              <div
+                ref={heroBattlesRef}
+                className={`min-w-0 max-w-full rounded-[16px] transition-shadow duration-300 ${
+                  highlightedDemoTarget === "heroCards"
+                    ? "ring-2 ring-[#b98da0]/90 ring-offset-2 ring-offset-[#fdfbf8] sm:rounded-[20px]"
+                    : ""
+                }`}
+              >
                 <p className="m-0 text-[15px] font-semibold leading-snug text-[#3f3a35] sm:text-base">What do you need to win right now?</p>
                 <div className="mt-3 grid min-w-0 gap-3 sm:gap-4">
                   <div className={`${GLASS_PANEL} min-w-0 rounded-[16px] border border-[#e8dfd8]/90 p-3 sm:rounded-[20px] sm:p-4`}>
@@ -7246,11 +7503,16 @@ function ResultsView({
               <AnimatePresence>
                 {(planResult || adaptivePlanTasks.length > 0) && (
                   <motion.div
+                    ref={planBoardRef}
                     initial={{ opacity: 0, y: 24 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -16 }}
                     transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-                    className="mt-1 sm:mt-2"
+                    className={`mt-1 transition-shadow duration-300 sm:mt-2 ${
+                      highlightedDemoTarget === "planBoard"
+                        ? "rounded-[14px] ring-2 ring-[#b98da0]/90 ring-offset-2 ring-offset-[#fdfbf8] sm:rounded-[18px]"
+                        : ""
+                    }`}
                   >
                     <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8f7e9b] sm:mb-3 sm:text-xs">
                       72 HOURS, MADE SMALL ENOUGH TO HOLD
@@ -8255,7 +8517,14 @@ function ResultsView({
           )}
 
           {workspaceTab === "tools" && toolPanel === "trust" && (
-            <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
+            <motion.div
+              variants={itemVariants}
+              className={`grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4 ${
+                highlightedDemoTarget === "trustPanel"
+                  ? "rounded-[16px] ring-2 ring-[#b98da0]/90 ring-offset-2 ring-offset-[#fdfbf8] sm:rounded-[20px]"
+                  : ""
+              }`}
+            >
               <CockpitToolsBackRow onBack={() => onOpenToolPanel(null)} />
               <div className="min-w-0 max-w-full">
                 <p className="m-0 text-[16px] font-semibold text-[#3f3a35] sm:text-lg">{TRUST_PANEL_TITLE}</p>
@@ -8551,11 +8820,36 @@ function ResultsView({
                   Open {SENTINEL_PREVIEW_TITLE}
                 </button>
               </details>
+
+              <div className="rounded-[14px] border border-[#ece4dc] bg-[#faf7f4]/90 px-3 py-2.5 sm:rounded-[16px] sm:px-3.5 sm:py-3">
+                <p className="m-0 text-[10px] leading-snug text-[#756f68] sm:text-xs">
+                  Presenter shortcut: open the guided demo on the trust-and-safety step. Navigation only — it does not change
+                  medical facts in the case.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPitchStepIndex(9)
+                    setPitchModeOpen(true)
+                  }}
+                  className="mt-2 w-full rounded-[12px] border border-[#b98da0]/55 bg-white/90 px-3 py-2 text-left text-[11px] font-semibold text-[#4a3548] transition hover:bg-white sm:text-xs"
+                >
+                  Guide me through the demo (jump to this step)
+                </button>
+              </div>
             </motion.div>
           )}
 
           {workspaceTab === "saved" && (
-            <motion.div variants={itemVariants} className="grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4">
+            <motion.div
+              ref={savedCaseTopRef}
+              variants={itemVariants}
+              className={`grid min-w-0 max-w-full gap-3 overflow-x-hidden sm:gap-4 ${
+                highlightedDemoTarget === "savedCase"
+                  ? "rounded-[16px] ring-2 ring-[#b98da0]/90 ring-offset-2 ring-offset-[#fdfbf8] sm:rounded-[20px]"
+                  : ""
+              }`}
+            >
               <div className="min-w-0 max-w-full">
                 <p className="m-0 text-[16px] font-semibold leading-snug text-[#3f3a35] sm:text-lg">Saved case</p>
                 <p className="mt-1 m-0 text-[11px] leading-snug text-[#6f665f] sm:text-xs sm:leading-relaxed">
@@ -8924,18 +9218,159 @@ function ResultsView({
           onClose={() => {
             setPhoneModeOpen(false)
             setPhoneModeScript(null)
+            setPhoneReviewPhaseNudge(0)
           }}
           onCopy={onCopy}
           onOpenTrust={() => {
             setPhoneModeOpen(false)
             setPhoneModeScript(null)
+            setPhoneReviewPhaseNudge(0)
             setTrustScrollToReceipt(true)
             onOpenToolPanel("trust")
           }}
           open={phoneModeOpen}
+          phoneReviewPhaseNudge={phoneReviewPhaseNudge}
           script={phoneModeScript}
         />
       )}
+
+      {pitchModeOpen && (() => {
+        const safeIdx = Math.min(Math.max(pitchStepIndex, 0), PITCH_GUIDE_STEPS.length - 1)
+        const step = PITCH_GUIDE_STEPS[safeIdx]!
+        return (
+          <>
+            <button
+              type="button"
+              aria-label="Close demo guide"
+              className="fixed inset-0 z-[69] bg-[#1c1614]/20 sm:hidden"
+              onClick={() => setPitchModeOpen(false)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pitch-guide-title"
+              className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[min(52vh,28rem)] min-h-0 min-w-0 flex-col rounded-t-[18px] border border-[#e5ddd4] bg-[#fdfbf8] shadow-[0_-8px_40px_rgba(30,24,20,0.12)] sm:bottom-5 sm:left-auto sm:right-5 sm:top-auto sm:max-h-[min(78vh,32rem)] sm:w-[min(100vw-1rem,22.5rem)] sm:rounded-[20px]"
+            >
+              <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[#ebe3dc] px-3 py-2.5 sm:px-4 sm:py-3">
+                <div className="min-w-0 flex-1 pr-1">
+                  <p id="pitch-guide-title" className="m-0 text-[12px] font-semibold leading-snug text-[#2a2420] sm:text-sm">
+                    Anchor demo path
+                  </p>
+                  <p className="mt-1 m-0 text-[10px] leading-snug text-[#756f68] sm:text-[11px]">
+                    Follow the story: from one messy caregiver concern to scripts, tasks, saved context, and safety boundaries.
+                  </p>
+                  <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span className="inline-flex max-w-full shrink rounded-full border border-[#c9b8d8]/90 bg-white/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#6f6280] sm:text-[10px]">
+                      Demo guide · navigation only
+                    </span>
+                    <span className="shrink-0 text-[10px] text-[#756f68] sm:text-[11px]">
+                      Step {safeIdx + 1} of {PITCH_GUIDE_STEP_COUNT}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPitchModeOpen(false)}
+                  className="shrink-0 rounded-full border border-[#d8cec5] bg-white px-2.5 py-1 text-[10px] font-medium text-[#5f5a55] sm:text-[11px]"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-2.5">
+                <div className="mb-2 h-1.5 w-full min-w-0 overflow-hidden rounded-full bg-[#ece4dc]">
+                  <div
+                    className="h-full max-w-full rounded-full bg-[#b98da0] transition-[width] duration-300"
+                    style={{ width: `${((safeIdx + 1) / PITCH_GUIDE_STEP_COUNT) * 100}%` }}
+                  />
+                </div>
+                <p className="m-0 text-[10px] leading-snug text-[#6f6280] sm:text-[11px]">
+                  This guide only navigates the demo. It does not change medical facts, contact anyone, or send anything.
+                </p>
+                <p className="mt-3 m-0 break-words text-[14px] font-semibold leading-snug text-[#2a2420] sm:text-[15px]">{step.title}</p>
+                <p className="mt-2 m-0 break-words text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                  <span className="font-semibold text-[#5f5a55]">Judge should notice · </span>
+                  {step.judgeNotice}
+                </p>
+                {safeIdx === 10 && (
+                  <div className="mt-3 rounded-[14px] border border-[#d8cec5] bg-[#faf7f4]/90 p-2.5 sm:p-3">
+                    <p className="m-0 text-[11px] leading-snug text-[#3f3a36] sm:text-xs sm:leading-relaxed">
+                      Anchor turns the first 72 hours from panic into a guided workflow. It does not replace doctors. It helps
+                      families prepare for them.
+                    </p>
+                  </div>
+                )}
+                {safeIdx === 4 && pitchStep5InlineTip && (
+                  <p className="mt-2 m-0 text-[10px] leading-snug text-[#8b6914] sm:text-[11px]" role="status">
+                    {pitchStep5InlineTip}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => runPitchPrimaryAction(safeIdx)}
+                  className="mt-3 w-full min-w-0 rounded-[14px] border border-[#b98da0]/80 bg-[#b7a6c9] px-3 py-3 text-[13px] font-semibold leading-snug text-white shadow-sm transition hover:opacity-95 sm:rounded-[16px] sm:text-sm"
+                >
+                  {step.primaryCta}
+                </button>
+                <details className="mt-2 rounded-[12px] border border-[#ece4dc] bg-white/80 px-2.5 py-2 sm:px-3">
+                  <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#4a3548] sm:text-xs [&::-webkit-details-marker]:hidden">
+                    What to say
+                  </summary>
+                  <p className="mt-1.5 m-0 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px] sm:leading-relaxed">{step.whatToSay}</p>
+                </details>
+                <details className="mt-2 rounded-[12px] border border-[#ece4dc] bg-white/80 px-2.5 py-2 sm:px-3">
+                  <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#4a3548] sm:text-xs [&::-webkit-details-marker]:hidden">
+                    Full demo checklist
+                  </summary>
+                  <ol className="mt-2 m-0 list-decimal space-y-1 pl-4 text-[10px] leading-snug text-[#5f5a55] sm:text-[11px]">
+                    {PITCH_GUIDE_STEPS.map((s, i) => (
+                      <li key={s.title} className={i === safeIdx ? "font-semibold text-[#3f3a35]" : ""}>
+                        {s.title}
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+                <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={safeIdx <= 0}
+                    onClick={() => setPitchStepIndex((i) => Math.max(0, i - 1))}
+                    className="min-w-0 flex-1 rounded-[12px] border border-[#d8cec5] bg-white px-2 py-2 text-[11px] font-medium text-[#3f3a35] disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none sm:px-3 sm:text-xs"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={safeIdx >= PITCH_GUIDE_STEPS.length - 1}
+                    onClick={() => setPitchStepIndex((i) => Math.min(PITCH_GUIDE_STEPS.length - 1, i + 1))}
+                    className="min-w-0 flex-1 rounded-[12px] border border-[#8a5f72] bg-[#f5eef8]/95 px-2 py-2 text-[11px] font-semibold text-[#4a3548] disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none sm:px-3 sm:text-xs"
+                  >
+                    Next
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPitchModeOpen(false)}
+                  className="mt-2 w-full rounded-[12px] border border-[#d8cec5] bg-white/90 py-2 text-[11px] font-medium text-[#5f5a55] sm:text-xs"
+                >
+                  Close guide
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPitchStepIndex(0)
+                  }}
+                  className="mt-2 w-full text-left text-[10px] font-medium text-[#756f68] underline decoration-[#c9b8d8]/60 underline-offset-2 sm:text-[11px]"
+                >
+                  Reset demo path
+                </button>
+                <p className="m-0 mt-1 text-[9px] leading-snug text-[#9b9290] sm:text-[10px]">
+                  Reset demo path does not clear the case.
+                </p>
+              </div>
+            </div>
+          </>
+        )
+      })()}
 
       {error && (
         <div className="mt-3 sm:mt-5">
